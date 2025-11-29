@@ -1,0 +1,21 @@
+# Development and source files - not needed for deployment
+archive/
+*.csv
+*.XLSX
+*.xlsx
+*.pdf
+*.zip
+copilot-instructions.md
+pspf-explorer-design.md
+update_requirements.js
+
+# Editor and OS files
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Node modules (if any added later)
+node_modules/
+styles/main.legacy.css

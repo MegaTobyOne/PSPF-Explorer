@@ -1,0 +1,750 @@
+<!--
+    PSPF Explorer - Protective Security Policy Framework Compliance Tracker
+    A comprehensive tool for tracking compliance with the Australian Government's
+    Protective Security Policy Framework (PSPF) requirements across all domains.
+    
+    Developed by: Toby Harvey
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PSPF Explorer 2025 - Interactive Australian Government Protective Security Policy Framework compliance tracking and management tool">
+    <meta name="author" content="PSPF Explorer">
+    <meta name="robots" content="noindex, nofollow">
+    <title>PSPF Explorer 2025</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+</head>
+<body>
+    <!-- Welcome Modal for First-Time Users -->
+    <div id="welcomeModal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to PSPF Explorer 2025</h2>
+            <p>Navigate the Australian Government Protective Security Policy Framework 2025 with this interactive compliance dashboard!</p>
+            
+            <div class="welcome-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Six Security Domains</h3>
+                        <p>Explore Governance, Risk, Information, Technology, Personnel, and Physical security domains with 2025 updates.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Track 2025 Requirements</h3>
+                        <p>Monitor compliance with latest requirements including Zero Trust, post-quantum cryptography, and AI governance.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Real-time Compliance</h3>
+                        <p>Track your organization's security posture with interactive dashboards and progress indicators.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="pulse-demo">
+                <h4>Key 2025 Updates:</h4>
+                <ul class="welcome-list">
+                    <li>🔒 Mandatory CISO appointment with Audit Committee reporting</li>
+                    <li>🛡️ Zero Trust cybersecurity culture requirements</li>
+                    <li>🔐 Post-quantum cryptography for new systems</li>
+                    <li>🤖 Enhanced AI and quantum technology governance</li>
+                    <li>👤 Stricter eligibility waiver and clearance protocols</li>
+                </ul>
+            </div>
+            
+            <div class="welcome-privacy-note">
+                <p>💾 <strong>Your data stays private</strong> - All information is stored locally in your browser. Nothing is sent to any server.</p>
+            </div>
+            
+            <button id="closeWelcome" class="btn btn-primary">Start Exploring</button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">PSPF Explorer</h1>
+            <nav class="nav">
+                <button id="homeBtn" class="nav-btn active">Home</button>
+                <button id="searchBtn" class="nav-btn">Search</button>
+                <button id="progressBtn" class="nav-btn">Progress</button>
+                <button id="projectBtn" class="nav-btn">Projects</button>
+                <button id="dataBtn" class="nav-btn">Data</button>
+                <button id="helpBtn" class="nav-btn">Help</button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Breadcrumb Navigation -->
+            <nav class="breadcrumb" id="breadcrumb">
+                <a href="#" data-level="home">PSPF Domains</a>
+            </nav>
+
+            <!-- Home View - Domain Overview -->
+            <section id="homeView" class="view active">
+                <div class="view-header">
+                    <h2>PSPF 2025 Compliance Dashboard</h2>
+                    <p class="subtitle">Interactive exploration of the Australian Government Protective Security Policy Framework 2025</p>
+                </div>
+
+                <div class="domains-grid" id="domainsGrid">
+                    <!-- Domain cards will be dynamically generated -->
+                </div>
+
+                <!-- Welcome Dashboard (visible by default) -->
+                <div class="welcome-dashboard" id="welcomeDashboard">
+                    <div class="dashboard-header">
+                        <h3>PSPF 2025 Framework Overview</h3>
+                        <p class="dashboard-subtitle">Comprehensive protective security compliance tracking across all government domains</p>
+                    </div>
+
+                    <div class="dashboard-stats">
+                        <div class="stat-card">
+                            <div class="stat-number" id="totalRequirements">131</div>
+                            <div class="stat-label">Total Requirements</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="totalDomains">6</div>
+                            <div class="stat-label">Security Domains</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="totalProjects">0</div>
+                            <div class="stat-label">Active Projects</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="complianceRate">0%</div>
+                            <div class="stat-label">Compliance Rate</div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-content">
+                        <div class="domain-summary">
+                            <h4>Domain Summary</h4>
+                            <div class="domain-summary-grid" id="domainSummaryGrid">
+                                <!-- Domain summary cards will be generated -->
+                            </div>
+                        </div>
+
+                        <div class="quick-actions">
+                            <h4>Quick Actions</h4>
+                            <div class="action-cards">
+                                <div class="action-card">
+                                    <h5>🚀 Get Started</h5>
+                                    <p>Begin by exploring the Governance domain to understand leadership and accountability requirements.</p>
+                                    <button class="btn btn-primary" onclick="window.pspfExplorer.showDomainRequirements('governance')">
+                                        Explore Governance
+                                    </button>
+                                </div>
+                                <div class="action-card">
+                                    <h5>📊 Create Project</h5>
+                                    <p>Start tracking your compliance progress by creating a new project or initiative.</p>
+                                    <button class="btn btn-outline" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn')">
+                                        Create Project
+                                    </button>
+                                </div>
+                                <div class="action-card">
+                                    <h5>📈 View Progress</h5>
+                                    <p>Monitor your overall compliance status and identify areas needing attention.</p>
+                                    <button class="btn btn-outline" onclick="window.pspfExplorer.showView('progress'); window.pspfExplorer.updateNavButtons('progressBtn')">
+                                        View Progress
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pspf-highlights">
+                        <h4>PSPF 2025 Key Updates</h4>
+                        <div class="highlights-grid">
+                            <div class="highlight-item">
+                                <div class="highlight-icon">🔐</div>
+                                <div class="highlight-content">
+                                    <h6>Enhanced Cyber Security</h6>
+                                    <p>Mandatory CISO appointments and Zero Trust architecture requirements</p>
+                                </div>
+                            </div>
+                            <div class="highlight-item">
+                                <div class="highlight-icon">🛡️</div>
+                                <div class="highlight-content">
+                                    <h6>Post-Quantum Cryptography</h6>
+                                    <p>New requirements for quantum-resistant security measures</p>
+                                </div>
+                            </div>
+                            <div class="highlight-item">
+                                <div class="highlight-icon">🌐</div>
+                                <div class="highlight-content">
+                                    <h6>Foreign Interference</h6>
+                                    <p>Strengthened protections against foreign interference and insider threats</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Requirements Section (initially hidden) -->
+                <div class="requirements-section hidden" id="requirementsSection">
+                    <div class="requirements-header">
+                        <h3 id="selectedDomainTitle">Domain Requirements</h3>
+                        <p id="selectedDomainDescription">Select a domain above to view its detailed description and requirements</p>
+                    </div>
+                    <div class="requirements-layout">
+                        <div class="requirements-list">
+                            <h4>Requirements List</h4>
+                            <div class="tag-filters">
+                                <h5>Filter by Tags <span class="clear-tags" onclick="pspfExplorer.clearTagFilters()">Clear</span></h5>
+                                <div class="tag-selector" id="tagFilters">
+                                    <!-- Tag filters will be populated here -->
+                                </div>
+                            </div>
+                            <div class="requirements-sidebar" id="requirementsList">
+                                <!-- Requirements list will be dynamically generated -->
+                            </div>
+                        </div>
+                        <div class="requirement-details">
+                            <div class="requirement-detail-content" id="requirementDetails">
+                                <div class="placeholder-content">
+                                    <h4>Select a Requirement</h4>
+                                    <p>Choose a requirement from the list to view its details and compliance status.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Search View -->
+            <section id="searchView" class="view">
+                <div class="view-header">
+                    <h2>Search</h2>
+                    <div class="search-bar">
+                        <input type="text" id="searchInput" placeholder="Search projects, tasks, activities, or events...">
+                        <button id="searchSubmit" class="btn btn-primary">Search</button>
+                    </div>
+                </div>
+                <div class="search-results" id="searchResults">
+                    <div class="spinner" id="searchSpinner"></div>
+                    <div class="empty-state">
+                        <h3>🔍 Search Your Data</h3>
+                        <p>Enter a search term above to find projects, tasks, risks, or requirements across your entire dataset.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Progress View -->
+            <section id="progressView" class="view">
+                <div class="view-header">
+                    <h2>Progress Overview</h2>
+                    <p class="subtitle">Track your compliance journey across all domains</p>
+                </div>
+                
+                <div class="stats-overview" id="statsOverview">
+                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View all projects">
+                        <div class="stat-header">
+                            <div>
+                                <span class="stat-number" id="totalProjects">0</span>
+                                <span class="stat-label">Active Projects</span>
+                            </div>
+                            <span class="stat-icon">📊</span>
+                        </div>
+                        <div class="mini-chart">
+                            <div class="mini-chart-bar" id="projectsChart"></div>
+                        </div>
+                        <div class="stat-trend trend-neutral" id="projectsTrend">
+                            <span>→</span> No change
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View all tasks">
+                        <div class="stat-header">
+                            <div>
+                                <span class="stat-number" id="totalTasks">0</span>
+                                <span class="stat-label">Total Tasks</span>
+                            </div>
+                            <span class="stat-icon">✅</span>
+                        </div>
+                        <div class="mini-chart">
+                            <div class="mini-chart-bar" id="tasksChart"></div>
+                        </div>
+                        <div class="stat-trend trend-neutral" id="tasksTrend">
+                            <span>→</span> No change
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View task completion">
+                        <div class="stat-header">
+                            <div>
+                                <span class="stat-number" id="completedTasks">0</span>
+                                <span class="stat-label">Completed Tasks</span>
+                            </div>
+                            <div class="progress-ring" id="taskCompletionRing">
+                                <svg>
+                                    <circle class="progress-ring-background" cx="30" cy="30" r="26"></circle>
+                                    <circle class="progress-ring-progress" cx="30" cy="30" r="26" 
+                                            stroke-dasharray="163.36" stroke-dashoffset="163.36"></circle>
+                                </svg>
+                                <div class="progress-ring-text" id="taskCompletionPercent">0%</div>
+                            </div>
+                        </div>
+                        <div class="stat-trend trend-neutral" id="completionTrend">
+                            <span>→</span> No change
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="window.pspfExplorer.showView('home'); window.pspfExplorer.updateNavButtons('homeBtn');" title="View compliance by domain">
+                        <div class="stat-header">
+                            <div>
+                                <span class="stat-number" id="overallCompliance">0%</span>
+                                <span class="stat-label">Requirements Met</span>
+                            </div>
+                            <div class="progress-ring" id="complianceRing">
+                                <svg>
+                                    <circle class="progress-ring-background" cx="30" cy="30" r="26"></circle>
+                                    <circle class="progress-ring-progress" cx="30" cy="30" r="26" 
+                                            stroke-dasharray="163.36" stroke-dashoffset="163.36"></circle>
+                                </svg>
+                                <div class="progress-ring-text" id="compliancePercent">0%</div>
+                            </div>
+                        </div>
+                        <div class="stat-trend trend-neutral" id="complianceTrend">
+                            <span>→</span> No change
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View all risks">
+                        <div class="stat-header">
+                            <div>
+                                <span class="stat-number" id="totalRisks">0</span>
+                                <span class="stat-label">Active Risks</span>
+                            </div>
+                            <span class="stat-icon">⚠️</span>
+                        </div>
+                        <div class="mini-chart">
+                            <div class="mini-chart-bar risk-chart" id="risksChart"></div>
+                        </div>
+                        <div class="stat-trend trend-neutral" id="risksTrend">
+                            <span>→</span> Risk level stable
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="essential-eight-card" id="essentialEightWidget">
+                    <!-- Essential Eight analytics will render here -->
+                </div>
+
+                <div class="progress-grid" id="progressGrid">
+                    <!-- Progress cards will be dynamically generated -->
+                </div>
+            </section>
+
+            <!-- Data Management View -->
+            <section id="dataView" class="view">
+                <div class="view-header">
+                    <h2>Data Management</h2>
+                    <p class="subtitle">Export, import, and manage your PSPF Explorer data</p>
+                </div>
+                
+                <div class="data-management">
+                    <div class="data-section">
+                        <div class="data-card data-card-info">
+                            <h3>💾 Local Storage</h3>
+                            <p>Your data is stored <strong>privately in this browser only</strong>. It never leaves your device and is not shared with any server.</p>
+                            <ul class="storage-info-list">
+                                <li>✅ Private - only you can see your data</li>
+                                <li>✅ Fast - no network delays</li>
+                                <li>✅ Offline - works without internet</li>
+                                <li>⚠️ Browser-specific - data doesn't sync between devices</li>
+                                <li>⚠️ Clearing browser data will erase your work</li>
+                            </ul>
+                            <p><strong>Tip:</strong> Export your data regularly to keep a backup!</p>
+                        </div>
+                        
+                        <div class="data-card">
+                            <h3>🗂️ Export Data</h3>
+                            <p>Download all your projects, tasks, activities, and events as a backup file.</p>
+                            <button id="exportDataBtn" class="btn btn-primary">Export All Data</button>
+                        </div>
+                        
+                        <div class="data-card">
+                            <h3>📥 Import Data</h3>
+                            <p>Restore data from a previously exported backup file.</p>
+                            <input type="file" id="importFileInput" accept=".json" class="hidden" title="Select backup file to import">
+                            <button id="importDataBtn" class="btn btn-secondary">Import Data</button>
+                        </div>
+                        
+                        <div class="data-card data-card--hidden">
+                            <h3>📋 Manage Requirements</h3>
+                            <p>Add, edit, or remove PSPF requirements. Changes preserve existing compliance data.</p>
+                            <button id="manageRequirementsBtn" class="btn btn-primary">Manage Requirements</button>
+                        </div>
+                        
+                        <div class="data-card">
+                            <h3>🏷️ Manage Tags</h3>
+                            <p>Create, edit, or remove requirement tags for custom organization.</p>
+                            <div id="tagManagementArea" class="tag-management-area">
+                                <!-- Tag list will be dynamically generated -->
+                            </div>
+                            <div class="tag-add-form">
+                                <input type="text" id="newTagName" placeholder="Tag name..." maxlength="30">
+                                <input type="color" id="newTagColor" value="#3b82f6" title="Tag color">
+                                <input type="text" id="newTagDescription" placeholder="Description..." maxlength="100">
+                                <button id="addTagBtn" class="btn btn-primary">Add Tag</button>
+                            </div>
+                        </div>
+                        
+                        <div class="data-card warning">
+                            <h3>🗑️ Clear Data</h3>
+                            <p>Remove all data and start fresh. This action cannot be undone.</p>
+                            <button id="clearDataBtn" class="btn btn-danger">Clear All Data</button>
+                        </div>
+                    </div>
+                    
+                    <div class="data-info">
+                        <h3>📊 Data Summary</h3>
+                        <div class="data-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Projects:</span>
+                                <span class="stat-value" id="dataProjectCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Tasks:</span>
+                                <span class="stat-value" id="dataTaskCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Activities:</span>
+                                <span class="stat-value" id="dataRiskCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Events:</span>
+                                <span class="stat-value" id="dataIncidentCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Last Modified:</span>
+                                <span class="stat-value" id="dataLastModified">Never</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Project Management View -->
+            <section id="projectView" class="view">
+                <div class="view-header">
+                    <h2>Project Management</h2>
+                    <p class="subtitle">Manage your compliance projects and activities</p>
+                    <button id="addProjectBtn" class="btn btn-primary">Add New Project</button>
+                </div>
+                
+                <div class="projects-layout">
+                    <div class="projects-list-panel">
+                        <h4>Projects List</h4>
+                        <div class="projects-sidebar" id="projectsList">
+                            <!-- Projects list will be dynamically generated -->
+                        </div>
+                    </div>
+                    <div class="project-details-panel">
+                        <div class="project-detail-content" id="projectDetails">
+                            <div class="placeholder-content">
+                                <h4>Select a Project</h4>
+                                <p>Choose a project from the list to view its details and manage tasks.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Help View -->
+            <section id="helpView" class="view">
+                <div class="view-header">
+                    <h2>Help & Support</h2>
+                    <p class="subtitle">Learn how to use PSPF Explorer effectively</p>
+                </div>
+                <div class="help-content">
+                    <div class="help-section">
+                        <h3>🎯 What is PSPF Explorer?</h3>
+                        <p>PSPF Explorer transforms the Australian Government Protective Security Policy Framework (PSPF) from static documents into an interactive, engaging experience. Instead of reading through PowerPoint presentations or PDFs, you can explore security requirements dynamically and see how your work contributes to organizational security.</p>
+                        <p><strong>Who is it for?</strong> Everyone in the organization - from executives to frontline staff. This tool is designed for universal access with plain-language explanations that make complex security requirements accessible to all.</p>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>🚀 Getting Started</h3>
+                        <p><strong>Start with the Home page:</strong> The six PSPF domains are displayed as interactive cards across the top. Each domain shows its current compliance status through visual indicators.</p>
+                        <p><strong>Explore domains:</strong> Click on any domain to see its specific requirements. Each requirement explains what needs to be done in practical, everyday language.</p>
+                        <p><strong>Track progress:</strong> Use the visual cues and progress indicators to understand which areas need attention and celebrate your achievements.</p>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>📊 Understanding the Structure</h3>
+                        <p>PSPF Explorer follows a simple hierarchy that you can navigate both top-down and bottom-up:</p>
+                        <ul>
+                            <li><strong>Domains</strong> → Core PSPF areas (fixed structure)</li>
+                            <li><strong>Requirements</strong> → Specific security requirements within each domain (fixed structure)</li>
+                            <li><strong>Projects</strong> → Your work initiatives to meet requirements (you can create and manage these)</li>
+                            <li><strong>Tasks</strong> → Specific actions within projects (you can create and manage these)</li>
+                            <li><strong>Risks</strong> → Potential issues to track (you can create and manage these)</li>
+                        </ul>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>✅ Managing Compliance</h3>
+                        <p><strong>Binary tracking:</strong> Each requirement is either met (Yes) or not met (No). All requirements start as "No" and must be manually updated to "Yes" when completed.</p>
+                        <p><strong>Adding context:</strong> Use the comment field for each requirement to add notes, context, or progress updates. Comments are hidden once a requirement is marked as complete.</p>
+                        <p><strong>Visual feedback:</strong> Your compliance progress drives the visual indicators throughout the system, giving you instant feedback on your security posture.</p>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>🎯 Working with Projects</h3>
+                        <p><strong>Create projects:</strong> Go to the Projects tab to create new compliance initiatives. Projects help organize your work toward meeting specific requirements.</p>
+                        <p><strong>Manage tasks:</strong> Within each project, create tasks for specific actions that need to be completed.</p>
+                        <p><strong>Track risks:</strong> Identify and track potential issues that could impact your compliance work.</p>
+                        <p><strong>Two-column layout:</strong> The Projects page uses a list-and-details layout - select a project from the left to see its details on the right.</p>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>📈 Progress Overview</h3>
+                        <p>The Progress tab provides a comprehensive view of your compliance journey:</p>
+                        <ul>
+                            <li><strong>Statistics cards:</strong> See key metrics like active projects, total tasks, completion rates, and compliance percentages</li>
+                            <li><strong>Domain progress:</strong> Visual representation of progress across all PSPF domains</li>
+                            <li><strong>Trends:</strong> Track how your compliance posture is improving over time</li>
+                        </ul>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>🔍 Search & Data Management</h3>
+                        <p><strong>Search functionality:</strong> Use the Search tab to find specific projects, tasks, risks, or requirements across your entire dataset.</p>
+                        <p><strong>Data backup:</strong> The Data tab allows you to export your work for backup or import data from previous sessions.</p>
+                        <p><strong>Local storage:</strong> Your data is stored locally in your browser, so it persists between sessions on the same device.</p>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>💡 Tips for Success</h3>
+                        <ul>
+                            <li><strong>Start small:</strong> Begin with one domain and gradually expand your compliance tracking</li>
+                            <li><strong>Regular updates:</strong> Check in frequently to update progress and maintain momentum</li>
+                            <li><strong>Use plain language:</strong> When adding comments or project descriptions, write in terms that anyone can understand</li>
+                            <li><strong>Celebrate progress:</strong> Acknowledge both individual and team achievements as you improve compliance</li>
+                            <li><strong>Connect daily work:</strong> Link routine activities to security requirements to show how everyday actions contribute to organizational security</li>
+                        </ul>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>🎨 Visual Cues</h3>
+                        <p><strong>Progress indicators:</strong> Circular progress rings show completion percentages at a glance</p>
+                        <p><strong>Status colors:</strong> Green indicates completion, amber shows progress, and red highlights areas needing attention</p>
+                        <p><strong>Interactive elements:</strong> Hover effects and animations guide you toward important information</p>
+                        <p><strong>Responsive design:</strong> The interface adapts to different screen sizes for optimal viewing on any device</p>
+                    </div>
+
+                    <div class="help-section">
+                        <h3>🤝 Getting Help</h3>
+                        <p>PSPF Explorer is designed to be intuitive and self-explanatory. If you encounter any issues:</p>
+                        <ul>
+                            <li>Try refreshing the page to resolve temporary issues</li>
+                            <li>Check that you're using a modern web browser</li>
+                            <li>Ensure JavaScript is enabled in your browser settings</li>
+                            <li>Use the export function in the Data tab to backup your work regularly</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-content">
+            <div class="disclaimer">
+                <p><strong>⚠️ Experimental Tool:</strong> This is an experiment and should not be relied upon for decision making.</p>
+                <p><strong>🤖 AI Assistance:</strong> This application was developed with assistance from generative artificial intelligence tools.</p>
+                <p><strong>💾 Your Data is Private:</strong> All data is stored locally in your browser. Nothing is sent to any server. Use Export to backup your work.</p>
+            </div>
+            <div class="footer-meta">
+                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2025</p>
+                <p><a href="https://www.protectivesecurity.gov.au/pspf-annual-release" target="_blank" rel="noopener noreferrer">Authoritative Source for PSPF</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- CRUD Modals -->
+    <!-- Project Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <h3 id="projectModalTitle">Add Project</h3>
+            <form id="projectForm">
+                <div class="form-group">
+                    <label for="projectName">Project Name</label>
+                    <input type="text" id="projectName" required>
+                </div>
+                <div class="form-group">
+                    <label for="projectDesc">Description</label>
+                    <textarea id="projectDesc" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="projectStatusSelect">Status</label>
+                    <select id="projectStatusSelect">
+                        <option value="planning">Planning</option>
+                        <option value="active">Active</option>
+                        <option value="on-hold">On Hold</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelProject">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Link Requirements Modal -->
+    <div id="linkRequirementsModal" class="modal">
+        <div class="modal-content">
+            <h3>Link Requirements</h3>
+            <div class="form-group">
+                <label for="requirementsSearch">Filter</label>
+                <input type="text" id="requirementsSearch" placeholder="Search by title or ID">
+            </div>
+            <div id="requirementsChecklist" class="requirements-checklist">
+                <!-- Populated dynamically with checkboxes grouped by domain -->
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="cancelLinkRequirements" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="saveLinkRequirements" class="btn btn-primary">Save Links</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <h3 id="taskModalTitle">Add Task</h3>
+            <form id="taskForm">
+                <div class="form-group">
+                    <label for="taskName">Task Name</label>
+                    <input type="text" id="taskName" required>
+                </div>
+                <div class="form-group">
+                    <label for="taskDesc">Description</label>
+                    <textarea id="taskDesc" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="taskStatus">Status</label>
+                    <select id="taskStatus">
+                        <option value="not-started">Not Started</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="taskAssignee">Assignee</label>
+                    <input type="text" id="taskAssignee">
+                </div>
+                <div class="form-group">
+                    <label for="taskDueDate">Due Date</label>
+                    <input type="date" id="taskDueDate">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelTask">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Risk Modal -->
+    <div id="riskModal" class="modal">
+        <div class="modal-content">
+            <h3 id="riskModalTitle">Add Risk</h3>
+            <form id="riskForm">
+                <div class="form-group">
+                    <label for="riskName">Risk Title</label>
+                    <input type="text" id="riskName" required>
+                </div>
+                <div class="form-group">
+                    <label for="riskDesc">Description</label>
+                    <textarea id="riskDesc" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="riskLikelihood">Likelihood</label>
+                    <select id="riskLikelihood">
+                        <option value="very-low">Very Low</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="very-high">Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="riskImpact">Impact</label>
+                    <select id="riskImpact">
+                        <option value="very-low">Very Low</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="very-high">Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="riskMitigation">Mitigation Strategy</label>
+                    <textarea id="riskMitigation" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelRisk">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Risk</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Event Modal -->
+    <div id="incidentModal" class="modal">
+        <div class="modal-content">
+            <h3 id="incidentModalTitle">Add Event</h3>
+            <form id="incidentForm">
+                <div class="form-group">
+                    <label for="incidentName">Event Title</label>
+                    <input type="text" id="incidentName" required>
+                </div>
+                <div class="form-group">
+                    <label for="incidentDesc">Description</label>
+                    <textarea id="incidentDesc" rows="4"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="incidentDate">Date Occurred</label>
+                    <input type="datetime-local" id="incidentDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="incidentSeverity">Impact Level</label>
+                    <select id="incidentSeverity">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="incidentResolution">Resolution/Action Taken</label>
+                    <textarea id="incidentResolution" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelIncident">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    
+    <script type="module" src="scripts/main.js"></script>
+
+</body>
+</html>
