@@ -61,7 +61,7 @@ export class PSPFExplorer {
                     id: 'risk',
                     title: 'Risk Management',
                     description: 'Security risk management aligned with enterprise risk, including third-party, supply chain, and foreign interference risk management.',
-                    requirements: ['RISK-036', 'RISK-037', 'RISK-038', 'RISK-039', 'RISK-040', 'RISK-041', 'RISK-042', 'RISK-043', 'RISK-044', 'RISK-045', 'RISK-046', 'RISK-047', 'RISK-048', 'RISK-049', 'RISK-050', 'RISK-051', 'RISK-052', 'RISK-053', 'RISK-054', 'RISK-055', 'RISK-056', 'RISK-057', 'RISK-058']
+                    requirements: ['RISK-036', 'RISK-037', 'RISK-038', 'RISK-039', 'RISK-040', 'RISK-041', 'RISK-042', 'RISK-043', 'RISK-044', 'RISK-045', 'RISK-046', 'RISK-047', 'RISK-048', 'RISK-049', 'RISK-050', 'RISK-051', 'RISK-052', 'RISK-053', 'RISK-054', 'RISK-055', 'RISK-056', 'RISK-057']
                 },
                 {
                     id: 'information',
@@ -98,6 +98,7 @@ export class PSPFExplorer {
                 'GOV-006': { id: 'GOV-006', domainId: 'governance', title: 'The Accountable Authority is answerable to their minister for the entity\'s pr...', description: 'The Accountable Authority is answerable to their minister for the entity\'s protective security. (02. Entity Protective Security Roles and Responsibilities)' },
                 'GOV-007': { id: 'GOV-007', domainId: 'governance', title: 'The Accountable Authority is responsible for managing the security risks of t...', description: 'The Accountable Authority is responsible for managing the security risks of their entity. (02. Entity Protective Security Roles and Responsibilities)' },
                 'GOV-008': { id: 'GOV-008', domainId: 'governance', title: 'A Chief Security Officer is appointed and empowered to oversee the entity...', description: 'A Chief Security Officer is appointed and empowered to oversee the entity protective security arrangements. (02. Entity Protective Security Roles and Responsibilities)' },
+                'GOV-009': { id: 'GOV-009', domainId: 'governance', title: 'The Chief Security Officer has appropriate capability and experience...', description: 'The Chief Security Officer has appropriate capability and experience commensurate with the entity s risk environment and holds a minimum security clearance of Baseline. (02. Entity Protective Security Roles and Responsibilities)', tags: [] },
                 'GOV-010': { id: 'GOV-010', domainId: 'governance', title: 'The Chief Security Officer is accountable to the Accountable Authority for pr...', description: 'The Chief Security Officer is accountable to the Accountable Authority for protective security matters. (02. Entity Protective Security Roles and Responsibilities)' },
                 'GOV-011': { id: 'GOV-011', domainId: 'governance', title: 'A Chief Information Security Officer is appointed to oversee the entity...', description: 'A Chief Information Security Officer is appointed to oversee the entity cyber security program and the cyber security for the entity most critical technology resources. (02. Entity Protective Security Roles and Responsibilities)' },
                 'GOV-012': { id: 'GOV-012', domainId: 'governance', title: 'The Chief Information Security Officer has the appropriate capability and exp...', description: 'The Chief Information Security Officer has the appropriate capability and experience and holds a minimum security clearance of Negative Vetting 1. (02. Entity Protective Security Roles and Responsibilities)' },
@@ -662,6 +663,11 @@ export class PSPFExplorer {
             if (requirementsList) {
                 requirementsList.innerHTML = domain.requirements.map(reqId => {
                     const requirement = this.requirements[reqId];
+                    // Skip if requirement is not defined
+                    if (!requirement) {
+                        console.warn(`Requirement ${reqId} not found in definitions`);
+                        return '';
+                    }
                     const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
                     
                     return `
