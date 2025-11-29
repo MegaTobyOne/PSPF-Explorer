@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PSPF Explorer - Interactive Protective Security Policy Framework compliance tracking and management tool">
+    <meta name="author" content="PSPF Explorer">
+    <meta name="robots" content="noindex, nofollow">
+    <title>PSPF Explorer</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+</head>
+<body>
+    <!-- Welcome Modal for First-Time Users -->
+    <div id="welcomeModal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to PSPF Explorer</h2>
+            <p>Transform your security framework from static documents into an engaging, interactive experience!</p>
+            
+            <div class="welcome-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Watch the Heartbeat</h3>
+                        <p>Each domain has a heartbeat pulse that shows its health. Unhealthy pulses indicate areas needing attention.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Mark Requirements as Met</h3>
+                        <p>Click domains to see requirements. Mark them as "Yes" when complete. Add detailed comments for "No" items to improve the pulse.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Manage Your Work</h3>
+                        <p>Add projects, tasks, and track risks. The more you document and complete, the healthier your domains become!</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="pulse-demo">
+                <div class="pulse-example healthy">
+                    <div class="pulse-dot"></div>
+                    <span>Healthy: All requirements met</span>
+                </div>
+                <div class="pulse-example warning">
+                    <div class="pulse-dot"></div>
+                    <span>Warning: Some requirements not met with good explanations</span>
+                </div>
+                <div class="pulse-example critical">
+                    <div class="pulse-dot"></div>
+                    <span>Critical: Requirements not met with poor or no explanations</span>
+                </div>
+            </div>
+            
+            <button id="closeWelcome" class="btn btn-primary">Start Exploring</button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">PSPF Explorer</h1>
+            <nav class="nav">
+                <button id="homeBtn" class="nav-btn active">Home</button>
+                <button id="searchBtn" class="nav-btn">Search</button>
+                <button id="progressBtn" class="nav-btn">Progress</button>
+                <button id="dataBtn" class="nav-btn">Data</button>
+                <button id="helpBtn" class="nav-btn">Help</button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Breadcrumb Navigation -->
+            <nav class="breadcrumb" id="breadcrumb">
+                <a href="#" data-level="home">PSPF Domains</a>
+            </nav>
+
+            <!-- Home View - Domain Overview -->
+            <section id="homeView" class="view active">
+                <div class="view-header">
+                    <h2>Protective Security Policy Framework 2025</h2>
+                    <p class="subtitle">Watch the heartbeat of your security compliance. Healthy pulses mean strong protection.</p>
+                </div>
+
+                <div class="domains-grid" id="domainsGrid">
+                    <!-- Domain cards will be dynamically generated -->
+                </div>
+
+                <!-- Requirements Section (initially hidden) -->
+                <div class="requirements-section hidden" id="requirementsSection">
+                    <div class="requirements-header">
+                        <h3 id="selectedDomainTitle">Domain Requirements</h3>
+                        <p id="selectedDomainDescription">Select a domain above to view its requirements</p>
+                    </div>
+                    <div class="requirements-grid" id="requirementsGrid">
+                        <!-- Requirements will be dynamically generated -->
+                    </div>
+                </div>
+
+                <div class="stats-overview" id="statsOverview">
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalProjects">0</span>
+                        <span class="stat-label">Active Projects</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalTasks">0</span>
+                        <span class="stat-label">Total Tasks</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="completedTasks">0</span>
+                        <span class="stat-label">Completed Tasks</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="overallCompliance">0%</span>
+                        <span class="stat-label">Requirements Met</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Domain Detail View -->
+            <section id="domainView" class="view">
+                <div class="view-header">
+                    <h2 id="domainTitle"></h2>
+                    <p id="domainDescription"></p>
+                    <div class="domain-health">
+                        <div class="health-indicator">
+                            <div class="pulse-dot" id="domainPulse"></div>
+                            <span id="domainHealthText">Checking health...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="requirements-list" id="requirementsList">
+                    <!-- Requirements will be dynamically generated -->
+                </div>
+            </section>
+
+            <!-- Requirement Detail View -->
+            <section id="requirementView" class="view">
+                <div class="view-header">
+                    <h2 id="requirementTitle"></h2>
+                    <p id="requirementDescription"></p>
+                    
+                    <div class="compliance-info">
+                        <p class="compliance-note">
+                            📊 <strong>Manage compliance status in the Progress tab</strong>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="content-tabs">
+                    <div class="tab-nav">
+                        <button class="tab-btn active" data-tab="projects">Projects</button>
+                        <button class="tab-btn" data-tab="guidance">Guidance</button>
+                    </div>
+
+                    <div class="tab-content">
+                        <div id="projectsTab" class="tab-pane active">
+                            <div class="section-header">
+                                <h3>Projects</h3>
+                                <button class="btn btn-primary" id="addProjectBtn">Add Project</button>
+                            </div>
+                            <div class="projects-list" id="projectsList">
+                                <!-- Projects will be dynamically generated -->
+                            </div>
+                        </div>
+
+                        <div id="guidanceTab" class="tab-pane">
+                            <div class="guidance-content" id="guidanceContent">
+                                <!-- Guidance content will be populated based on requirement -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Project Detail View -->
+            <section id="projectView" class="view">
+                <div class="view-header">
+                    <h2 id="projectTitle"></h2>
+                    <p id="projectDescription"></p>
+                    <div class="project-meta">
+                        <span class="status-badge" id="projectStatus"></span>
+                        <span class="date-info" id="projectDates"></span>
+                        <span class="project-url-display hidden" id="projectUrl">
+                            <a href="#" target="_blank">🔗 Open Project</a>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="content-tabs">
+                    <div class="tab-nav">
+                        <button class="tab-btn active" data-tab="tasks">Tasks</button>
+                        <button class="tab-btn" data-tab="risks">Risks</button>
+                        <button class="tab-btn" data-tab="incidents">Incidents</button>
+                    </div>
+
+                    <div class="tab-content">
+                        <div id="tasksTab" class="tab-pane active">
+                            <div class="section-header">
+                                <h3>Tasks</h3>
+                                <button class="btn btn-primary" id="addTaskBtn">Add Task</button>
+                            </div>
+                            <div class="tasks-list" id="tasksList">
+                                <!-- Tasks will be dynamically generated -->
+                            </div>
+                        </div>
+
+                        <div id="risksTab" class="tab-pane">
+                            <div class="section-header">
+                                <h3>Risks</h3>
+                                <button class="btn btn-primary" id="addRiskBtn">Add Risk</button>
+                            </div>
+                            <div class="risks-list" id="risksList">
+                                <!-- Risks will be dynamically generated -->
+                            </div>
+                        </div>
+
+                        <div id="incidentsTab" class="tab-pane">
+                            <div class="section-header">
+                                <h3>Incidents</h3>
+                                <button class="btn btn-primary" id="addIncidentBtn">Add Incident</button>
+                            </div>
+                            <div class="incidents-list" id="incidentsList">
+                                <!-- Incidents will be dynamically generated -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Search View -->
+            <section id="searchView" class="view">
+                <div class="view-header">
+                    <h2>Search</h2>
+                    <div class="search-bar">
+                        <input type="text" id="searchInput" placeholder="Search projects, tasks, risks, or incidents...">
+                        <button id="searchSubmit" class="btn btn-primary">Search</button>
+                    </div>
+                </div>
+                <div class="search-results" id="searchResults">
+                    <!-- Search results will be displayed here -->
+                </div>
+            </section>
+
+            <!-- Progress View -->
+                        <!-- Progress View -->
+            <section id="progressView" class="view">
+                <div class="view-header">
+                    <h2>Progress Overview</h2>
+                    <p class="subtitle">Track your compliance journey across all PSPF domains</p>
+                </div>
+                <div class="progress-grid" id="progressGrid">
+                    <!-- Progress cards will be dynamically generated -->
+                </div>
+            </section>
+
+            <!-- Data Management View -->
+            <section id="dataView" class="view">
+                <div class="view-header">
+                    <h2>Data Management</h2>
+                    <p class="subtitle">Export, import, and manage your PSPF Explorer data</p>
+                </div>
+                
+                <div class="data-management">
+                    <div class="data-section">
+                        <div class="data-card">
+                            <h3>🗂️ Export Data</h3>
+                            <p>Download all your projects, tasks, risks, and incidents as a backup file.</p>
+                            <button id="exportDataBtn" class="btn btn-primary">Export All Data</button>
+                        </div>
+                        
+                        <div class="data-card">
+                            <h3>📥 Import Data</h3>
+                            <p>Restore data from a previously exported backup file.</p>
+                            <input type="file" id="importFileInput" accept=".json" class="hidden" title="Select backup file to import">
+                            <button id="importDataBtn" class="btn btn-secondary">Import Data</button>
+                        </div>
+                        
+                        <div class="data-card warning">
+                            <h3>🗑️ Clear Data</h3>
+                            <p>Remove all data and start fresh. This action cannot be undone.</p>
+                            <button id="clearDataBtn" class="btn btn-danger">Clear All Data</button>
+                        </div>
+                    </div>
+                    
+                    <div class="data-info">
+                        <h3>📊 Data Summary</h3>
+                        <div class="data-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Projects:</span>
+                                <span class="stat-value" id="dataProjectCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Tasks:</span>
+                                <span class="stat-value" id="dataTaskCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Risks:</span>
+                                <span class="stat-value" id="dataRiskCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Incidents:</span>
+                                <span class="stat-value" id="dataIncidentCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Last Modified:</span>
+                                <span class="stat-value" id="dataLastModified">Never</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- CRUD Modals -->
+    <!-- Project Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <h3 id="projectModalTitle">Add Project</h3>
+            <form id="projectForm">
+                <div class="form-group">
+                    <label for="projectName">Project Name</label>
+                    <input type="text" id="projectName" required>
+                </div>
+                <div class="form-group">
+                    <label for="projectDesc">Description</label>
+                    <textarea id="projectDesc" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="projectStatusSelect">Status</label>
+                    <select id="projectStatusSelect">
+                        <option value="planning">Planning</option>
+                        <option value="active">Active</option>
+                        <option value="on-hold">On Hold</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="projectStartDate">Start Date</label>
+                    <input type="date" id="projectStartDate">
+                </div>
+                <div class="form-group">
+                    <label for="projectEndDate">Target End Date</label>
+                    <input type="date" id="projectEndDate">
+                </div>
+                <div class="form-group">
+                    <label for="projectUrl">Project URL</label>
+                    <input type="url" id="projectUrl" placeholder="https://example.com">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelProject">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <h3 id="taskModalTitle">Add Task</h3>
+            <form id="taskForm">
+                <div class="form-group">
+                    <label for="taskName">Task Name</label>
+                    <input type="text" id="taskName" required>
+                </div>
+                <div class="form-group">
+                    <label for="taskDesc">Description</label>
+                    <textarea id="taskDesc" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="taskStatus">Status</label>
+                    <select id="taskStatus">
+                        <option value="not-started">Not Started</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="taskAssignee">Assignee</label>
+                    <input type="text" id="taskAssignee">
+                </div>
+                <div class="form-group">
+                    <label for="taskDueDate">Due Date</label>
+                    <input type="date" id="taskDueDate">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelTask">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Risk Modal -->
+    <div id="riskModal" class="modal">
+        <div class="modal-content">
+            <h3 id="riskModalTitle">Add Risk</h3>
+            <form id="riskForm">
+                <div class="form-group">
+                    <label for="riskName">Risk Title</label>
+                    <input type="text" id="riskName" required>
+                </div>
+                <div class="form-group">
+                    <label for="riskDesc">Description</label>
+                    <textarea id="riskDesc" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="riskLikelihood">Likelihood</label>
+                    <select id="riskLikelihood">
+                        <option value="very-low">Very Low</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="very-high">Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="riskImpact">Impact</label>
+                    <select id="riskImpact">
+                        <option value="very-low">Very Low</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="very-high">Very High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="riskMitigation">Mitigation Strategy</label>
+                    <textarea id="riskMitigation" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelRisk">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Risk</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Incident Modal -->
+    <div id="incidentModal" class="modal">
+        <div class="modal-content">
+            <h3 id="incidentModalTitle">Add Incident</h3>
+            <form id="incidentForm">
+                <div class="form-group">
+                    <label for="incidentName">Incident Title</label>
+                    <input type="text" id="incidentName" required>
+                </div>
+                <div class="form-group">
+                    <label for="incidentDesc">Description</label>
+                    <textarea id="incidentDesc" rows="4"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="incidentDate">Date Occurred</label>
+                    <input type="datetime-local" id="incidentDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="incidentSeverity">Severity</label>
+                    <select id="incidentSeverity">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="incidentResolution">Resolution/Action Taken</label>
+                    <textarea id="incidentResolution" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelIncident">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Incident</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- NOTE: This version requires external scripts/main.js file -->
+    <!-- For self-contained version with full functionality, use index-embedded-stage4.html -->
+    <script src="scripts/main.js"></script>
+</body>
+</html>
