@@ -63,6 +63,38 @@
     box-sizing: border-box;
 }
 
+/* Skip link for keyboard navigation */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--primary-color);
+    color: white;
+    padding: 0.5rem 1rem;
+    z-index: 1001;
+    text-decoration: none;
+    font-weight: 500;
+    border-radius: 0 0 var(--radius-md) 0;
+    transition: top 0.3s ease;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Visually hidden but accessible to screen readers */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     line-height: 1.6;
@@ -131,6 +163,11 @@ body {
     background: white;
     color: var(--primary-color);
     box-shadow: var(--shadow-md);
+}
+
+.nav-btn:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 2px;
 }
 
 /* Main Container */
@@ -350,6 +387,11 @@ body {
 
 .requirement-item.active .requirement-status {
     color: rgba(255, 255, 255, 0.9);
+}
+
+.requirement-item:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
 }
 
 .requirement-code {
@@ -753,6 +795,20 @@ body {
     width: 100%;
     margin-bottom: 0.25rem;
     font-family: inherit;
+}
+
+/* Focus states for form controls */
+.compliance-select:focus-visible,
+.compliance-comment:focus-visible,
+.compliance-url:focus-visible,
+input[type="text"]:focus-visible,
+input[type="url"]:focus-visible,
+input[type="date"]:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+    border-color: var(--primary-color);
 }
 
 .field-help {
@@ -1913,6 +1969,22 @@ body {
 .btn-small {
     padding: 0.375rem 0.75rem;
     font-size: 0.8rem;
+}
+
+/* Focus states for accessibility */
+.btn:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.btn-primary:focus-visible {
+    outline-color: white;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.4);
+}
+
+.btn-danger:focus-visible {
+    outline-color: var(--danger-color);
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3);
 }
 
 /* Requirement Management Styles */
@@ -3133,6 +3205,113 @@ body {
     margin: 0;
     font-size: 0.9rem;
     color: var(--text-secondary);
+}
+
+/* Toast Notification System */
+.notification-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 400px;
+}
+
+.notification {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+}
+
+.notification-show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.notification-hide {
+    opacity: 0;
+    transform: translateX(100%);
+}
+
+.notification-icon {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.notification-message {
+    flex: 1;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.notification-close:hover {
+    color: var(--text-primary);
+}
+
+.notification-success {
+    border-color: var(--success-color);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), var(--bg-elevated));
+}
+
+.notification-success .notification-icon {
+    color: var(--success-color);
+}
+
+.notification-error {
+    border-color: var(--danger-color);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), var(--bg-elevated));
+}
+
+.notification-error .notification-icon {
+    color: var(--danger-color);
+}
+
+.notification-warning {
+    border-color: var(--warning-color);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), var(--bg-elevated));
+}
+
+.notification-warning .notification-icon {
+    color: var(--warning-color);
+}
+
+.notification-info {
+    border-color: var(--info-color);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), var(--bg-elevated));
+}
+
+.notification-info .notification-icon {
+    color: var(--info-color);
+}
+
+@media (max-width: 480px) {
+    .notification-container {
+        left: 1rem;
+        right: 1rem;
+        max-width: none;
+    }
 }
 
 .welcome-privacy-note strong {

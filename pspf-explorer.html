@@ -69,12 +69,15 @@
         </div>
     </div>
 
+    <!-- Skip to main content link for keyboard users -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <!-- Header -->
-    <header class="header">
+    <header class="header" role="banner">
         <div class="container">
             <h1 class="logo">PSPF Explorer</h1>
-            <nav class="nav">
-                <button id="homeBtn" class="nav-btn active">Home</button>
+            <nav class="nav" role="navigation" aria-label="Main navigation">
+                <button id="homeBtn" class="nav-btn active" aria-current="page">Home</button>
                 <button id="searchBtn" class="nav-btn">Search</button>
                 <button id="progressBtn" class="nav-btn">Progress</button>
                 <button id="projectBtn" class="nav-btn">Projects</button>
@@ -85,7 +88,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="main">
+    <main class="main" id="main-content" role="main">
         <div class="container">
             <!-- Breadcrumb Navigation -->
             <nav class="breadcrumb" id="breadcrumb">
@@ -143,21 +146,21 @@
                                 <div class="action-card">
                                     <h5>🚀 Get Started</h5>
                                     <p>Begin by exploring the Governance domain to understand leadership and accountability requirements.</p>
-                                    <button class="btn btn-primary" onclick="window.pspfExplorer.showDomainRequirements('governance')">
+                                    <button class="btn btn-primary" data-action="view-domain" data-domain-id="governance">
                                         Explore Governance
                                     </button>
                                 </div>
                                 <div class="action-card">
                                     <h5>📊 Create Project</h5>
                                     <p>Start tracking your compliance progress by creating a new project or initiative.</p>
-                                    <button class="btn btn-outline" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn')">
+                                    <button class="btn btn-outline" data-action="nav-view" data-view="project" data-nav-btn="projectBtn">
                                         Create Project
                                     </button>
                                 </div>
                                 <div class="action-card">
                                     <h5>📈 View Progress</h5>
                                     <p>Monitor your overall compliance status and identify areas needing attention.</p>
-                                    <button class="btn btn-outline" onclick="window.pspfExplorer.showView('progress'); window.pspfExplorer.updateNavButtons('progressBtn')">
+                                    <button class="btn btn-outline" data-action="nav-view" data-view="progress" data-nav-btn="progressBtn">
                                         View Progress
                                     </button>
                                 </div>
@@ -203,7 +206,7 @@
                         <div class="requirements-list">
                             <h4>Requirements List</h4>
                             <div class="tag-filters">
-                                <h5>Filter by Tags <span class="clear-tags" onclick="pspfExplorer.clearTagFilters()">Clear</span></h5>
+                                <h5>Filter by Tags <span class="clear-tags" data-action="clear-tags" tabindex="0" role="button">Clear</span></h5>
                                 <div class="tag-selector" id="tagFilters">
                                     <!-- Tag filters will be populated here -->
                                 </div>
@@ -225,15 +228,17 @@
             </section>
 
             <!-- Search View -->
-            <section id="searchView" class="view">
+            <section id="searchView" class="view" aria-labelledby="search-heading">
                 <div class="view-header">
-                    <h2>Search</h2>
-                    <div class="search-bar">
-                        <input type="text" id="searchInput" placeholder="Search projects, tasks, activities, or events...">
-                        <button id="searchSubmit" class="btn btn-primary">Search</button>
+                    <h2 id="search-heading">Search</h2>
+                    <div class="search-bar" role="search">
+                        <label for="searchInput" class="visually-hidden">Search projects, tasks, activities, or events</label>
+                        <input type="text" id="searchInput" placeholder="Search projects, tasks, activities, or events..." aria-describedby="search-help">
+                        <button id="searchSubmit" class="btn btn-primary" aria-label="Submit search">Search</button>
                     </div>
+                    <span id="search-help" class="visually-hidden">Enter keywords to search across all your data</span>
                 </div>
-                <div class="search-results" id="searchResults">
+                <div class="search-results" id="searchResults" aria-live="polite" aria-atomic="false">
                     <div class="spinner" id="searchSpinner"></div>
                     <div class="empty-state">
                         <h3>🔍 Search Your Data</h3>
@@ -250,7 +255,7 @@
                 </div>
                 
                 <div class="stats-overview" id="statsOverview">
-                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View all projects">
+                    <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View all projects">
                         <div class="stat-header">
                             <div>
                                 <span class="stat-number" id="totalProjects">0</span>
@@ -265,7 +270,7 @@
                             <span>→</span> No change
                         </div>
                     </div>
-                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View all tasks">
+                    <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View all tasks">
                         <div class="stat-header">
                             <div>
                                 <span class="stat-number" id="totalTasks">0</span>
@@ -280,7 +285,7 @@
                             <span>→</span> No change
                         </div>
                     </div>
-                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View task completion">
+                    <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View task completion">
                         <div class="stat-header">
                             <div>
                                 <span class="stat-number" id="completedTasks">0</span>
@@ -299,7 +304,7 @@
                             <span>→</span> No change
                         </div>
                     </div>
-                    <div class="stat-card" onclick="window.pspfExplorer.showView('home'); window.pspfExplorer.updateNavButtons('homeBtn');" title="View compliance by domain">
+                    <div class="stat-card" data-action="nav-view" data-view="home" data-nav-btn="homeBtn" tabindex="0" role="button" title="View compliance by domain">
                         <div class="stat-header">
                             <div>
                                 <span class="stat-number" id="overallCompliance">0%</span>
@@ -318,7 +323,7 @@
                             <span>→</span> No change
                         </div>
                     </div>
-                    <div class="stat-card" onclick="window.pspfExplorer.showView('project'); window.pspfExplorer.updateNavButtons('projectBtn');" title="View all risks">
+                    <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View all risks">
                         <div class="stat-header">
                             <div>
                                 <span class="stat-number" id="totalRisks">0</span>
@@ -559,7 +564,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="app-footer">
+    <footer class="app-footer" role="contentinfo">
         <div class="footer-content">
             <div class="disclaimer">
                 <p><strong>⚠️ Experimental Tool:</strong> This is an experiment and should not be relied upon for decision making.</p>

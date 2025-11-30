@@ -4,6 +4,18 @@ export class PSPFExplorer {
             this.options = { ...defaultOptions, ...options };
 
             this.storageAvailable = typeof localStorage !== 'undefined';
+            
+            // Debounce utility for performance
+            this.debounce = (fn, delay) => {
+                let timeoutId;
+                return (...args) => {
+                    clearTimeout(timeoutId);
+                    timeoutId = setTimeout(() => fn.apply(this, args), delay);
+                };
+            };
+
+            // Track active modals for cleanup
+            this.activeModals = new Set();
 
             // Initialize data structures
             this.projects = this.readStorage('pspf_projects', []);
@@ -24,6 +36,111 @@ export class PSPFExplorer {
             }
         }
 
+        /**
+         * Show a toast notification to the user
+         * @param {string} message - The message to display
+         * @param {string} type - 'success' | 'error' | 'warning' | 'info'
+         * @param {number} duration - How long to show the toast (ms)
+         */
+        showNotification(message, type = 'info', duration = 4000) {
+            if (typeof document === 'undefined') return;
+
+            // Create container if it doesn't exist
+            let container = document.getElementById('notificationContainer');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'notificationContainer';
+                container.className = 'notification-container';
+                document.body.appendChild(container);
+            }
+
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            
+            const icons = {
+                success: '✓',
+                error: '✕',
+                warning: '⚠',
+                info: 'ℹ'
+            };
+
+            notification.innerHTML = `
+                <span class="notification-icon">${icons[type] || icons.info}</span>
+                <span class="notification-message">${this.escapeHtml(message)}</span>
+                <button class="notification-close" aria-label="Close notification">×</button>
+            `;
+
+            container.appendChild(notification);
+
+            // Trigger animation
+            requestAnimationFrame(() => {
+                notification.classList.add('notification-show');
+            });
+
+            // Close button handler
+            const closeBtn = notification.querySelector('.notification-close');
+            const removeNotification = () => {
+                notification.classList.remove('notification-show');
+                notification.classList.add('notification-hide');
+                setTimeout(() => notification.remove(), 300);
+            };
+            closeBtn.addEventListener('click', removeNotification);
+
+            // Auto-remove after duration
+            if (duration > 0) {
+                setTimeout(removeNotification, duration);
+            }
+        }
+
+        /**
+         * Escape HTML to prevent XSS
+         */
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * Create a modal with proper event listener cleanup
+         * @param {string} content - HTML content for the modal
+         * @param {Object} options - Modal options
+         * @returns {HTMLElement} The modal element
+         */
+        createModal(content, options = {}) {
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            if (options.id) modal.id = options.id;
+            modal.innerHTML = content;
+            
+            // Store event listeners for cleanup
+            modal._eventListeners = [];
+            
+            // Helper to add tracked event listeners
+            modal.addTrackedListener = (element, event, handler) => {
+                element.addEventListener(event, handler);
+                modal._eventListeners.push({ element, event, handler });
+            };
+            
+            // Enhanced remove method that cleans up listeners
+            const originalRemove = modal.remove.bind(modal);
+            modal.remove = () => {
+                // Clean up all tracked event listeners
+                modal._eventListeners.forEach(({ element, event, handler }) => {
+                    element.removeEventListener(event, handler);
+                });
+                modal._eventListeners = [];
+                this.activeModals.delete(modal);
+                originalRemove();
+            };
+            
+            document.body.appendChild(modal);
+            modal.style.display = 'block';
+            this.activeModals.add(modal);
+            
+            return modal;
+        }
+
         init() {
             this.loadDomainData();
             this.loadTagDefinitions(); // Load custom tag definitions
@@ -32,6 +149,7 @@ export class PSPFExplorer {
 
             if (typeof document !== 'undefined') {
                 this.setupEventListeners();
+                this.setupEventDelegation();
                 this.showWelcomeModalIfFirstTime();
                 this.renderHome();
                 this.updateDataStats();
@@ -79,7 +197,7 @@ export class PSPFExplorer {
                     id: 'personnel',
                     title: 'Personnel Security',
                     description: 'Pre-employment screening, security clearance processes, conditional clearance management, and eligibility waiver protocols.',
-                    requirements: ['PERS-109', 'PERS-110', 'PERS-111', 'PERS-112', 'PERS-113', 'PERS-114', 'PERS-115', 'PERS-116', 'PERS-117', 'PERS-118', 'PERS-119', 'PERS-120']
+                    requirements: ['PERS-108', 'PERS-109', 'PERS-110', 'PERS-111', 'PERS-112', 'PERS-113', 'PERS-114', 'PERS-115', 'PERS-116', 'PERS-117', 'PERS-118', 'PERS-119', 'PERS-120']
                 },
                 {
                     id: 'physical',
@@ -339,7 +457,7 @@ export class PSPFExplorer {
                 addTagBtn.addEventListener('click', () => this.addNewTag());
             }
 
-            // Search functionality
+            // Search functionality with debouncing
             const searchInput = document.getElementById('searchInput');
             const searchSubmit = document.getElementById('searchSubmit');
             
@@ -353,7 +471,16 @@ export class PSPFExplorer {
                     }
                 };
 
+                // Debounced search for typing (300ms delay)
+                const debouncedSearch = this.debounce(() => {
+                    const query = searchInput.value.toLowerCase().trim();
+                    if (query.length >= 2) {
+                        this.performSearch(query);
+                    }
+                }, 300);
+
                 searchSubmit.addEventListener('click', performSearch);
+                searchInput.addEventListener('input', debouncedSearch);
                 searchInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') {
                         performSearch();
@@ -464,6 +591,189 @@ export class PSPFExplorer {
             }
         }
 
+        setupEventDelegation() {
+            // Main container event delegation for dynamic elements
+            const mainContainer = document.querySelector('.main');
+            if (!mainContainer) return;
+
+            // Handle click events via delegation
+            mainContainer.addEventListener('click', (e) => {
+                const target = e.target.closest('[data-action]');
+                if (!target) return;
+
+                const action = target.dataset.action;
+                this.handleDelegatedAction(action, target, e);
+            });
+
+            // Handle keyboard events for accessibility (Enter and Space)
+            mainContainer.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                
+                const target = e.target.closest('[data-action]');
+                if (!target) return;
+
+                // Prevent space from scrolling the page
+                if (e.key === ' ') {
+                    e.preventDefault();
+                }
+
+                const action = target.dataset.action;
+                this.handleDelegatedAction(action, target, e);
+            });
+            
+            // Body-level delegation for modals (outside main container)
+            document.body.addEventListener('click', (e) => {
+                const target = e.target.closest('[data-action]');
+                if (!target) return;
+                
+                // Skip if already handled by main container
+                if (mainContainer.contains(target)) return;
+                
+                const action = target.dataset.action;
+                this.handleDelegatedAction(action, target, e);
+            });
+        }
+
+        handleDelegatedAction(action, target, event) {
+            switch (action) {
+                // Domain actions
+                case 'view-domain':
+                    const domainId = target.dataset.domainId;
+                    if (domainId) this.showDomainRequirements(domainId);
+                    break;
+
+                // Requirement actions
+                case 'view-requirement':
+                    const reqId = target.dataset.requirementId;
+                    if (reqId) this.showRequirementDetails(reqId);
+                    break;
+
+                // Project actions
+                case 'view-project':
+                    const projectId = target.dataset.projectId;
+                    if (projectId) this.showProjectDetails(projectId);
+                    break;
+
+                case 'edit-project':
+                    const editProjectId = target.dataset.projectId;
+                    if (editProjectId) this.showProjectModal(editProjectId);
+                    break;
+
+                case 'delete-project':
+                    const deleteProjectId = target.dataset.projectId;
+                    if (deleteProjectId) this.deleteProject(deleteProjectId);
+                    break;
+
+                case 'add-task':
+                    const taskProjectId = target.dataset.projectId;
+                    if (taskProjectId) this.addTask(taskProjectId);
+                    break;
+
+                case 'add-risk':
+                    const riskProjectId = target.dataset.projectId;
+                    if (riskProjectId) this.addRisk(riskProjectId);
+                    break;
+
+                // Task actions
+                case 'edit-task':
+                    const editTaskId = target.dataset.taskId;
+                    if (editTaskId) this.editTask(editTaskId);
+                    break;
+
+                case 'delete-task':
+                    const deleteTaskId = target.dataset.taskId;
+                    if (deleteTaskId) this.deleteTask(deleteTaskId);
+                    break;
+
+                case 'complete-task':
+                    const completeTaskId = target.dataset.taskId;
+                    if (completeTaskId) this.markTaskComplete(completeTaskId);
+                    break;
+
+                case 'reopen-task':
+                    const reopenTaskId = target.dataset.taskId;
+                    if (reopenTaskId) this.markTaskIncomplete(reopenTaskId);
+                    break;
+
+                // Risk actions
+                case 'edit-risk':
+                    const editRiskId = target.dataset.riskId;
+                    if (editRiskId) this.editRisk(editRiskId);
+                    break;
+
+                case 'delete-risk':
+                    const deleteRiskId = target.dataset.riskId;
+                    if (deleteRiskId) this.deleteRisk(deleteRiskId);
+                    break;
+
+                // Navigation actions
+                case 'nav-view':
+                    const viewName = target.dataset.view;
+                    const navBtn = target.dataset.navBtn;
+                    if (viewName) {
+                        this.showView(viewName);
+                        if (navBtn) this.updateNavButtons(navBtn);
+                    }
+                    break;
+
+                // Link/Unlink actions
+                case 'link-project':
+                    const linkReqId = target.dataset.requirementId;
+                    if (linkReqId) this.showLinkProjectModal(linkReqId);
+                    break;
+
+                case 'unlink-project':
+                    const unlinkProjectId = target.dataset.projectId;
+                    const unlinkReqId = target.dataset.requirementId;
+                    if (unlinkProjectId && unlinkReqId) {
+                        this.unlinkProjectFromRequirement(unlinkProjectId, unlinkReqId);
+                    }
+                    break;
+
+                case 'unlink-requirement':
+                    const unlinkReqFromProject = target.dataset.requirementId;
+                    if (unlinkReqFromProject) this.unlinkRequirementFromProject(unlinkReqFromProject);
+                    break;
+
+                // Tag actions
+                case 'toggle-tag':
+                    const toggleReqId = target.dataset.requirementId;
+                    const toggleTagId = target.dataset.tagId;
+                    if (toggleReqId && toggleTagId) {
+                        this.toggleRequirementTag(toggleReqId, toggleTagId);
+                    }
+                    break;
+
+                case 'edit-tag':
+                    const editTagKey = target.dataset.tagKey;
+                    if (editTagKey) this.editTag(editTagKey);
+                    break;
+
+                case 'delete-tag':
+                    const deleteTagKey = target.dataset.tagKey;
+                    if (deleteTagKey) this.deleteTag(deleteTagKey);
+                    break;
+
+                case 'clear-tags':
+                    this.clearTagFilters();
+                    break;
+
+                // Requirement management actions
+                case 'edit-requirement-mgmt':
+                    const editReqUuid = target.dataset.reqUuid;
+                    if (editReqUuid) this.editRequirement(editReqUuid);
+                    break;
+
+                case 'delete-requirement-mgmt':
+                    const deleteReqUuid = target.dataset.reqUuid;
+                    if (deleteReqUuid) this.deleteRequirement(deleteReqUuid);
+                    break;
+
+                default:
+                    console.warn(`Unknown delegated action: ${action}`);
+            }
+        }
+
         showWelcomeModalIfFirstTime() {
             if (!this.storageAvailable || typeof document === 'undefined') {
                 return;
@@ -543,11 +853,13 @@ export class PSPFExplorer {
         updateNavButtons(activeId) {
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('active');
+                btn.removeAttribute('aria-current');
             });
             
             const activeBtn = document.getElementById(activeId);
             if (activeBtn) {
                 activeBtn.classList.add('active');
+                activeBtn.setAttribute('aria-current', 'page');
             }
         }
 
@@ -574,7 +886,7 @@ export class PSPFExplorer {
                         <div class="domain-stats">
                             <span class="health-text">${health.text}</span>
                         </div>
-                        <button class="btn btn-outline domain-btn" onclick="window.pspfExplorer.showDomainRequirements('${domain.id}')">
+                        <button class="btn btn-outline domain-btn" data-action="view-domain" data-domain-id="${domain.id}">
                             View Requirements
                         </button>
                         <div class="pulse-indicator">
@@ -594,7 +906,7 @@ export class PSPFExplorer {
                 const requirementCount = domain.requirements.length;
                 
                 return `
-                    <div class="domain-summary-card" onclick="window.pspfExplorer.showDomainRequirements('${domain.id}')">
+                    <div class="domain-summary-card" data-action="view-domain" data-domain-id="${domain.id}" tabindex="0" role="button">
                         <div class="domain-summary-title">
                             <span>${domain.title}</span>
                             <div class="pulse-dot ${health.status}" style="width: 8px; height: 8px;"></div>
@@ -671,7 +983,7 @@ export class PSPFExplorer {
                     const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
                     
                     return `
-                        <div class="requirement-item" data-req="${reqId}" onclick="window.pspfExplorer.showRequirementDetails('${reqId}')">
+                        <div class="requirement-item" data-req="${reqId}" data-action="view-requirement" data-requirement-id="${reqId}" tabindex="0" role="button">
                             <div class="requirement-info">
                                 <span class="requirement-code">${reqId}</span>
                                 ${compliance.url ? '<span class="url-indicator" title="Has reference link">🔗</span>' : ''}
@@ -816,7 +1128,8 @@ export class PSPFExplorer {
                             return `
                                 <div class="tag-option ${isSelected ? 'selected' : ''}" 
                                      style="background-color: ${isSelected ? tag.color : ''};border-color: ${tag.color}"
-                                     onclick="pspfExplorer.toggleRequirementTag('${requirementId}', '${tagId}')"
+                                     data-action="toggle-tag" data-requirement-id="${requirementId}" data-tag-id="${tagId}"
+                                     tabindex="0" role="button"
                                      title="${tag.description}">
                                     ${tag.name}
                                 </div>
@@ -910,7 +1223,7 @@ export class PSPFExplorer {
                                 <div class="linked-project-item">
                                     <span class="project-name">${project.name}</span>
                                     <span class="project-status status-${project.status}">${this.getStatusText(project.status)}</span>
-                                    <button class="btn-link btn-small" onclick="window.pspfExplorer.unlinkProjectFromRequirement('${project.id}', '${reqId}')">
+                                    <button class="btn-link btn-small" data-action="unlink-project" data-project-id="${project.id}" data-requirement-id="${reqId}">
                                         ✕ Unlink
                                     </button>
                                 </div>
@@ -918,7 +1231,7 @@ export class PSPFExplorer {
                             '<p class="no-projects">No projects linked to this requirement.</p>'
                         }
                     </div>
-                    <button class="btn btn-primary btn-small" onclick="window.pspfExplorer.showLinkProjectModal('${reqId}')">
+                    <button class="btn btn-primary btn-small" data-action="link-project" data-requirement-id="${reqId}">
                         + Link Project
                     </button>
                 </div>
@@ -943,13 +1256,11 @@ export class PSPFExplorer {
             );
 
             if (availableProjects.length === 0) {
-                alert('No available projects to link. Create a project first.');
+                this.showNotification('No available projects to link. Create a project first.', 'warning');
                 return;
             }
 
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.innerHTML = `
+            const modalContent = `
                 <div class="modal-content">
                     <h3>Link Project to Requirement</h3>
                     <div class="form-group">
@@ -957,19 +1268,26 @@ export class PSPFExplorer {
                         <select id="projectSelect" class="form-control">
                             <option value="">Choose a project...</option>
                             ${availableProjects.map(project => `
-                                <option value="${project.id}">${project.name} (${this.getStatusText(project.status)})</option>
+                                <option value="${project.id}">${this.escapeHtml(project.name)} (${this.getStatusText(project.status)})</option>
                             `).join('')}
                         </select>
                     </div>
                     <div class="modal-buttons">
-                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
-                        <button class="btn btn-primary" onclick="window.pspfExplorer.linkProjectToRequirement(document.getElementById('projectSelect').value, '${reqId}'); this.closest('.modal').remove();">Link Project</button>
+                        <button class="btn btn-secondary" id="cancelLinkBtn">Cancel</button>
+                        <button class="btn btn-primary" id="confirmLinkBtn">Link Project</button>
                     </div>
                 </div>
             `;
 
-            document.body.appendChild(modal);
-            modal.style.display = 'block';
+            const modal = this.createModal(modalContent);
+            
+            // Attach tracked event listeners for proper cleanup
+            modal.addTrackedListener(modal.querySelector('#cancelLinkBtn'), 'click', () => modal.remove());
+            modal.addTrackedListener(modal.querySelector('#confirmLinkBtn'), 'click', () => {
+                const projectId = document.getElementById('projectSelect').value;
+                this.linkProjectToRequirement(projectId, reqId);
+                modal.remove();
+            });
         }
 
         linkProjectToRequirement(projectId, reqId) {
@@ -1307,7 +1625,7 @@ export class PSPFExplorer {
                     ${controlsHtml}
                 </div>
                 <div class="essential-eight-footer">
-                    <button class="btn btn-outline btn-small" onclick="window.pspfExplorer.showDomainRequirements('technology'); window.pspfExplorer.showView('home'); window.pspfExplorer.updateNavButtons('homeBtn');">Review Technology Controls</button>
+                    <button class="btn btn-outline btn-small" data-action="view-domain" data-domain-id="technology">Review Technology Controls</button>
                     <span class="essential-eight-note">Mapped to requirements TECH-099 – TECH-106</span>
                 </div>
             `;
@@ -1341,7 +1659,7 @@ export class PSPFExplorer {
                             <span>${percentage}%</span>
                         </div>
                         <p class="progress-status">${health.text}</p>
-                        <button class="btn btn-outline btn-small" onclick="window.pspfExplorer.showDomainRequirements('${domain.id}'); window.pspfExplorer.showView('home'); window.pspfExplorer.updateNavButtons('homeBtn');">
+                        <button class="btn btn-outline btn-small" data-action="view-domain" data-domain-id="${domain.id}">
                             Manage Compliance
                         </button>
                     </div>
@@ -1430,7 +1748,7 @@ export class PSPFExplorer {
                             ${result.reqId ? `<span class="result-req-id">${result.reqId}</span>` : ''}
                             <h4>${result.title}</h4>
                             <p>${result.description}</p>
-                            ${result.domain && result.domainId ? `<span class="result-domain result-domain-clickable" onclick="window.pspfExplorer.showDomainRequirements('${result.domainId}'); window.pspfExplorer.showView('home'); window.pspfExplorer.updateNavButtons('homeBtn');">Domain: ${result.domain}</span>` : result.domain ? `<span class="result-domain">Domain: ${result.domain}</span>` : ''}
+                            ${result.domain && result.domainId ? `<span class="result-domain result-domain-clickable" data-action="view-domain" data-domain-id="${result.domainId}" tabindex="0" role="button">Domain: ${result.domain}</span>` : result.domain ? `<span class="result-domain">Domain: ${result.domain}</span>` : ''}
                             ${result.severity ? `<span class="result-severity severity-${result.severity}">Risk Level: ${result.severity.toUpperCase()}</span>` : ''}
                         </div>
                     `).join('')}
@@ -1455,7 +1773,7 @@ export class PSPFExplorer {
             }
 
             projectsList.innerHTML = this.projects.map(project => `
-                <div class="project-item" data-project="${project.id}" onclick="window.pspfExplorer.showProjectDetails('${project.id}')">
+                <div class="project-item" data-project="${project.id}" data-action="view-project" data-project-id="${project.id}" tabindex="0" role="button">
                     <div class="project-name">${project.name}</div>
                     <div class="project-meta">
                         <span class="project-status ${project.status}">${this.getStatusText(project.status)}</span>
@@ -1518,10 +1836,10 @@ export class PSPFExplorer {
                 </div>
 
                 <div class="project-actions">
-                    <button class="btn btn-primary" onclick="window.pspfExplorer.showProjectModal('${project.id}')">Edit Project</button>
-                    <button class="btn btn-secondary" onclick="window.pspfExplorer.addTask('${project.id}')">Add Task</button>
-                    <button class="btn btn-outline" onclick="window.pspfExplorer.addRisk('${project.id}')">Add Risk</button>
-                    <button class="btn btn-danger" onclick="window.pspfExplorer.deleteProject('${project.id}')">Delete Project</button>
+                    <button class="btn btn-primary" data-action="edit-project" data-project-id="${project.id}">Edit Project</button>
+                    <button class="btn btn-secondary" data-action="add-task" data-project-id="${project.id}">Add Task</button>
+                    <button class="btn btn-outline" data-action="add-risk" data-project-id="${project.id}">Add Risk</button>
+                    <button class="btn btn-danger" data-action="delete-project" data-project-id="${project.id}">Delete Project</button>
                 </div>
 
                 ${projectTasks.length > 0 ? `
@@ -1539,8 +1857,8 @@ export class PSPFExplorer {
                                         </div>
                                     </div>
                                     <div class="task-actions">
-                                        <button class="btn btn-small btn-outline" onclick="window.pspfExplorer.showTaskModal('${task.id}', '${project.id}')">Edit</button>
-                                        <button class="btn btn-small btn-danger" onclick="window.pspfExplorer.deleteTask('${task.id}')">Delete</button>
+                                        <button class="btn btn-small btn-outline" data-action="edit-task" data-task-id="${task.id}">Edit</button>
+                                        <button class="btn btn-small btn-danger" data-action="delete-task" data-task-id="${task.id}">Delete</button>
                                     </div>
                                 </div>
                             `).join('')}
@@ -1563,8 +1881,8 @@ export class PSPFExplorer {
                                         </div>
                                     </div>
                                     <div class="risk-actions">
-                                        <button class="btn btn-small btn-outline" onclick="window.pspfExplorer.showRiskModal('${risk.id}', '${project.id}')">Edit</button>
-                                        <button class="btn btn-small btn-danger" onclick="window.pspfExplorer.deleteRisk('${risk.id}')">Delete</button>
+                                        <button class="btn btn-small btn-outline" data-action="edit-risk" data-risk-id="${risk.id}">Edit</button>
+                                        <button class="btn btn-small btn-danger" data-action="delete-risk" data-risk-id="${risk.id}">Delete</button>
                                     </div>
                                 </div>
                             `).join('')}
@@ -1890,11 +2208,11 @@ export class PSPFExplorer {
                             ${isOverdue ? '<span class="overdue-indicator">⚠️ Overdue</span>' : ''}
                         </div>
                         <div class="task-actions">
-                            <button class="btn btn-outline btn-small" onclick="window.pspfExplorer.editTask('${task.id}')">Edit</button>
-                            <button class="btn btn-danger btn-small" onclick="window.pspfExplorer.deleteTask('${task.id}')">Delete</button>
+                            <button class="btn btn-outline btn-small" data-action="edit-task" data-task-id="${task.id}">Edit</button>
+                            <button class="btn btn-danger btn-small" data-action="delete-task" data-task-id="${task.id}">Delete</button>
                             ${task.status !== 'completed' ? 
-                                `<button class="btn btn-success btn-small" onclick="window.pspfExplorer.markTaskComplete('${task.id}')">Complete</button>` : 
-                                `<button class="btn btn-secondary btn-small" onclick="window.pspfExplorer.markTaskIncomplete('${task.id}')">Reopen</button>`
+                                `<button class="btn btn-success btn-small" data-action="complete-task" data-task-id="${task.id}">Complete</button>` : 
+                                `<button class="btn btn-secondary btn-small" data-action="reopen-task" data-task-id="${task.id}">Reopen</button>`
                             }
                         </div>
                     </div>
@@ -2075,8 +2393,8 @@ export class PSPFExplorer {
                             </div>
                         ` : ''}
                         <div class="risk-actions">
-                            <button class="btn btn-outline btn-small" onclick="window.pspfExplorer.editRisk('${risk.id}')">Edit</button>
-                            <button class="btn btn-danger btn-small" onclick="window.pspfExplorer.deleteRisk('${risk.id}')">Delete</button>
+                            <button class="btn btn-outline btn-small" data-action="edit-risk" data-risk-id="${risk.id}">Edit</button>
+                            <button class="btn btn-danger btn-small" data-action="delete-risk" data-risk-id="${risk.id}">Delete</button>
                         </div>
                     </div>
                 `;
@@ -2190,7 +2508,7 @@ export class PSPFExplorer {
                             <div style="font-size: 0.9rem; color: var(--text-secondary);">${reqId} • ${domainTitle}</div>
                         </div>
                         <div>
-                            <button class="btn btn-outline btn-small" onclick="window.pspfExplorer.unlinkRequirementFromProject('${reqId}')">Unlink</button>
+                            <button class="btn btn-outline btn-small" data-action="unlink-requirement" data-requirement-id="${reqId}">Unlink</button>
                         </div>
                     </div>
                 `;
@@ -2299,11 +2617,11 @@ export class PSPFExplorer {
                 downloadLink.click();
                 document.body.removeChild(downloadLink);
                 
-                alert('Data exported successfully!');
+                this.showNotification('Data exported successfully!', 'success');
                 
             } catch (error) {
                 console.error('Export failed:', error);
-                alert('Export failed. Please try again.');
+                this.showNotification('Export failed. Please try again.', 'error');
             }
         }
 
@@ -2316,34 +2634,447 @@ export class PSPFExplorer {
                 try {
                     const importData = JSON.parse(e.target.result);
                     
-                    if (!importData.data || !importData.version) {
-                        throw new Error('Invalid backup file format');
-                    }
-
-                    if (!confirm('This will replace all current data with imported data. Continue?')) {
+                    // Validate the backup file structure and data
+                    const validation = this.validateImportData(importData);
+                    
+                    if (!validation.valid) {
+                        this.showNotification(`Import failed: ${validation.errors.join(', ')}`, 'error', 8000);
                         return;
                     }
 
-                    this.projects = importData.data.projects || [];
-                    this.tasks = importData.data.tasks || [];
-                    this.risks = importData.data.risks || [];
-                    this.incidents = importData.data.incidents || [];
-                    this.compliance = importData.data.compliance || {};
+                    // Show warnings if any
+                    let confirmMessage = 'This will replace all current data with imported data.';
+                    if (validation.warnings.length > 0) {
+                        confirmMessage += `\\n\\nWarnings:\\n${validation.warnings.join('\\n')}`;
+                    }
+                    confirmMessage += '\\n\\nContinue?';
+
+                    if (!confirm(confirmMessage)) {
+                        return;
+                    }
+
+                    // Sanitize and import the data
+                    const sanitizedData = this.sanitizeImportData(importData.data);
+                    
+                    this.projects = sanitizedData.projects;
+                    this.tasks = sanitizedData.tasks;
+                    this.risks = sanitizedData.risks;
+                    this.incidents = sanitizedData.incidents;
+                    this.compliance = sanitizedData.compliance;
 
                     this.saveData();
                     this.updateDataStats();
                     this.renderHome();
 
-                    alert('Data imported successfully!');
+                    const summary = `Imported: ${this.projects.length} projects, ${this.tasks.length} tasks, ${this.risks.length} risks, ${this.incidents.length} events, ${Object.keys(this.compliance).length} compliance records`;
+                    
+                    this.showNotification(summary, 'success', 6000);
                     
                 } catch (error) {
                     console.error('Import failed:', error);
-                    alert('Import failed. Please check the file format and try again.');
+                    this.showNotification(`Import failed: ${error.message || 'Invalid JSON format'}`, 'error');
                 }
             };
 
             reader.readAsText(file);
             event.target.value = '';
+        }
+
+        /**
+         * Validates the structure and content of imported data
+         * @param {Object} importData - The parsed JSON data from the backup file
+         * @returns {Object} - { valid: boolean, errors: string[], warnings: string[] }
+         */
+        validateImportData(importData) {
+            const errors = [];
+            const warnings = [];
+
+            // Check basic structure
+            if (!importData || typeof importData !== 'object') {
+                errors.push('Invalid file format: not a valid JSON object');
+                return { valid: false, errors, warnings };
+            }
+
+            // Check version
+            if (!importData.version) {
+                errors.push('Missing version field - this may not be a valid PSPF Explorer backup');
+            } else if (!['1.0', '1.1', '2.0'].includes(importData.version)) {
+                warnings.push(`Unknown version "${importData.version}" - some data may not import correctly`);
+            }
+
+            // Check data object exists
+            if (!importData.data || typeof importData.data !== 'object') {
+                errors.push('Missing or invalid data field');
+                return { valid: false, errors, warnings };
+            }
+
+            const data = importData.data;
+
+            // Validate projects array
+            if (data.projects !== undefined) {
+                if (!Array.isArray(data.projects)) {
+                    errors.push('Projects must be an array');
+                } else {
+                    const projectValidation = this.validateProjectsArray(data.projects);
+                    errors.push(...projectValidation.errors);
+                    warnings.push(...projectValidation.warnings);
+                }
+            }
+
+            // Validate tasks array
+            if (data.tasks !== undefined) {
+                if (!Array.isArray(data.tasks)) {
+                    errors.push('Tasks must be an array');
+                } else {
+                    const taskValidation = this.validateTasksArray(data.tasks);
+                    errors.push(...taskValidation.errors);
+                    warnings.push(...taskValidation.warnings);
+                }
+            }
+
+            // Validate risks array
+            if (data.risks !== undefined) {
+                if (!Array.isArray(data.risks)) {
+                    errors.push('Risks must be an array');
+                } else {
+                    const riskValidation = this.validateRisksArray(data.risks);
+                    errors.push(...riskValidation.errors);
+                    warnings.push(...riskValidation.warnings);
+                }
+            }
+
+            // Validate incidents array
+            if (data.incidents !== undefined) {
+                if (!Array.isArray(data.incidents)) {
+                    errors.push('Incidents must be an array');
+                } else {
+                    const incidentValidation = this.validateIncidentsArray(data.incidents);
+                    errors.push(...incidentValidation.errors);
+                    warnings.push(...incidentValidation.warnings);
+                }
+            }
+
+            // Validate compliance object
+            if (data.compliance !== undefined) {
+                if (typeof data.compliance !== 'object' || Array.isArray(data.compliance)) {
+                    errors.push('Compliance must be an object');
+                } else {
+                    const complianceValidation = this.validateComplianceObject(data.compliance);
+                    errors.push(...complianceValidation.errors);
+                    warnings.push(...complianceValidation.warnings);
+                }
+            }
+
+            // Check for reasonable data sizes (prevent DoS via huge files)
+            const maxItems = 10000;
+            if (data.projects?.length > maxItems) {
+                errors.push(`Too many projects (${data.projects.length}). Maximum allowed: ${maxItems}`);
+            }
+            if (data.tasks?.length > maxItems) {
+                errors.push(`Too many tasks (${data.tasks.length}). Maximum allowed: ${maxItems}`);
+            }
+            if (data.risks?.length > maxItems) {
+                errors.push(`Too many risks (${data.risks.length}). Maximum allowed: ${maxItems}`);
+            }
+
+            return {
+                valid: errors.length === 0,
+                errors,
+                warnings
+            };
+        }
+
+        validateProjectsArray(projects) {
+            const errors = [];
+            const warnings = [];
+            const seenIds = new Set();
+
+            projects.forEach((project, index) => {
+                const prefix = `Project ${index + 1}`;
+
+                if (!project || typeof project !== 'object') {
+                    errors.push(`${prefix}: Invalid project object`);
+                    return;
+                }
+
+                // Required fields
+                if (!project.id || typeof project.id !== 'string') {
+                    errors.push(`${prefix}: Missing or invalid id`);
+                } else {
+                    if (seenIds.has(project.id)) {
+                        errors.push(`${prefix}: Duplicate project id "${project.id}"`);
+                    }
+                    seenIds.add(project.id);
+                }
+
+                if (!project.name || typeof project.name !== 'string') {
+                    errors.push(`${prefix}: Missing or invalid name`);
+                } else if (project.name.length > 500) {
+                    warnings.push(`${prefix}: Name is very long (${project.name.length} chars)`);
+                }
+
+                // Optional fields type checking
+                if (project.description !== undefined && typeof project.description !== 'string') {
+                    warnings.push(`${prefix}: Description should be a string`);
+                }
+
+                if (project.status !== undefined) {
+                    const validStatuses = ['planning', 'active', 'on-hold', 'completed'];
+                    if (!validStatuses.includes(project.status)) {
+                        warnings.push(`${prefix}: Unknown status "${project.status}"`);
+                    }
+                }
+
+                if (project.requirements !== undefined && !Array.isArray(project.requirements)) {
+                    warnings.push(`${prefix}: Requirements should be an array`);
+                }
+            });
+
+            return { errors, warnings };
+        }
+
+        validateTasksArray(tasks) {
+            const errors = [];
+            const warnings = [];
+            const seenIds = new Set();
+
+            tasks.forEach((task, index) => {
+                const prefix = `Task ${index + 1}`;
+
+                if (!task || typeof task !== 'object') {
+                    errors.push(`${prefix}: Invalid task object`);
+                    return;
+                }
+
+                if (!task.id || typeof task.id !== 'string') {
+                    errors.push(`${prefix}: Missing or invalid id`);
+                } else {
+                    if (seenIds.has(task.id)) {
+                        errors.push(`${prefix}: Duplicate task id "${task.id}"`);
+                    }
+                    seenIds.add(task.id);
+                }
+
+                if (!task.name || typeof task.name !== 'string') {
+                    errors.push(`${prefix}: Missing or invalid name`);
+                }
+
+                if (task.status !== undefined) {
+                    const validStatuses = ['not-started', 'in-progress', 'completed', 'blocked'];
+                    if (!validStatuses.includes(task.status)) {
+                        warnings.push(`${prefix}: Unknown status "${task.status}"`);
+                    }
+                }
+
+                if (task.dueDate !== undefined && task.dueDate !== '') {
+                    const date = new Date(task.dueDate);
+                    if (isNaN(date.getTime())) {
+                        warnings.push(`${prefix}: Invalid due date format`);
+                    }
+                }
+            });
+
+            return { errors, warnings };
+        }
+
+        validateRisksArray(risks) {
+            const errors = [];
+            const warnings = [];
+            const seenIds = new Set();
+
+            risks.forEach((risk, index) => {
+                const prefix = `Risk ${index + 1}`;
+
+                if (!risk || typeof risk !== 'object') {
+                    errors.push(`${prefix}: Invalid risk object`);
+                    return;
+                }
+
+                if (!risk.id || typeof risk.id !== 'string') {
+                    errors.push(`${prefix}: Missing or invalid id`);
+                } else {
+                    if (seenIds.has(risk.id)) {
+                        errors.push(`${prefix}: Duplicate risk id "${risk.id}"`);
+                    }
+                    seenIds.add(risk.id);
+                }
+
+                if (!risk.name || typeof risk.name !== 'string') {
+                    errors.push(`${prefix}: Missing or invalid name`);
+                }
+
+                const validLevels = ['very-low', 'low', 'medium', 'high', 'very-high'];
+                if (risk.likelihood !== undefined && !validLevels.includes(risk.likelihood)) {
+                    warnings.push(`${prefix}: Unknown likelihood level "${risk.likelihood}"`);
+                }
+
+                if (risk.impact !== undefined && !validLevels.includes(risk.impact)) {
+                    warnings.push(`${prefix}: Unknown impact level "${risk.impact}"`);
+                }
+            });
+
+            return { errors, warnings };
+        }
+
+        validateIncidentsArray(incidents) {
+            const errors = [];
+            const warnings = [];
+            const seenIds = new Set();
+
+            incidents.forEach((incident, index) => {
+                const prefix = `Event ${index + 1}`;
+
+                if (!incident || typeof incident !== 'object') {
+                    errors.push(`${prefix}: Invalid event object`);
+                    return;
+                }
+
+                if (!incident.id || typeof incident.id !== 'string') {
+                    errors.push(`${prefix}: Missing or invalid id`);
+                } else {
+                    if (seenIds.has(incident.id)) {
+                        errors.push(`${prefix}: Duplicate event id "${incident.id}"`);
+                    }
+                    seenIds.add(incident.id);
+                }
+
+                if (incident.severity !== undefined) {
+                    const validSeverities = ['low', 'medium', 'high', 'critical'];
+                    if (!validSeverities.includes(incident.severity)) {
+                        warnings.push(`${prefix}: Unknown severity "${incident.severity}"`);
+                    }
+                }
+            });
+
+            return { errors, warnings };
+        }
+
+        validateComplianceObject(compliance) {
+            const errors = [];
+            const warnings = [];
+            const validStatuses = ['not-set', 'yes', 'no', 'partial', 'na'];
+
+            Object.entries(compliance).forEach(([reqId, data]) => {
+                if (!reqId || typeof reqId !== 'string') {
+                    warnings.push(`Invalid compliance key found`);
+                    return;
+                }
+
+                if (!data || typeof data !== 'object') {
+                    warnings.push(`Compliance ${reqId}: Invalid data format`);
+                    return;
+                }
+
+                if (data.status !== undefined && !validStatuses.includes(data.status)) {
+                    warnings.push(`Compliance ${reqId}: Unknown status "${data.status}"`);
+                }
+
+                if (data.comment !== undefined && typeof data.comment !== 'string') {
+                    warnings.push(`Compliance ${reqId}: Comment should be a string`);
+                }
+
+                if (data.url !== undefined && typeof data.url !== 'string') {
+                    warnings.push(`Compliance ${reqId}: URL should be a string`);
+                }
+            });
+
+            return { errors, warnings };
+        }
+
+        /**
+         * Sanitizes imported data to ensure safe values
+         * @param {Object} data - The data object to sanitize
+         * @returns {Object} - Sanitized data
+         */
+        sanitizeImportData(data) {
+            const sanitizeString = (str, maxLength = 10000) => {
+                if (typeof str !== 'string') return '';
+                // Remove any potential script tags or dangerous content
+                return str
+                    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                    .replace(/javascript:/gi, '')
+                    .replace(/on\w+\s*=/gi, '')
+                    .slice(0, maxLength);
+            };
+
+            const sanitizeId = (id) => {
+                if (typeof id !== 'string') return String(Date.now());
+                // Only allow alphanumeric, dashes, and underscores
+                return id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100) || String(Date.now());
+            };
+
+            // Sanitize projects
+            const projects = (data.projects || []).map(project => ({
+                id: sanitizeId(project.id),
+                name: sanitizeString(project.name, 500),
+                description: sanitizeString(project.description, 5000),
+                status: ['planning', 'active', 'on-hold', 'completed'].includes(project.status) 
+                    ? project.status : 'planning',
+                createdAt: project.createdAt || new Date().toISOString(),
+                requirements: Array.isArray(project.requirements) 
+                    ? project.requirements.filter(r => typeof r === 'string').map(r => sanitizeId(r))
+                    : []
+            }));
+
+            // Sanitize tasks
+            const tasks = (data.tasks || []).map(task => ({
+                id: sanitizeId(task.id),
+                name: sanitizeString(task.name, 500),
+                description: sanitizeString(task.description, 5000),
+                status: ['not-started', 'in-progress', 'completed', 'blocked'].includes(task.status) 
+                    ? task.status : 'not-started',
+                assignee: sanitizeString(task.assignee, 200),
+                dueDate: task.dueDate || '',
+                projectId: task.projectId ? sanitizeId(task.projectId) : null,
+                createdAt: task.createdAt || new Date().toISOString()
+            }));
+
+            // Sanitize risks
+            const risks = (data.risks || []).map(risk => ({
+                id: sanitizeId(risk.id),
+                name: sanitizeString(risk.name, 500),
+                description: sanitizeString(risk.description, 5000),
+                likelihood: ['very-low', 'low', 'medium', 'high', 'very-high'].includes(risk.likelihood) 
+                    ? risk.likelihood : 'medium',
+                impact: ['very-low', 'low', 'medium', 'high', 'very-high'].includes(risk.impact) 
+                    ? risk.impact : 'medium',
+                severity: ['low', 'medium', 'high', 'critical'].includes(risk.severity) 
+                    ? risk.severity : 'medium',
+                mitigation: sanitizeString(risk.mitigation, 5000),
+                projectId: risk.projectId ? sanitizeId(risk.projectId) : null,
+                createdAt: risk.createdAt || new Date().toISOString()
+            }));
+
+            // Sanitize incidents
+            const incidents = (data.incidents || []).map(incident => ({
+                id: sanitizeId(incident.id),
+                name: sanitizeString(incident.name, 500),
+                description: sanitizeString(incident.description, 5000),
+                severity: ['low', 'medium', 'high', 'critical'].includes(incident.severity) 
+                    ? incident.severity : 'low',
+                resolution: sanitizeString(incident.resolution, 5000),
+                date: incident.date || new Date().toISOString(),
+                projectId: incident.projectId ? sanitizeId(incident.projectId) : null,
+                createdAt: incident.createdAt || new Date().toISOString()
+            }));
+
+            // Sanitize compliance
+            const compliance = {};
+            if (data.compliance && typeof data.compliance === 'object') {
+                Object.entries(data.compliance).forEach(([key, value]) => {
+                    const sanitizedKey = sanitizeId(key);
+                    if (sanitizedKey && value && typeof value === 'object') {
+                        compliance[sanitizedKey] = {
+                            status: ['not-set', 'yes', 'no', 'partial', 'na'].includes(value.status) 
+                                ? value.status : 'not-set',
+                            comment: sanitizeString(value.comment, 5000),
+                            url: sanitizeString(value.url, 2000)
+                        };
+                    }
+                });
+            }
+
+            return { projects, tasks, risks, incidents, compliance };
         }
 
         clearAllData() {
@@ -2370,11 +3101,11 @@ export class PSPFExplorer {
                 this.updateDataStats();
                 this.renderHome();
 
-                alert('All data has been cleared successfully.');
+                this.showNotification('All data has been cleared successfully.', 'success');
                 
             } catch (error) {
                 console.error('Clear data failed:', error);
-                alert('Failed to clear data. Please try again.');
+                this.showNotification('Failed to clear data. Please try again.', 'error');
             }
         }
 
@@ -2404,8 +3135,8 @@ export class PSPFExplorer {
                             </div>
                         </div>
                         <div class="tag-management-actions">
-                            <button class="btn btn-outline btn-small" onclick="window.pspfExplorer.editTag('${tagKey}')">Edit</button>
-                            <button class="btn btn-danger btn-small" onclick="window.pspfExplorer.deleteTag('${tagKey}')">Delete</button>
+                            <button class="btn btn-outline btn-small" data-action="edit-tag" data-tag-key="${tagKey}">Edit</button>
+                            <button class="btn btn-danger btn-small" data-action="delete-tag" data-tag-key="${tagKey}">Delete</button>
                         </div>
                     </div>
                 `;
@@ -2434,7 +3165,7 @@ export class PSPFExplorer {
             const description = descriptionInput.value.trim();
 
             if (!name) {
-                alert('Please enter a tag name.');
+                this.showNotification('Please enter a tag name.', 'warning');
                 return;
             }
 
@@ -2442,7 +3173,7 @@ export class PSPFExplorer {
             const tagKey = name.toLowerCase().replace(/\s+/g, '-');
 
             if (this.tagDefinitions[tagKey]) {
-                alert('A tag with this name already exists.');
+                this.showNotification('A tag with this name already exists.', 'warning');
                 return;
             }
 
@@ -2462,7 +3193,7 @@ export class PSPFExplorer {
             this.renderTagManagement();
             this.populateTagFilters();
 
-            alert(`Tag "${name}" added successfully!`);
+            this.showNotification(`Tag "${name}" added successfully!`, 'success');
         }
 
         editTag(tagKey) {
@@ -2474,7 +3205,7 @@ export class PSPFExplorer {
 
             const newColor = prompt('Enter new color (hex code):', tag.color);
             if (!newColor || !newColor.match(/^#[0-9A-Fa-f]{6}$/)) {
-                alert('Invalid color format. Please use hex format like #3b82f6');
+                this.showNotification('Invalid color format. Please use hex format like #3b82f6', 'warning');
                 return;
             }
 
@@ -2486,7 +3217,7 @@ export class PSPFExplorer {
             // If name changed, update all requirements that use this tag
             if (newTagKey !== tagKey) {
                 if (this.tagDefinitions[newTagKey]) {
-                    alert('A tag with this name already exists.');
+                    this.showNotification('A tag with this name already exists.', 'warning');
                     return;
                 }
 
@@ -2511,7 +3242,7 @@ export class PSPFExplorer {
             this.renderTagManagement();
             this.populateTagFilters();
 
-            alert('Tag updated successfully!');
+            this.showNotification('Tag updated successfully!', 'success');
         }
 
         deleteTag(tagKey) {
@@ -2539,7 +3270,7 @@ export class PSPFExplorer {
             this.renderTagManagement();
             this.populateTagFilters();
 
-            alert('Tag deleted successfully!');
+            this.showNotification('Tag deleted successfully!', 'success');
         }
 
         saveTagDefinitions() {
@@ -2573,24 +3304,20 @@ export class PSPFExplorer {
         }
 
         showRequirementManagerModal() {
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.id = 'requirementManagerModal';
-            modal.innerHTML = `
+            const modalContent = `
                 <div class="modal-content" style="max-width: 800px; max-height: 90vh;">
                     <h3>📋 Requirement Management</h3>
                     <div style="margin-bottom: 1rem;">
-                        <button class="btn btn-primary" onclick="window.pspfExplorer.showAddRequirementModal()">+ Add New Requirement</button>
-                        <button class="btn btn-secondary" onclick="window.pspfExplorer.exportRequirements()">Export Requirements</button>
+                        <button class="btn btn-primary" id="addReqBtn">+ Add New Requirement</button>
+                        <button class="btn btn-secondary" id="exportReqBtn">Export Requirements</button>
                     </div>
                     
                     <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-                        <select id="domainFilter" onchange="window.pspfExplorer.filterRequirements()" style="min-width: 150px;">
+                        <select id="domainFilter" style="min-width: 150px;">
                             <option value="">All Domains</option>
-                            ${this.domains.map(d => `<option value="${d.id}">${d.title}</option>`).join('')}
+                            ${this.domains.map(d => `<option value="${d.id}">${this.escapeHtml(d.title)}</option>`).join('')}
                         </select>
-                        <input type="text" id="requirementSearch" placeholder="Search requirements..." 
-                               oninput="window.pspfExplorer.filterRequirements()" style="flex: 1;">
+                        <input type="text" id="requirementSearch" placeholder="Search requirements..." style="flex: 1;">
                     </div>
                     
                     <div id="requirementsList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; background: var(--bg-secondary);">
@@ -2598,13 +3325,20 @@ export class PSPFExplorer {
                     </div>
                     
                     <div class="form-actions">
-                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Close</button>
+                        <button class="btn btn-secondary" id="closeReqMgrBtn">Close</button>
                     </div>
                 </div>
             `;
             
-            document.body.appendChild(modal);
-            modal.style.display = 'block';
+            const modal = this.createModal(modalContent, { id: 'requirementManagerModal' });
+            
+            // Attach tracked event listeners for proper cleanup
+            modal.addTrackedListener(modal.querySelector('#addReqBtn'), 'click', () => this.showAddRequirementModal());
+            modal.addTrackedListener(modal.querySelector('#exportReqBtn'), 'click', () => this.exportRequirements());
+            modal.addTrackedListener(modal.querySelector('#closeReqMgrBtn'), 'click', () => modal.remove());
+            modal.addTrackedListener(modal.querySelector('#domainFilter'), 'change', () => this.filterRequirements());
+            modal.addTrackedListener(modal.querySelector('#requirementSearch'), 'input', () => this.filterRequirements());
+            
             this.renderRequirementsList();
         }
 
@@ -2670,8 +3404,8 @@ export class PSPFExplorer {
                             <div style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.4;">${req.description.length > 150 ? req.description.substring(0, 150) + '...' : req.description}</div>
                         </div>
                         <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
-                            <button class="btn btn-outline btn-small" onclick="window.pspfExplorer.editRequirement('${req.uuid}')">Edit</button>
-                            <button class="btn btn-danger btn-small" onclick="window.pspfExplorer.deleteRequirement('${req.uuid}')" 
+                            <button class="btn btn-outline btn-small" data-action="edit-requirement-mgmt" data-req-uuid="${req.uuid}">Edit</button>
+                            <button class="btn btn-danger btn-small" data-action="delete-requirement-mgmt" data-req-uuid="${req.uuid}" 
                                     ${hasCompliance ? 'title="Warning: This requirement has compliance data"' : ''}>Delete</button>
                         </div>
                     </div>
@@ -2700,16 +3434,14 @@ export class PSPFExplorer {
 
         showRequirementEditModal(requirement = null) {
             const isEdit = !!requirement;
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.innerHTML = `
+            const modalContent = `
                 <div class="modal-content">
                     <h3>${isEdit ? 'Edit Requirement' : 'Add New Requirement'}</h3>
                     <form id="requirementEditForm">
                         <div class="form-group">
                             <label for="reqId">Requirement ID</label>
                             <input type="text" id="reqId" required placeholder="e.g., GOV-036" 
-                                   value="${requirement ? requirement.id : ''}"
+                                   value="${requirement ? this.escapeHtml(requirement.id) : ''}"
                                    pattern="[A-Z]+-[0-9]+" title="Format: DOMAIN-NUMBER (e.g., GOV-036)">
                             <small style="color: var(--text-secondary);">Format: DOMAIN-NUMBER (e.g., GOV-036, TECH-108)</small>
                         </div>
@@ -2720,7 +3452,7 @@ export class PSPFExplorer {
                                 <option value="">Select Domain</option>
                                 ${this.domains.map(domain => `
                                     <option value="${domain.id}" ${requirement && requirement.domainId === domain.id ? 'selected' : ''}>
-                                        ${domain.title}
+                                        ${this.escapeHtml(domain.title)}
                                     </option>
                                 `).join('')}
                             </select>
@@ -2729,12 +3461,12 @@ export class PSPFExplorer {
                         <div class="form-group">
                             <label for="reqTitle">Title</label>
                             <input type="text" id="reqTitle" required placeholder="Requirement title"
-                                   value="${requirement ? requirement.title : ''}">
+                                   value="${requirement ? this.escapeHtml(requirement.title) : ''}">
                         </div>
                         
                         <div class="form-group">
                             <label for="reqDescription">Description</label>
-                            <textarea id="reqDescription" required placeholder="Detailed requirement description" rows="4">${requirement ? requirement.description : ''}</textarea>
+                            <textarea id="reqDescription" required placeholder="Detailed requirement description" rows="4">${requirement ? this.escapeHtml(requirement.description) : ''}</textarea>
                         </div>
                         
                         ${isEdit ? `
@@ -2745,17 +3477,20 @@ export class PSPFExplorer {
                         ` : ''}
                         
                         <div class="form-actions">
-                            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cancel</button>
+                            <button type="button" class="btn btn-secondary" id="cancelReqEditBtn">Cancel</button>
                             <button type="submit" class="btn btn-primary">${isEdit ? 'Update' : 'Create'} Requirement</button>
                         </div>
                     </form>
                 </div>
             `;
             
-            document.body.appendChild(modal);
-            modal.style.display = 'block';
+            const modal = this.createModal(modalContent);
             
-            document.getElementById('requirementEditForm').addEventListener('submit', (e) => {
+            // Attach tracked event listeners for proper cleanup
+            modal.addTrackedListener(modal.querySelector('#cancelReqEditBtn'), 'click', () => modal.remove());
+            
+            const form = modal.querySelector('#requirementEditForm');
+            modal.addTrackedListener(form, 'submit', (e) => {
                 e.preventDefault();
                 this.saveRequirement(requirement);
                 modal.remove();
@@ -2770,13 +3505,13 @@ export class PSPFExplorer {
             
             // Validate ID format
             if (!/^[A-Z]+-[0-9]+$/.test(reqId)) {
-                alert('Invalid ID format. Use format: DOMAIN-NUMBER (e.g., GOV-036)');
+                this.showNotification('Invalid ID format. Use format: DOMAIN-NUMBER (e.g., GOV-036)', 'error');
                 return;
             }
             
             // Check for duplicate IDs (unless editing existing)
             if (!existingRequirement && this.requirements[reqId]) {
-                alert('A requirement with this ID already exists.');
+                this.showNotification('A requirement with this ID already exists.', 'warning');
                 return;
             }
             
@@ -2822,7 +3557,7 @@ export class PSPFExplorer {
             this.saveData();
             this.renderRequirementsList();
             this.renderDomainsGrid();
-            alert(`Requirement ${reqId} ${existingRequirement ? 'updated' : 'created'} successfully!`);
+            this.showNotification(`Requirement ${reqId} ${existingRequirement ? 'updated' : 'created'} successfully!`, 'success');
         }
 
         migrateRequirementData(oldId, newId) {
@@ -2883,7 +3618,7 @@ export class PSPFExplorer {
             this.saveData();
             this.renderRequirementsList();
             this.renderDomainsGrid();
-            alert(`Requirement ${requirement.id} deleted successfully.`);
+            this.showNotification(`Requirement ${requirement.id} deleted successfully.`, 'success');
         }
 
         exportRequirements() {
@@ -2912,7 +3647,7 @@ export class PSPFExplorer {
             downloadLink.click();
             document.body.removeChild(downloadLink);
             
-            alert('Requirements exported successfully!');
+            this.showNotification('Requirements exported successfully!', 'success');
         }
 
         saveData() {
