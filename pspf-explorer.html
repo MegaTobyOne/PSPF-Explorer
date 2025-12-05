@@ -81,6 +81,7 @@
                 <button id="searchBtn" class="nav-btn">Search</button>
                 <button id="progressBtn" class="nav-btn">Progress</button>
                 <button id="projectBtn" class="nav-btn">Projects</button>
+                <button id="myWorkBtn" class="nav-btn">My Work</button>
                 <button id="dataBtn" class="nav-btn">Data</button>
                 <button id="helpBtn" class="nav-btn">Help</button>
             </nav>
@@ -478,6 +479,83 @@
                             <div class="placeholder-content">
                                 <h4>Select a Project</h4>
                                 <p>Choose a project from the list to view its details and manage tasks.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- My Work View -->
+            <section id="myWorkView" class="view">
+                <div class="view-header">
+                    <h2>My Work</h2>
+                    <p class="subtitle">Focus on requirements you own by tagging them and tracking their progress in one place.</p>
+                    <div class="my-work-filter-bar">
+                        <div class="filter-labels">
+                            <h4>Your Tags</h4>
+                            <p class="subtitle-sm">Select a tag to filter the requirements you tagged.</p>
+                        </div>
+                        <div class="my-work-user">
+                            <label for="myWorkUserNameInput">Your name</label>
+                            <input type="text" id="myWorkUserNameInput" placeholder="e.g., bob">
+                        </div>
+                        <div class="tag-selector" id="myWorkTagFilters"></div>
+                        <button class="btn btn-link" data-action="mywork-clear-tags">Clear filters</button>
+                    </div>
+                </div>
+
+                <div class="my-work-dashboard" id="myWorkDashboard">
+                    <div class="stat-card">
+                        <div class="stat-number" id="myWorkTotalAssignments">0</div>
+                        <div class="stat-label">Tagged Requirements</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="myWorkComplianceRate">0%</div>
+                        <div class="stat-label">Compliance Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="myWorkMetCount">0</div>
+                        <div class="stat-label">Requirements Met</div>
+                    </div>
+                </div>
+
+                <div class="my-work-layout">
+                    <div class="my-work-list-panel">
+                        <div class="list-header">
+                            <h3>Your tagged work</h3>
+                            <p class="subtitle-sm">Only requirements with one of your tags appear below. Add tags inline to capture ownership.</p>
+                        </div>
+                        <div id="myWorkRequirementsList" class="my-work-list" aria-live="polite"></div>
+                    </div>
+                    <div class="my-work-visuals">
+                        <div class="mini-heatmap-card">
+                            <h4>Status snapshot</h4>
+                            <div id="myWorkMiniHeatmap" class="mini-heatmap-grid" aria-live="polite">
+                                <!-- Filtered requirement chips render here -->
+                            </div>
+                            <div class="heatmap-legend" aria-label="Status legend">
+                                <span class="legend-chip yes">Met</span>
+                                <span class="legend-chip partial">Risk Managed</span>
+                                <span class="legend-chip no">Not Met</span>
+                                <span class="legend-chip na">Not Applicable</span>
+                                <span class="legend-chip not-set">Not Set</span>
+                            </div>
+                        </div>
+                        <div class="my-work-progress-card">
+                            <h4>Progress summary</h4>
+                            <div class="stats-grid">
+                                <div>
+                                    <p class="stat-label">In progress</p>
+                                    <p class="stat-number" id="myWorkPartialCount">0</p>
+                                </div>
+                                <div>
+                                    <p class="stat-label">Not met</p>
+                                    <p class="stat-number" id="myWorkNotMetCount">0</p>
+                                </div>
+                                <div>
+                                    <p class="stat-label">Needs attention</p>
+                                    <p class="stat-number" id="myWorkNoDataCount">0</p>
+                                </div>
                             </div>
                         </div>
                     </div>

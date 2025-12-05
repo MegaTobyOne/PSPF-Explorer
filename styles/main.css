@@ -593,6 +593,10 @@ body {
     margin-bottom: 12px;
 }
 
+.tag-selector.tag-selector-inline {
+    gap: 0.5rem;
+}
+
 .tag-option {
     padding: 6px 12px;
     border-radius: 16px;
@@ -617,6 +621,11 @@ body {
 .tag-option:not(.selected):hover {
     border-color: var(--accent-color);
     color: var(--text-primary);
+}
+
+.tag-option.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 .tags-display {
@@ -948,6 +957,226 @@ select:focus-visible {
 
 .project-item.active .project-meta {
     color: rgba(255, 255, 255, 0.9);
+}
+
+.subtitle-sm {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.my-work-filter-bar {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.my-work-user {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 180px;
+}
+
+.my-work-user label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.my-work-user input {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+    padding: 0.35rem 0.65rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    min-width: 160px;
+    font-size: 0.95rem;
+}
+
+.my-work-filter-bar .filter-labels {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 180px;
+}
+
+.my-work-filter-bar .btn-link {
+    margin-left: auto;
+    align-self: flex-start;
+}
+
+.my-work-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.25rem 0;
+}
+
+.my-work-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr);
+    gap: 1.5rem;
+}
+
+.my-work-list-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.my-work-list-panel .list-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.my-work-list-panel .list-header p {
+    margin: 0;
+}
+
+.my-work-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.my-work-list .requirement-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.requirement-card .requirement-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.requirement-card .requirement-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.requirement-card .requirement-meta {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.requirement-card .requirement-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.requirement-card .requirement-description {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.requirement-card .requirement-meta {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.my-work-visuals {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.mini-heatmap-card,
+.my-work-progress-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.mini-heatmap-card h4,
+.my-work-progress-card h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.mini-heatmap-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-height: 60px;
+}
+
+.mini-heatmap-grid .requirement-chip {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+}
+
+.my-work-progress-card .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+.my-work-progress-card .stat-number {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin: 0.2rem 0;
+}
+
+.my-work-progress-card .stat-label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-transform: none;
+}
+
+#myWorkEmptyState {
+    border: 1px dashed var(--border-light);
+    padding: 1.5rem;
+    margin: 0;
+}
+
+@media (max-width: 1024px) {
+    .my-work-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .my-work-filter-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .my-work-filter-bar .btn-link {
+        margin-left: 0;
+    }
 }
 
 .project-name {
@@ -2786,6 +3015,15 @@ select:focus-visible {
 .search-result-item:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
+}
+
+.search-result-clickable {
+    cursor: pointer;
+}
+
+.search-result-clickable:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
 }
 
 .search-result-item h4 {

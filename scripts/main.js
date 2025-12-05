@@ -37,6 +37,11 @@ export class PSPFExplorer {
             this.risks = this.readStorage('pspf_risks', []);
             this.incidents = this.readStorage('pspf_incidents', []);
             this.compliance = this.readStorage('pspf_compliance', {});
+
+            this.userProfiles = this.readStorage('pspf_user_profiles', {});
+            this.currentUserProfile = null;
+            this.userTagAssignments = this.readStorage('pspf_user_tag_assignments', {});
+            this.myWorkActiveTagFilters = new Set();
             
             this.currentView = 'home';
             this.selectedDomain = null;
@@ -158,6 +163,8 @@ export class PSPFExplorer {
         init() {
             this.loadDomainData();
             this.loadTagDefinitions(); // Load custom tag definitions
+            this.initializeUserProfile();
+            this.loadUserTagAssignments();
             this.loadSavedRequirements(); // Load saved tags
             this.initializeRequirementUUIDs();
 
@@ -216,6 +223,14 @@ export class PSPFExplorer {
                 this.showView('project');
                 this.updateNavButtons('projectBtn');
             });
+
+            const myWorkBtn = document.getElementById('myWorkBtn');
+            if (myWorkBtn) {
+                myWorkBtn.addEventListener('click', () => {
+                    this.showView('myWork');
+                    this.updateNavButtons('myWorkBtn');
+                });
+            }
 
             document.getElementById('dataBtn').addEventListener('click', () => {
                 this.showView('data');
@@ -453,10 +468,17 @@ export class PSPFExplorer {
                     break;
 
                 // Requirement actions
-                case 'view-requirement':
+                case 'view-requirement': {
                     const reqId = target.dataset.requirementId;
-                    if (reqId) this.showRequirementDetails(reqId);
+                    if (reqId) {
+                        const requirement = this.requirements[reqId];
+                        if (requirement) {
+                            this.showDomainRequirements(requirement.domainId);
+                        }
+                        this.showRequirementDetails(reqId);
+                    }
                     break;
+                }
 
                 // Project actions
                 case 'view-project':
@@ -526,6 +548,16 @@ export class PSPFExplorer {
                     }
                     break;
 
+                case 'view-task':
+                    const taskId = target.dataset.taskId;
+                    if (taskId) this.showTaskModal(taskId);
+                    break;
+
+                case 'view-risk':
+                    const riskId = target.dataset.riskId;
+                    if (riskId) this.showRiskModal(riskId);
+                    break;
+
                 // Link/Unlink actions
                 case 'link-project':
                     const linkReqId = target.dataset.requirementId;
@@ -566,6 +598,17 @@ export class PSPFExplorer {
 
                 case 'clear-tags':
                     this.clearTagFilters();
+                    break;
+
+                case 'mywork-toggle-filter':
+                    const myWorkTagId = target.dataset.tagId;
+                    if (myWorkTagId) {
+                        this.toggleMyWorkFilter(myWorkTagId);
+                    }
+                    break;
+
+                case 'mywork-clear-tags':
+                    this.clearMyWorkFilters();
                     break;
 
                 // Requirement management actions
@@ -666,6 +709,9 @@ export class PSPFExplorer {
                 btn.removeAttribute('aria-current');
             });
             
+                if (viewName === 'myWork') {
+                    this.renderMyWorkView();
+                }
             const activeBtn = document.getElementById(activeId);
             if (activeBtn) {
                 activeBtn.classList.add('active');
@@ -687,11 +733,12 @@ export class PSPFExplorer {
             domainsGrid.innerHTML = this.domains.map(domain => {
                 const health = this.calculateDomainHealth(domain.id);
                 const healthClass = health.status;
+                const homeTitle = domain.id === 'governance' ? 'Security Governance' : domain.title;
                 
                 return `
                     <div class="domain-card ${healthClass}" data-domain="${domain.id}">
                         <div class="domain-header">
-                            <h3>${domain.title}</h3>
+                            <h3>${homeTitle}</h3>
                         </div>
                         <div class="domain-stats">
                             <span class="health-text">${health.text}</span>
@@ -882,24 +929,44 @@ export class PSPFExplorer {
         }
 
         toggleRequirementTag(requirementId, tagId) {
-            const requirement = this.requirements[requirementId];
-            if (!requirement) return;
-            
-            // Ensure tags array exists
-            if (!requirement.tags) {
-                requirement.tags = [];
-            }
-            
-            const tagIndex = requirement.tags.indexOf(tagId);
-            if (tagIndex > -1) {
-                requirement.tags.splice(tagIndex, 1);
+            if (!this.currentUserProfile) return;
+            const currentTags = new Set(this.getUserRequirementTags(requirementId));
+            if (currentTags.has(tagId)) {
+                currentTags.delete(tagId);
             } else {
-                requirement.tags.push(tagId);
+                currentTags.add(tagId);
             }
-            
-            this.saveRequirements();
+
+            this.setUserRequirementTags(requirementId, Array.from(currentTags));
             this.renderRequirementsList();
-            this.showRequirementDetails(requirementId); // Refresh details view
+            if (this.currentView === 'myWork') {
+                this.renderMyWorkView();
+            }
+            this.showRequirementDetails(requirementId);
+        }
+
+        getCurrentUserAssignmentMap() {
+            if (!this.currentUserProfile) return {};
+            if (!this.userTagAssignments[this.currentUserProfile.id]) {
+                this.userTagAssignments[this.currentUserProfile.id] = {};
+            }
+            return this.userTagAssignments[this.currentUserProfile.id];
+        }
+
+        getUserRequirementTags(requirementId, userId = null) {
+            const assignments = userId ? this.userTagAssignments[userId] || {} : this.getCurrentUserAssignmentMap();
+            return (assignments[requirementId] || []).slice();
+        }
+
+        setUserRequirementTags(requirementId, tags = []) {
+            if (!this.currentUserProfile) return;
+            const userMap = this.getCurrentUserAssignmentMap();
+            if (!tags.length) {
+                delete userMap[requirementId];
+            } else {
+                userMap[requirementId] = [...tags];
+            }
+            this.saveUserTagAssignments();
         }
 
         saveRequirements() {
@@ -911,53 +978,32 @@ export class PSPFExplorer {
         }
 
         loadSavedRequirements() {
-            // Ensure all requirements have tags array
-            Object.keys(this.requirements).forEach(reqId => {
-                if (!this.requirements[reqId].tags) {
-                    this.requirements[reqId].tags = [];
-                }
-            });
+            if (!this.storageAvailable) return;
+            const saved = localStorage.getItem('pspf_requirements');
+            if (!saved) return;
 
-            // Load saved requirements from localStorage
-            if (this.storageAvailable) {
-                const saved = localStorage.getItem('pspf_requirements');
-                if (saved) {
+            try {
                 const savedRequirements = JSON.parse(saved);
-                // Merge saved data with default requirements, preserving tags
-                Object.keys(this.requirements).forEach(reqId => {
-                    if (savedRequirements[reqId] && savedRequirements[reqId].tags) {
-                        this.requirements[reqId].tags = savedRequirements[reqId].tags;
+                Object.keys(savedRequirements).forEach(reqId => {
+                    const existing = this.requirements[reqId];
+                    if (existing) {
+                        this.requirements[reqId] = {
+                            ...existing,
+                            ...savedRequirements[reqId]
+                        };
+                    } else {
+                        this.requirements[reqId] = savedRequirements[reqId];
                     }
                 });
-                }
-            }
-            
-            // Add some example tags for demo
-            if (!this.storageAvailable || !localStorage.getItem('pspf_requirements')) {
-                // Add sample tags to a few requirements for demonstration
-                if (this.requirements['GOV-001']) {
-                    this.requirements['GOV-001'].tags = ['high'];
-                }
-                if (this.requirements['GOV-002']) {
-                    this.requirements['GOV-002'].tags = ['critical'];
-                }
-                if (this.requirements['TECH-099']) {
-                    this.requirements['TECH-099'].tags = ['medium'];
-                }
-                if (this.requirements['INFO-058']) {
-                    this.requirements['INFO-058'].tags = ['low', 'medium'];
-                }
-                if (this.storageAvailable) {
-                    this.saveRequirements();
-                }
+            } catch (error) {
+                console.warn('Unable to load saved requirements:', error);
             }
         }
 
         renderTagsInDetails(requirementId) {
             const requirement = this.requirements[requirementId];
             if (!requirement) return '';
-            
-            const tags = requirement.tags || [];
+            const tags = this.getUserRequirementTags(requirementId);
             
             return `
                 <div class="tag-manager">
@@ -988,7 +1034,7 @@ export class PSPFExplorer {
         }
 
         renderTagsInList(requirement) {
-            const tags = requirement.tags || [];
+            const tags = this.getUserRequirementTags(requirement.id);
             if (tags.length === 0) return '';
             
             return tags.map(tagId => {
@@ -1528,6 +1574,190 @@ export class PSPFExplorer {
             }).join('');
         }
 
+        renderMyWorkView() {
+            if (!this.currentUserProfile) return;
+
+            this.renderMyWorkTagFilters();
+            const displayName = this.currentUserProfile.name || 'You';
+            const assignments = this.getCurrentUserAssignmentMap();
+            const activeFilters = this.myWorkActiveTagFilters;
+            const requirementIds = Object.keys(assignments).filter(reqId => (assignments[reqId] || []).length > 0);
+            const filteredIds = requirementIds.filter(reqId => {
+                if (!activeFilters.size) return true;
+                const tags = assignments[reqId] || [];
+                return Array.from(activeFilters).some(tagId => tags.includes(tagId));
+            });
+
+            const requirements = filteredIds
+                .map(reqId => this.requirements[reqId])
+                .filter(Boolean)
+                .sort((a, b) => a.id.localeCompare(b.id));
+
+            this.updateMyWorkDashboard(requirements);
+            this.renderMyWorkMiniHeatmap(requirements);
+
+            const listContainer = document.getElementById('myWorkRequirementsList');
+            if (listContainer) {
+                if (!requirements.length) {
+                    listContainer.innerHTML = `
+                        <div class="empty-state">
+                            <h3>${this.escapeHtml(displayName)}, this space is empty.</h3>
+                            <p>Tag requirements to surface them in your personal workspace.</p>
+                        </div>
+                    `;
+                } else {
+                    listContainer.innerHTML = requirements.map(req => this.renderMyWorkRequirementCard(req)).join('');
+                }
+            }
+
+            const userNameInput = document.getElementById('myWorkUserNameInput');
+            if (userNameInput) {
+                userNameInput.value = displayName;
+                userNameInput.onblur = (event) => {
+                    const trimmed = (event.target.value || '').trim();
+                    this.currentUserProfile.name = trimmed || 'You';
+                    this.saveUserProfile();
+                    this.renderMyWorkView();
+                };
+            }
+        }
+
+        renderMyWorkTagFilters() {
+            const container = document.getElementById('myWorkTagFilters');
+            if (!container) return;
+
+            container.innerHTML = Object.keys(this.tagDefinitions).map(tagId => {
+                const tag = this.tagDefinitions[tagId];
+                if (!tag) return '';
+                const usageCount = this.getCurrentUserTagUsage(tagId);
+                const isActive = this.myWorkActiveTagFilters.has(tagId);
+                const disabledClass = usageCount === 0 ? 'disabled' : '';
+                const colorValue = this.escapeHtml(tag.color || '#64748b');
+                const activeStyle = isActive ? `background-color: ${colorValue}; color: white;` : '';
+                const label = this.escapeHtml(tag.name || tagId);
+                return `
+                    <div class="tag-option ${isActive ? 'selected' : ''} ${disabledClass}" 
+                         style="border-color: ${colorValue}; ${activeStyle}"
+                         data-action="mywork-toggle-filter"
+                         data-tag-id="${tagId}"
+                         tabindex="0"
+                         role="button"
+                         title="${this.escapeHtml(tag.description || '')}">
+                        ${label}${usageCount ? ` (${usageCount})` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        toggleMyWorkFilter(tagId) {
+            if (!tagId) return;
+            if (this.getCurrentUserTagUsage(tagId) === 0) return;
+            if (this.myWorkActiveTagFilters.has(tagId)) {
+                this.myWorkActiveTagFilters.delete(tagId);
+            } else {
+                this.myWorkActiveTagFilters.add(tagId);
+            }
+            this.renderMyWorkView();
+        }
+
+        clearMyWorkFilters() {
+            if (!this.myWorkActiveTagFilters.size) return;
+            this.myWorkActiveTagFilters.clear();
+            this.renderMyWorkView();
+        }
+
+        renderMyWorkRequirementCard(requirement) {
+            const tags = this.getUserRequirementTags(requirement.id);
+            const compliance = this.compliance[requirement.id] || { status: 'not-set' };
+            const safeDescription = requirement.description ? this.escapeHtml(requirement.description) : '';
+            const descriptionText = safeDescription.length > 160 ? `${safeDescription.substring(0, 160)}…` : safeDescription;
+
+            return `
+                <article class="requirement-card" data-req="${requirement.id}">
+                    <div class="requirement-header">
+                        <div>
+                            <h4>${requirement.id}</h4>
+                            <p class="requirement-meta">${this.escapeHtml(requirement.title)}</p>
+                        </div>
+                        <span class="status-badge ${compliance.status}">${this.getStatusText(compliance.status)}</span>
+                    </div>
+                    <p class="requirement-description">${descriptionText}</p>
+                    <div class="tag-selector tag-selector-inline">
+                        ${this.renderMyWorkTagOptions(requirement.id, tags)}
+                    </div>
+                    <div class="requirement-actions">
+                        <button class="btn btn-link btn-small" data-action="view-requirement" data-requirement-id="${requirement.id}">View details</button>
+                    </div>
+                </article>
+            `;
+        }
+
+        renderMyWorkTagOptions(requirementId, selectedTags) {
+            return Object.keys(this.tagDefinitions).map(tagId => {
+                const tag = this.tagDefinitions[tagId];
+                if (!tag) return '';
+                const isSelected = selectedTags.includes(tagId);
+                const colorValue = this.escapeHtml(tag.color || '#64748b');
+                const style = isSelected ? `background-color: ${colorValue}; color: white; border-color: ${colorValue};` : `border-color: ${colorValue};`;
+                return `
+                    <div class="tag-option ${isSelected ? 'selected' : ''}"
+                         style="${style}"
+                         data-action="toggle-tag"
+                         data-requirement-id="${requirementId}"
+                         data-tag-id="${tagId}"
+                         tabindex="0"
+                         role="button"
+                         title="${this.escapeHtml(tag.description || '')}">
+                        ${this.escapeHtml(tag.name || tagId)}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        updateMyWorkDashboard(requirements) {
+            const total = requirements.length;
+            const statuses = requirements.map(req => this.compliance[req.id]?.status || 'not-set');
+            const metCount = statuses.filter(status => status === 'yes' || status === 'na').length;
+            const partialCount = statuses.filter(status => status === 'partial').length;
+            const notMetCount = statuses.filter(status => status === 'no').length;
+            const notSetCount = statuses.filter(status => status === 'not-set').length;
+            const complianceRate = total ? Math.round((metCount / total) * 100) : 0;
+
+            const totalEl = document.getElementById('myWorkTotalAssignments');
+            const complianceEl = document.getElementById('myWorkComplianceRate');
+            const metEl = document.getElementById('myWorkMetCount');
+            const partialEl = document.getElementById('myWorkPartialCount');
+            const notMetEl = document.getElementById('myWorkNotMetCount');
+            const notSetEl = document.getElementById('myWorkNoDataCount');
+
+            if (totalEl) totalEl.textContent = total;
+            if (complianceEl) complianceEl.textContent = `${complianceRate}%`;
+            if (metEl) metEl.textContent = metCount;
+            if (partialEl) partialEl.textContent = partialCount;
+            if (notMetEl) notMetEl.textContent = notMetCount;
+            if (notSetEl) notSetEl.textContent = notSetCount;
+        }
+
+        renderMyWorkMiniHeatmap(requirements) {
+            const heatmap = document.getElementById('myWorkMiniHeatmap');
+            if (!heatmap) return;
+            if (!requirements.length) {
+                heatmap.innerHTML = '<p class="subtitle-sm">No tagged requirements yet.</p>';
+                return;
+            }
+            heatmap.innerHTML = requirements.map(req => {
+                const status = this.compliance[req.id]?.status || 'not-set';
+                const label = `${req.id}: ${this.getStatusText(status)}`;
+                return `<span class="requirement-chip ${status}" title="${label}" aria-label="${label}"></span>`;
+            }).join('');
+        }
+
+        getCurrentUserTagUsage(tagId) {
+            if (!this.currentUserProfile) return 0;
+            const assignments = this.getCurrentUserAssignmentMap();
+            return Object.values(assignments).filter(tags => tags.includes(tagId)).length;
+        }
+
         performSearch(query) {
             const results = [];
             const searchResults = document.getElementById('searchResults');
@@ -1600,19 +1830,37 @@ export class PSPFExplorer {
                 return;
             }
 
+            const renderSearchResult = (result) => {
+                const action = result.reqId ? 'view-requirement'
+                    : result.type === 'Project' ? 'view-project'
+                        : result.type === 'Task' ? 'view-task'
+                            : result.type === 'Risk' ? 'view-risk'
+                                : result.domainId ? 'view-domain'
+                                    : '';
+                const datasetAttrs = [
+                    result.reqId ? `data-requirement-id="${result.reqId}"` : '',
+                    result.projectId ? `data-project-id="${result.projectId}"` : (result.id && result.type === 'Project') ? `data-project-id="${result.id}"` : '',
+                    result.domainId ? `data-domain-id="${result.domainId}"` : '',
+                    result.taskId ? `data-task-id="${result.taskId}"` : (result.type === 'Task' && result.id) ? `data-task-id="${result.id}"` : '',
+                    result.riskId ? `data-risk-id="${result.riskId}"` : (result.type === 'Risk' && result.id) ? `data-risk-id="${result.id}"` : ''
+                ].filter(Boolean).join(' ');
+                const actionAttr = action ? `data-action="${action}"` : '';
+                return `
+                    <div class="search-result-item ${action ? 'search-result-clickable' : ''}" role="${action ? 'button' : 'article'}" tabindex="${action ? 0 : -1}" ${actionAttr} ${datasetAttrs}>
+                        <span class="result-type ${result.type.toLowerCase()}">${result.type}</span>
+                        ${result.reqId ? `<span class="result-req-id">${result.reqId}</span>` : ''}
+                        <h4>${result.title}</h4>
+                        <p>${result.description}</p>
+                        ${result.domain ? `<span class="result-domain ${result.domainId ? 'result-domain-clickable' : ''}">Domain: ${result.domain}</span>` : ''}
+                        ${result.severity ? `<span class="result-severity severity-${result.severity}">Risk Level: ${result.severity.toUpperCase()}</span>` : ''}
+                    </div>
+                `;
+            };
+
             searchResults.innerHTML = `
                 <h3>Search Results (${results.length})</h3>
                 <div class="search-results-list">
-                    ${results.map(result => `
-                        <div class="search-result-item">
-                            <span class="result-type ${result.type.toLowerCase()}">${result.type}</span>
-                            ${result.reqId ? `<span class="result-req-id">${result.reqId}</span>` : ''}
-                            <h4>${result.title}</h4>
-                            <p>${result.description}</p>
-                            ${result.domain && result.domainId ? `<span class="result-domain result-domain-clickable" data-action="view-domain" data-domain-id="${result.domainId}" tabindex="0" role="button">Domain: ${result.domain}</span>` : result.domain ? `<span class="result-domain">Domain: ${result.domain}</span>` : ''}
-                            ${result.severity ? `<span class="result-severity severity-${result.severity}">Risk Level: ${result.severity.toUpperCase()}</span>` : ''}
-                        </div>
-                    `).join('')}
+                    ${results.map(renderSearchResult).join('')}
                 </div>
             `;
             if (spinner) spinner.style.display = 'none';
@@ -2991,7 +3239,7 @@ export class PSPFExplorer {
                         <div class="tag-management-info">
                             <div class="tag-management-color" style="background-color: ${tag.color};"></div>
                             <div class="tag-management-details">
-                                <div class="tag-management-name">${tagKey}</div>
+                                <div class="tag-management-name">${tag.name || tagKey}</div>
                                 <div class="tag-management-description">${tag.description} • Used ${tagCount} time${tagCount !== 1 ? 's' : ''}</div>
                             </div>
                         </div>
@@ -3006,10 +3254,12 @@ export class PSPFExplorer {
 
         countTagUsage(tagKey) {
             let count = 0;
-            Object.values(this.requirements).forEach(req => {
-                if (req.tags && req.tags.includes(tagKey)) {
-                    count++;
-                }
+            Object.values(this.userTagAssignments).forEach(userMap => {
+                Object.values(userMap).forEach(tags => {
+                    if (tags.includes(tagKey)) {
+                        count++;
+                    }
+                });
             });
             return count;
         }
@@ -3039,6 +3289,7 @@ export class PSPFExplorer {
             }
 
             this.tagDefinitions[tagKey] = {
+                name: name,
                 color: color,
                 description: description || `Custom ${name} tag`
             };
@@ -3053,6 +3304,7 @@ export class PSPFExplorer {
             // Refresh UI
             this.renderTagManagement();
             this.populateTagFilters();
+            this.renderMyWorkView();
 
             this.showNotification(`Tag "${name}" added successfully!`, 'success');
         }
@@ -3075,33 +3327,35 @@ export class PSPFExplorer {
 
             const newTagKey = newName.toLowerCase().replace(/\s+/g, '-');
 
-            // If name changed, update all requirements that use this tag
+            // If name changed, update all user assignments that use this tag
             if (newTagKey !== tagKey) {
                 if (this.tagDefinitions[newTagKey]) {
                     this.showNotification('A tag with this name already exists.', 'warning');
                     return;
                 }
 
-                Object.values(this.requirements).forEach(req => {
-                    if (req.tags && req.tags.includes(tagKey)) {
-                        req.tags = req.tags.map(t => t === tagKey ? newTagKey : t);
-                    }
+                Object.values(this.userTagAssignments).forEach(userMap => {
+                    Object.keys(userMap).forEach(reqId => {
+                        userMap[reqId] = userMap[reqId].map(t => t === tagKey ? newTagKey : t);
+                    });
                 });
 
                 delete this.tagDefinitions[tagKey];
             }
 
             this.tagDefinitions[newTagKey] = {
+                name: newName,
                 color: newColor,
                 description: newDescription
             };
 
             this.saveTagDefinitions();
-            this.saveRequirements();
+            this.saveUserTagAssignments();
             
             // Refresh UI
             this.renderTagManagement();
             this.populateTagFilters();
+            this.renderMyWorkView();
 
             this.showNotification('Tag updated successfully!', 'success');
         }
@@ -3115,21 +3369,26 @@ export class PSPFExplorer {
 
             if (!confirm(confirmMessage)) return;
 
-            // Remove tag from all requirements
-            Object.values(this.requirements).forEach(req => {
-                if (req.tags && req.tags.includes(tagKey)) {
-                    req.tags = req.tags.filter(t => t !== tagKey);
-                }
+            Object.values(this.userTagAssignments).forEach(userMap => {
+                Object.keys(userMap).forEach(reqId => {
+                    const remaining = userMap[reqId].filter(t => t !== tagKey);
+                    if (remaining.length) {
+                        userMap[reqId] = remaining;
+                    } else {
+                        delete userMap[reqId];
+                    }
+                });
             });
 
             delete this.tagDefinitions[tagKey];
 
             this.saveTagDefinitions();
-            this.saveRequirements();
+            this.saveUserTagAssignments();
             
             // Refresh UI
             this.renderTagManagement();
             this.populateTagFilters();
+            this.renderMyWorkView();
 
             this.showNotification('Tag deleted successfully!', 'success');
         }
@@ -3147,6 +3406,44 @@ export class PSPFExplorer {
                 // Merge custom tags with defaults (custom tags override defaults)
                 this.tagDefinitions = { ...this.tagDefinitions, ...savedTags };
             }
+        }
+
+        initializeUserProfile() {
+            const savedProfile = this.readStorage('pspf_user_profile', null);
+            if (savedProfile && savedProfile.id) {
+                this.currentUserProfile = savedProfile;
+                return;
+            }
+            const generatedId = `user-${Date.now().toString(36)}`;
+            this.currentUserProfile = { id: generatedId, name: 'You' };
+            this.saveUserProfile();
+        }
+
+        saveUserProfile() {
+            if (!this.storageAvailable || !this.currentUserProfile) return;
+            localStorage.setItem('pspf_user_profile', JSON.stringify(this.currentUserProfile));
+        }
+
+        loadUserTagAssignments() {
+            this.userTagAssignments = this.readStorage('pspf_user_tag_assignments', {});
+            if (!this.currentUserProfile) return;
+            if (!this.userTagAssignments[this.currentUserProfile.id]) {
+                this.userTagAssignments[this.currentUserProfile.id] = {};
+            }
+
+            if (!this.storageAvailable || !localStorage.getItem('pspf_user_tag_assignments')) {
+                const demoTags = this.userTagAssignments[this.currentUserProfile.id];
+                demoTags['GOV-001'] = ['high'];
+                demoTags['GOV-002'] = ['critical'];
+                demoTags['TECH-099'] = ['medium'];
+                demoTags['INFO-058'] = ['low', 'medium'];
+                this.saveUserTagAssignments();
+            }
+        }
+
+        saveUserTagAssignments() {
+            if (!this.storageAvailable) return;
+            localStorage.setItem('pspf_user_tag_assignments', JSON.stringify(this.userTagAssignments));
         }
 
         // Requirement Management System
@@ -3230,7 +3527,7 @@ export class PSPFExplorer {
             // Apply tag filters
             if (this.activeTagFilters && this.activeTagFilters.size > 0) {
                 requirementsToShow = requirementsToShow.filter(req => {
-                    const reqTags = req.tags || [];
+                    const reqTags = this.getUserRequirementTags(req.id);
                     return Array.from(this.activeTagFilters).some(tagId => reqTags.includes(tagId));
                 });
             }
