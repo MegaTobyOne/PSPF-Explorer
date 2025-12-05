@@ -123,7 +123,7 @@
                             <div class="stat-label">Security Domains</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-number" id="totalProjects">0</div>
+                            <div class="stat-number" id="totalProjectsDashboard">0</div>
                             <div class="stat-label">Active Projects</div>
                         </div>
                         <div class="stat-card">
@@ -258,7 +258,7 @@
                     <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View all projects">
                         <div class="stat-header">
                             <div>
-                                <span class="stat-number" id="totalProjects">0</span>
+                                <span class="stat-number" id="totalProjectsProgress">0</span>
                                 <span class="stat-label">Active Projects</span>
                             </div>
                             <span class="stat-icon">📊</span>
@@ -342,6 +342,25 @@
                 
                 <div class="essential-eight-card" id="essentialEightWidget">
                     <!-- Essential Eight analytics will render here -->
+                </div>
+
+                <div class="requirements-heatmap" aria-label="Domain compliance grid">
+                    <div class="heatmap-header">
+                        <div>
+                            <h3>Requirements at-a-glance</h3>
+                            <p>Each block represents a domain and the smaller tiles show requirement status so you can spot missing items immediately.</p>
+                        </div>
+                        <div class="heatmap-legend" aria-label="Status legend">
+                            <span class="legend-chip yes">Met</span>
+                            <span class="legend-chip partial">Risk Managed</span>
+                            <span class="legend-chip no">Not Met</span>
+                            <span class="legend-chip na">Not Applicable</span>
+                            <span class="legend-chip not-set">Not Set</span>
+                        </div>
+                    </div>
+                    <div class="domain-requirements-grid" id="domainRequirementsGrid">
+                        <!-- Requirement tiles are rendered here -->
+                    </div>
                 </div>
 
                 <div class="progress-grid" id="progressGrid">

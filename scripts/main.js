@@ -1,3 +1,17 @@
+// Import domain data from module files
+let PSPFDomainsData;
+
+if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+    PSPFDomainsData = {
+        domains: [],
+        requirements: {},
+        essentialEightControls: []
+    };
+} else {
+    const module = await import('./domains/index.js');
+    PSPFDomainsData = module.default;
+}
+
 export class PSPFExplorer {
         constructor(options = {}) {
             const defaultOptions = { autoInit: true };
@@ -168,291 +182,16 @@ export class PSPFExplorer {
             // Initialize active tag filters
             this.activeTagFilters = new Set();
 
-            this.domains = [
-                {
-                    id: 'governance',
-                    title: 'Governance',
-                    description: 'Security governance, accountability, and leadership roles including Chief Security Officer (CSO) and Chief Information Security Officer (CISO) appointments.',
-                    requirements: ['GOV-001', 'GOV-002', 'GOV-003', 'GOV-004', 'GOV-005', 'GOV-006', 'GOV-007', 'GOV-008', 'GOV-009', 'GOV-010', 'GOV-011', 'GOV-012', 'GOV-013', 'GOV-014', 'GOV-015', 'GOV-016', 'GOV-017', 'GOV-018', 'GOV-019', 'GOV-020', 'GOV-021', 'GOV-022', 'GOV-023', 'GOV-024', 'GOV-025', 'GOV-026', 'GOV-027', 'GOV-028', 'GOV-029', 'GOV-030', 'GOV-031', 'GOV-032', 'GOV-033', 'GOV-034', 'GOV-035']
-                },
-                {
-                    id: 'risk',
-                    title: 'Risk Management',
-                    description: 'Security risk management aligned with enterprise risk, including third-party, supply chain, and foreign interference risk management.',
-                    requirements: ['RISK-036', 'RISK-037', 'RISK-038', 'RISK-039', 'RISK-040', 'RISK-041', 'RISK-042', 'RISK-043', 'RISK-044', 'RISK-045', 'RISK-046', 'RISK-047', 'RISK-048', 'RISK-049', 'RISK-050', 'RISK-051', 'RISK-052', 'RISK-053', 'RISK-054', 'RISK-055', 'RISK-056', 'RISK-057']
-                },
-                {
-                    id: 'information',
-                    title: 'Information Security',
-                    description: 'Protective markings, classifications (OFFICIAL, PROTECTED, SECRET, TOP SECRET), need-to-know principle and secure handling requirements.',
-                    requirements: ['INFO-058', 'INFO-059', 'INFO-060', 'INFO-061', 'INFO-062', 'INFO-063', 'INFO-064', 'INFO-065', 'INFO-066', 'INFO-067', 'INFO-068', 'INFO-069', 'INFO-070', 'INFO-071', 'INFO-072', 'INFO-073', 'INFO-074', 'INFO-075', 'INFO-076', 'INFO-077', 'INFO-078', 'INFO-079', 'INFO-080', 'INFO-081', 'INFO-082', 'INFO-083', 'INFO-211']
-                },
-                {
-                    id: 'technology',
-                    title: 'Technology Security',
-                    description: 'Cybersecurity strategy with zero trust culture, AI/quantum technology policies, Essential Eight mitigation strategies, and cloud security requirements.',
-                    requirements: ['TECH-084', 'TECH-085', 'TECH-086', 'TECH-087', 'TECH-088', 'TECH-089', 'TECH-090', 'TECH-091', 'TECH-092', 'TECH-093', 'TECH-094', 'TECH-095', 'TECH-096', 'TECH-097', 'TECH-098', 'TECH-099', 'TECH-100', 'TECH-101', 'TECH-102', 'TECH-103', 'TECH-104', 'TECH-105', 'TECH-106', 'TECH-107', 'TECH-108', 'TECH-109', 'TECH-110', 'TECH-111', 'TECH-112', 'TECH-113', 'TECH-114', 'TECH-115', 'TECH-212', 'TECH-213', 'TECH-214', 'TECH-215', 'TECH-216', 'TECH-217']
-                },
-                {
-                    id: 'personnel',
-                    title: 'Personnel Security',
-                    description: 'Pre-employment screening, security clearance processes, conditional clearance management, and eligibility waiver protocols.',
-                    requirements: ['PERS-116', 'PERS-117', 'PERS-118', 'PERS-119', 'PERS-120', 'PERS-121', 'PERS-122', 'PERS-123', 'PERS-124', 'PERS-125', 'PERS-126', 'PERS-127', 'PERS-128', 'PERS-129', 'PERS-130', 'PERS-131', 'PERS-132', 'PERS-133', 'PERS-134', 'PERS-135', 'PERS-136', 'PERS-137', 'PERS-138', 'PERS-139', 'PERS-140', 'PERS-141', 'PERS-142', 'PERS-143', 'PERS-144', 'PERS-145', 'PERS-146', 'PERS-147', 'PERS-148', 'PERS-149', 'PERS-150', 'PERS-151', 'PERS-152', 'PERS-153', 'PERS-154', 'PERS-155', 'PERS-156', 'PERS-157', 'PERS-158', 'PERS-159', 'PERS-160', 'PERS-161', 'PERS-162', 'PERS-163', 'PERS-164', 'PERS-165', 'PERS-166', 'PERS-167', 'PERS-168', 'PERS-169', 'PERS-170', 'PERS-171', 'PERS-172', 'PERS-173', 'PERS-174', 'PERS-175', 'PERS-176', 'PERS-177', 'PERS-178', 'PERS-179', 'PERS-180', 'PERS-181', 'PERS-182', 'PERS-183', 'PERS-184', 'PERS-185', 'PERS-186', 'PERS-187', 'PERS-188', 'PERS-218']
-                },
-                {
-                    id: 'physical',
-                    title: 'Physical Security',
-                    description: 'Security planning for facilities, certification and accreditation of physical assets, access controls, and technical surveillance measures.',
-                    requirements: ['PHYS-189', 'PHYS-190', 'PHYS-191', 'PHYS-192', 'PHYS-193', 'PHYS-194', 'PHYS-195', 'PHYS-196', 'PHYS-197', 'PHYS-198', 'PHYS-199', 'PHYS-200', 'PHYS-201', 'PHYS-202', 'PHYS-203', 'PHYS-204', 'PHYS-205', 'PHYS-206', 'PHYS-207', 'PHYS-208', 'PHYS-209', 'PHYS-210']
-                }
-            ];
+            // Domain definitions are loaded from domain modules
+            // See: scripts/domains/index.js for the consolidated exports
+            this.domains = PSPFDomainsData.domains;
 
-            this.requirements = {
-                'GOV-001': { id: 'GOV-001', domainId: 'governance', title: 'The Department of State supports portfolio entities to achieve and maintain a...', description: 'The Department of State supports portfolio entities to achieve and maintain an acceptable level of protective security through advice and guidance on government security. (01. WoAG Protective Security Roles)', tags: [] },
-                'GOV-002': { id: 'GOV-002', domainId: 'governance', title: 'The Accountable Authority complies with all Protective Security Directions.', description: 'The Accountable Authority complies with all Protective Security Directions. (01. WoAG Protective Security Roles)', tags: [] },
-                'GOV-003': { id: 'GOV-003', domainId: 'governance', title: 'The Technical Authority Entity provides technical advice and guidance to supp...', description: 'The Technical Authority Entity provides technical advice and guidance to support entities to achieve and maintain an acceptable level of protective security. (01. WoAG Protective Security Roles)', tags: [] },
-                'GOV-004': { id: 'GOV-004', domainId: 'governance', title: 'The Shared Service Provider Entity supplies security services that help relev...', description: 'The Shared Service Provider Entity supplies security services that help relevant entities achieve and maintain an acceptable level of security. (01. WoAG Protective Security Roles)' },
-                'GOV-005': { id: 'GOV-005', domainId: 'governance', title: 'The Shared Service Provider Entity develops, implements and maintains documen...', description: 'The Shared Service Provider Entity develops, implements and maintains documented responsibilities and accountabilities for partnerships or security service arrangements with other entities. (01. WoAG Protective Security Roles)' },
-                'GOV-006': { id: 'GOV-006', domainId: 'governance', title: 'The Accountable Authority is answerable to their minister for the entity\'s pr...', description: 'The Accountable Authority is answerable to their minister for the entity\'s protective security. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-007': { id: 'GOV-007', domainId: 'governance', title: 'The Accountable Authority is responsible for managing the security risks of t...', description: 'The Accountable Authority is responsible for managing the security risks of their entity. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-008': { id: 'GOV-008', domainId: 'governance', title: 'A Chief Security Officer is appointed and empowered to oversee the entity...', description: 'A Chief Security Officer is appointed and empowered to oversee the entity protective security arrangements. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-009': { id: 'GOV-009', domainId: 'governance', title: 'The Chief Security Officer has appropriate capability and experience...', description: 'The Chief Security Officer has appropriate capability and experience commensurate with the entity s risk environment and holds a minimum security clearance of Baseline. (02. Entity Protective Security Roles and Responsibilities)', tags: [] },
-                'GOV-010': { id: 'GOV-010', domainId: 'governance', title: 'The Chief Security Officer is accountable to the Accountable Authority for pr...', description: 'The Chief Security Officer is accountable to the Accountable Authority for protective security matters. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-011': { id: 'GOV-011', domainId: 'governance', title: 'A Chief Information Security Officer is appointed to oversee the entity...', description: 'A Chief Information Security Officer is appointed to oversee the entity cyber security program and the cyber security for the entity most critical technology resources. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-012': { id: 'GOV-012', domainId: 'governance', title: 'The Chief Information Security Officer has the appropriate capability and exp...', description: 'The Chief Information Security Officer has the appropriate capability and experience and holds a minimum security clearance of Negative Vetting 1. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-013': { id: 'GOV-013', domainId: 'governance', title: 'The Chief Information Security Officer is accountable to the Accountable Authority...', description: 'The Chief Information Security Officer is accountable to the Accountable Authority for cyber security risks and how the entity cyber security program is managing these risks. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-014': { id: 'GOV-014', domainId: 'governance', title: 'Where appointed, security practitioners are appropriately skilled, empowered ...', description: 'Where appointed, security practitioners are appropriately skilled, empowered and resourced to perform their designated functions. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-015': { id: 'GOV-015', domainId: 'governance', title: 'Where appointed, security practitioners have access to training across govern...', description: 'Where appointed, security practitioners have access to training across government to maintain and upskill on new and emerging security issues. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-016': { id: 'GOV-016', domainId: 'governance', title: 'The Accountable Authority approves security governance arrangements that are ...', description: 'The Accountable Authority approves security governance arrangements that are tailored to the entitys size, complexity and risk environment. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-017': { id: 'GOV-017', domainId: 'governance', title: 'A dedicated security email address is established and monitored as the centra...', description: 'A dedicated security email address is established and monitored as the central conduit for distribution of protective security-related information across the entity. (02. Entity Protective Security Roles and Responsibilities)' },
-                'GOV-018': { id: 'GOV-018', domainId: 'governance', title: 'A security plan is developed, implemented and maintained to address the manda...', description: 'A security plan is developed, implemented and maintained to address the mandatory elements of the plan. (03. Security Planning, Incidents and Training)' },
-                'GOV-019': { id: 'GOV-019', domainId: 'governance', title: 'The Accountable Authority approves the entity\'s security plan.', description: 'The Accountable Authority approves the entity\'s security plan. (03. Security Planning, Incidents and Training)' },
-                'GOV-020': { id: 'GOV-020', domainId: 'governance', title: 'The security plan is considered annually and reviewed at least every two year...', description: 'The security plan is considered annually and reviewed at least every two years to confirm its adequacy and ability to adapt to shifts in the entity\'s risk, threat or operating environment. (03. Security Planning, Incidents and Training)' },
-                'GOV-021': { id: 'GOV-021', domainId: 'governance', title: 'Procedures are developed, implemented and maintained to ensure all elements o...', description: 'Procedures are developed, implemented and maintained to ensure all elements of the entity\'s security plan are achieved. (03. Security Planning, Incidents and Training)' },
-                'GOV-022': { id: 'GOV-022', domainId: 'governance', title: 'Develop, establish and implement security monitoring arrangements to identify...', description: 'Develop, establish and implement security monitoring arrangements to identify the effectiveness of the entity\'s security plan and establish a continuous cycle of improvement. (03. Security Planning, Incidents and Training)' },
-                'GOV-023': { id: 'GOV-023', domainId: 'governance', title: 'The Accountable Authority and Chief Security Officer develop, implement and m...', description: 'The Accountable Authority and Chief Security Officer develop, implement and maintain a program to foster a positive security culture in the entity and support the secure delivery of government business. (03. Security Planning, Incidents and Training)' },
-                'GOV-024': { id: 'GOV-024', domainId: 'governance', title: 'Security awareness training is provided to personnel, including contractors, ...', description: 'Security awareness training is provided to personnel, including contractors, at engagement and annually thereafter. (03. Security Planning, Incidents and Training)' },
-                'GOV-025': { id: 'GOV-025', domainId: 'governance', title: 'Targeted security training is provided to personnel, including contractors, i...', description: 'Targeted security training is provided to personnel, including contractors, in specialist or high-risk positions. (03. Security Planning, Incidents and Training)' },
-                'GOV-026': { id: 'GOV-026', domainId: 'governance', title: 'Procedures are developed, implemented and maintained to ensure security incid...', description: 'Procedures are developed, implemented and maintained to ensure security incidents are responded to and managed. (03. Security Planning, Incidents and Training)' },
-                'GOV-027': { id: 'GOV-027', domainId: 'governance', title: 'Security incident management and response plans are incorporated into the ent...', description: 'Security incident management and response plans are incorporated into the entity\'s business continuity arrangements. (03. Security Planning, Incidents and Training)' },
-                'GOV-028': { id: 'GOV-028', domainId: 'governance', title: 'Significant or externally reportable security incidents and referral obligati...', description: 'Significant or externally reportable security incidents and referral obligations are reported to the relevant authority (or authorities) within the applicable timeframe. (03. Security Planning, Incidents and Training)' },
-                'GOV-029': { id: 'GOV-029', domainId: 'governance', title: 'Procedures are developed, implemented and maintained to investigate security ...', description: 'Procedures are developed, implemented and maintained to investigate security incidents in accordance with the principles of the Australian Government Investigations Standards. (03. Security Planning, Incidents and Training)' },
-                'GOV-030': { id: 'GOV-030', domainId: 'governance', title: 'The principles of procedural fairness are applied to all security investigati...', description: 'The principles of procedural fairness are applied to all security investigations, with due regard to national security considerations (03. Security Planning, Incidents and Training)' },
-                'GOV-031': { id: 'GOV-031', domainId: 'governance', title: 'The annual protective security report is provided to the entity\'s Minister.', description: 'The annual protective security report is provided to the entity\'s Minister. (04. Protective Security Reporting)' },
-                'GOV-032': { id: 'GOV-032', domainId: 'governance', title: 'The annual protective security report is submitted to the Department of Home ...', description: 'The annual protective security report is submitted to the Department of Home Affairs. (04. Protective Security Reporting)' },
-                'GOV-033': { id: 'GOV-033', domainId: 'governance', title: 'The Accountable Authority approves the entity\'s annual protective security re...', description: 'The Accountable Authority approves the entity\'s annual protective security report and confirms that they have verified the report\'s content. (04. Protective Security Reporting)' },
-                'GOV-034': { id: 'GOV-034', domainId: 'governance', title: 'Entities cooperate with the Department of Home Affairs assurance activities ...', description: 'Entities cooperate with the Department of Home Affairs assurance activities to review annual protective security reports. (04. Protective Security Reporting)' },
-                'GOV-035': { id: 'GOV-035', domainId: 'governance', title: 'The annual Cyber Security Survey is submitted to the Australian Signals Direc...', description: 'The annual Cyber Security Survey is submitted to the Australian Signals Directorate. (04. Protective Security Reporting)' },
-                'RISK-036': { id: 'RISK-036', domainId: 'risk', title: 'The Accountable Authority determines their entity\'s tolerance for security ri...', description: 'The Accountable Authority determines their entity\'s tolerance for security risks and documents in the security plan. (05. Security Risk Management)' },
-                'RISK-037': { id: 'RISK-037', domainId: 'risk', title: 'A risk steward (or manager) is identified for each security risk or category ...', description: 'A risk steward (or manager) is identified for each security risk or category of security risk, including shared risks. (05. Security Risk Management)' },
-                'RISK-038': { id: 'RISK-038', domainId: 'risk', title: 'The Accountable Authority considers the impact that their security risk manag...', description: 'The Accountable Authority considers the impact that their security risk management decisions could potentially have on other entities, and shares information on risks where appropriate. (05. Security Risk Management)' },
-                'RISK-039': { id: 'RISK-039', domainId: 'risk', title: 'The entity is accountable for the management of security risks arising from p...', description: 'The entity is accountable for the management of security risks arising from procuring goods and services and ensures procurement and contract decisions do not expose the entity or the Australian Government to an unacceptable level of risk. (06. Third Party Risk Management)' },
-                'RISK-040': { id: 'RISK-040', domainId: 'risk', title: 'Procurement, contracts and third-party outsourced arrangements contain propor...', description: 'Procurement, contracts and third-party outsourced arrangements contain proportionate security terms and conditions to ensure service providers, contractors and subcontractors comply with relevant PSPF Requirements and avoid exposing the entity or the Australian Government to an unacceptable level of risk. (06. Third Party Risk Management)' },
-                'RISK-041': { id: 'RISK-041', domainId: 'risk', title: 'Entity ensures service providers, contractors and subcontractors comply with ...', description: 'Entity ensures service providers, contractors and subcontractors comply with relevant PSPF Requirements as detailed by the entity. (06. Third Party Risk Management)' },
-                'RISK-042': { id: 'RISK-042', domainId: 'risk', title: 'Contractual security terms and conditions require service providers to report...', description: 'Contractual security terms and conditions require service providers to report any actual or suspected security incidents to the entity, and follow reasonable direction from the entity arising from incident investigations. (06. Third Party Risk Management)' },
-                'RISK-043': { id: 'RISK-043', domainId: 'risk', title: 'Government entities providing outsourced services provide IRAP assessment rep...', description: 'Government entities providing outsourced services provide IRAP assessment reports to the government entities consuming, or looking to consume, their services. (06. Third Party Risk Management)' },
-                'RISK-044': { id: 'RISK-044', domainId: 'risk', title: 'Contract security terms and conditions are monitored and reviewed to ensure t...', description: 'Contract security terms and conditions are monitored and reviewed to ensure the specified security controls, terms and conditions are implemented, operated and maintained by the contracted provider, including any subcontractors, over the life of a contract. (06. Third Party Risk Management)' },
-                'RISK-045': { id: 'RISK-045', domainId: 'risk', title: 'Contractual terms and conditions include appropriate security arrangements fo...', description: 'Contractual terms and conditions include appropriate security arrangements for the completion or termination of the contract. (06. Third Party Risk Management)' },
-                'RISK-046': { id: 'RISK-046', domainId: 'risk', title: 'Procurement and contract decisions consider the security risks before engagin...', description: 'Procurement and contract decisions consider the security risks before engaging providers operating under foreign ownership, control or influence, and in response to any developments during the contract period that may give rise to foreign ownership, control or influence risks. (06. Third Party Risk Management)' },
-                'RISK-047': { id: 'RISK-047', domainId: 'risk', title: 'Security risks arising from contractual arrangements for the provision of goo...', description: 'Security risks arising from contractual arrangements for the provision of goods and services are managed, reassessed and adjusted over the life of a contract. (06. Third Party Risk Management)' },
-                'RISK-048': { id: 'RISK-048', domainId: 'risk', title: 'Secure and verifiable third-party vendors, providers, partners and associated...', description: 'Secure and verifiable third-party vendors, providers, partners and associated services are used unless business operations require use, and the residual risks are managed and approved by the Chief Information Security Officer (06. Third Party Risk Management)' },
-                'RISK-049': { id: 'RISK-049', domainId: 'risk', title: 'Entities manage the security risks associated with engaging with foreign part...', description: 'Entities manage the security risks associated with engaging with foreign partners. (07. Countering Foreign Interference and Espionage)' },
-                'RISK-050': { id: 'RISK-050', domainId: 'risk', title: 'Personnel do not publicise their security clearance level on social media pla...', description: 'Personnel do not publicise their security clearance level on social media platforms, including employment-focused platforms such as LinkedIn. (07. Countering Foreign Interference and Espionage)' },
-                'RISK-051': { id: 'RISK-051', domainId: 'risk', title: 'Insider Threat program...', description: 'An insider threat program is implemented by entities that manage Baseline to Positive Vetting security clearance subjects, to manage the risk of insider threat in the entity.' },
-                'RISK-052': { id: 'RISK-052', domainId: 'risk', title: 'Exceptional circumstances and risk tolerance...', description: 'Where exceptional circumstances prevent or affect an entity\’s capability to implement a PSPF requirement or standard, the Accountable Authority may vary application, for a limited period of time, consistent with the entity\’s risk tolerance.' },
-                'RISK-053': { id: 'RISK-053', domainId: 'risk', title: 'Exceptional circumstance decisions are recorded in the plan...', description: 'Decisions to vary implementation of a PSPF requirement or standard due to exceptional circumstances are documented in the entity s security plan.' },
-                'RISK-054': { id: 'RISK-054', domainId: 'risk', title: 'Alternative mitigations are reviewed annually', description: 'Decisions to implement an alternative mitigation measure that meets or exceeds a PSPF requirement or standard are reviewed and reported annually.' },
-                'RISK-055': { id: 'RISK-055', domainId: 'risk', title: 'Business Continuity Plan is developed...', description: 'A business continuity plan is developed, implemented and maintained to respond effectively and minimise the impacts of significant business disruptions to the entity’s critical services and assets, and other services and assets when warranted by a threat and security risk assessment.' },
-                'RISK-056': { id: 'RISK-056', domainId: 'risk', title: 'Emergency planning is in BCP...', description: 'Plans for managing a broad range of emergencies are integrated within the business continuity plan.' },
-                'RISK-057': { id: 'RISK-057', domainId: 'risk', title: 'Emergency notifications...', description: 'Personnel who are likely to be impacted are notified if there is a heightened risk of an emergency.' },
-
-
-                // Information Domain - Requirements 58-83
-                'INFO-058': { id: 'INFO-058', domainId: 'information', title: 'Originator approval for sanitisation, reclassification and declassification', description: 'The originator remains responsible for controlling the sanitisation, reclassification or declassification of official and security classified information, and approves any changes to the information’s security classification.' },
-                'INFO-059': { id: 'INFO-059', domainId: 'information', title: 'Originator assessment of information value, importance and sensitivity', description: 'The value, importance or sensitivity of official information (intended for use as an official record) is assessed by the originator by considering the potential damage to the government, the national interest, organisations or individuals that would arise if the information’s confidentiality were compromised.' },
-                'INFO-060': { id: 'INFO-060', domainId: 'information', title: 'Classify at the lowest reasonable level', description: 'The security classification is set at the lowest reasonable level.' },
-                'INFO-061': { id: 'INFO-061', domainId: 'information', title: 'Apply text-based classification and caveat markings', description: 'Security classified information is clearly marked with the applicable security classification, and when relevant, security caveat, by using text-based markings, unless impractical for operational reasons.' },
-                'INFO-062': { id: 'INFO-062', domainId: 'information', title: 'Apply minimum protections and handling for OFFICIAL and classified info', description: 'The minimum protections and handling requirements are applied to protect OFFICIAL and security classified information.' },
-                'INFO-063': { id: 'INFO-063', domainId: 'information', title: 'Apply Security Caveat Standard and controlling authority handling', description: 'The Australian Government Security Caveat Standard and special handling requirements imposed by the controlling authority are applied to protect security caveated information.' },
-                'INFO-064': { id: 'INFO-064', domainId: 'information', title: 'Mark security caveats as text with a classification', description: 'Security caveats are clearly marked as text and only appear in conjunction with a security classification.' },
-                'INFO-065': { id: 'INFO-065', domainId: 'information', title: 'Number pages and references for accountable material', description: 'Accountable material has page and reference numbering.' },
-                'INFO-066': { id: 'INFO-066', domainId: 'information', title: 'Handle accountable material per Caveat Standard and originator rules', description: 'Accountable material is handled in accordance with any special handling requirements imposed by the originator and security caveat owner detailed in the Australian Government Security Caveat Standard.' },
-                'INFO-067': { id: 'INFO-067', domainId: 'information', title: 'Apply Email Protective Marking Standard for OFFICIAL/classified email', description: 'The Australian Government Email Protective Marking Standard is applied to protect OFFICIAL and security classified information exchanged by email in and between Australian Government entities, including other authorised parties.' },
-                'INFO-068': { id: 'INFO-068', domainId: 'information', title: 'Use Recordkeeping Metadata Security Classification/Caveat in systems', description: 'The Australian Government Recordkeeping Metadata Standard’s Security Classification property (and where relevant, the Security Caveat property) is applied to protectively mark information on technology systems that store, process or communicate security classified information.' },
-                'INFO-069': { id: 'INFO-069', domainId: 'information', title: 'Use Recordkeeping Metadata “Rights” for access restrictions', description: 'Apply the Australian Government Recordkeeping Metadata Standard’s ‘Rights’ property where the entity wishes to categorise information content by the type of restrictions on access.' },
-                'INFO-070': { id: 'INFO-070', domainId: 'information', title: 'Conduct classified discussions only in approved locations', description: 'Security classified discussions and dissemination of security classified information are only conducted in approved locations.' },
-                'INFO-071': { id: 'INFO-071', domainId: 'information', title: 'Implement proportional operational controls for information holdings', description: 'Entity implements operational controls for its information holdings that are proportional to their value, importance and sensitivity.' },
-                'INFO-072': { id: 'INFO-072', domainId: 'information', title: 'Maintain auditable register for TOP SECRET and accountable material', description: 'An auditable register is maintained for TOP SECRET information and accountable material.' },
-                'INFO-073': { id: 'INFO-073', domainId: 'information', title: 'Secure disposal per ISM, Records Authorities, NAP and Archives Act', description: 'OFFICIAL and security classified information is disposed of securely in accordance with the Minimum Protections and Handling Requirements, Information Security Manual, the Records Authorities, a Normal Administrative Practice and the Archives Act 1983.' },
-                'INFO-074': { id: 'INFO-074', domainId: 'information', title: 'Destroy classified information when retention periods expire', description: 'Security classified information is appropriately destroyed in accordance with the Minimum Protections and Handling Requirements when it has passed the minimum retention requirements or reaches authorised destruction dates.' },
-                'INFO-075': { id: 'INFO-075', domainId: 'information', title: 'Share externally only with clearance, need‑to‑know and transfer controls', description: 'Access to security classified information or resources is only provided to people outside the entity with the appropriate security clearance (where required) and a need-to-know, and is transferred in accordance with the Minimum Protections and Handling Requirements' },
-                'INFO-076': { id: 'INFO-076', domainId: 'information', title: 'Apply Commonwealth–State–Territory MoU when sharing with jurisdictions', description: 'The Memorandum of Understanding between the Commonwealth, States and Territories is applied when sharing information with state and territory government agencies.' },
-                'INFO-077': { id: 'INFO-077', domainId: 'information', title: 'Agree handling terms before sharing outside government (OFFICIAL: Sensitive exception)', description: 'An agreement or arrangement, such as a contract or deed, that establishes handling requirements and protections, is in place before security classified information or resources are disclosed or shared with a person or organisation outside of government, unless the entity is returning or responding to information provided by a person or organisation outside of government, or their authorised representative, which the government entity subsequently classified as OFFICIAL: Sensitive.' },
-                'INFO-078': { id: 'INFO-078', domainId: 'information', title: 'Meet security provisions in applicable international instruments', description: 'Provisions are met concerning the security of people, information and resources contained in international agreements and arrangements to which Australia is a party.' },
-                'INFO-079': { id: 'INFO-079', domainId: 'information', title: 'Share with foreign entities only under law or international agreement', description: 'Australian Government security classified information or resources shared with a foreign entity is protected by an explicit legislative provision, international agreement or international arrangement.' },
-                'INFO-080': { id: 'INFO-080', domainId: 'information', title: 'Do not share AUSTEO with non‑citizens unless exempted', description: 'Australian Government security classified information or resources bearing the Australian Eyes Only (AUSTEO) caveat is never shared with a person who is not an Australian citizen, even when an international agreement or international arrangement is in place, unless an exemption is granted.' },
-                'INFO-081': { id: 'INFO-081', domainId: 'information', title: 'Limit AGAO sharing to citizens or specified agency personnel', description: 'Australian Government security classified information or resources bearing the Australian Government Access Only (AGAO) caveat is not shared with a person who is not an Australia citizen, even when an international agreement or international arrangement is in place, unless they are working for, or seconded to, an entity that is a member of National Intelligence Community, the Department of Defence or the Australian Submarine Agency.' },
-                'INFO-082': { id: 'INFO-082', domainId: 'information', title: 'Safeguard foreign classified info per international agreement', description: 'Where an international agreement or international arrangement is in place, security classified foreign entity information or resources are safeguarded in accordance with the provisions set out in the agreement or arrangement.' },
-                'INFO-083': { id: 'INFO-083', domainId: 'information', title: 'Share with foreign non‑government only under law or agreement', description: 'Australian Government security classified information or resources shared with a foreign non-government stakeholder is protected by an explicit legislative provision, international agreement or international arrangement.' },
-
-                // Information Domain - New Requirement 211
-                'INFO-211': { id: 'INFO-211', domainId: 'information', title: 'Maintain technology asset stocktake and security risk management plan', description: 'A Technology Asset Stocktake and Technology Security Risk Management Plan is created to identify and manage the entity s internet-facing systems or services is maintained to ensure continuous visibility and monitoring of the entity’s resource and technology estate.' },
-
-                // Technology Domain - Requirements 84-108
-                'TECH-084': { id: 'TECH-084', domainId: 'technology', title: 'Cyber security throughout technology lifecycle', description: 'Apply comprehensive cyber security principles throughout the entire technology asset lifecycle from procurement to disposal.' },
-                'TECH-085': { id: 'TECH-085', domainId: 'technology', title: 'ASD ISM controls and guidelines', description: 'Apply Australian Signals Directorate Information Security Manual (ISM) controls and guidelines on a risk-based approach to ensure appropriate security.' },
-                'TECH-086': { id: 'TECH-086', domainId: 'technology', title: 'Authorise systems to operate based on residual risk acceptance', description: 'The Authorising Officer authorises each technology system to operate based on the acceptance of the residual security risks associated with its operation before that system processes, stores or communicates government information or data.' },
-                'TECH-087': { id: 'TECH-087', domainId: 'technology', title: 'Authorisation decisions follow ISM risk-based approach', description: 'Decisions to authorise (or reauthorise) a new technology system or make changes to an existing technology system are based on the Information Security Manual s risk-based approach to cyber security.' },
-                'TECH-088': { id: 'TECH-088', domainId: 'technology', title: 'Authorise systems to highest data classification', description: 'The technology system is authorised to the highest security classification of the information and data it will process, store or communicate.' },
-                'TECH-089': { id: 'TECH-089', domainId: 'technology', title: 'Maintain register of authorised technology systems', description: 'A register of the entity’s authorised technology systems is developed, implemented and maintained, and includes the name and position of the Authorising Officer, system owner, date of authorisation, and any decisions to accept residual security risks.' },
-                'TECH-090': { id: 'TECH-090', domainId: 'technology', title: 'Reassess authorisation after significant changes', description: 'Each technology system s suitability to be authorised to operate is reassessed when it undergoes significant functionality or architectural change, or where the system s security environment has changed considerably.' },
-                'TECH-091': { id: 'TECH-091', domainId: 'technology', title: 'Block TikTok on government devices', description: 'The TikTok application is prevented from being installed, and existing instances are removed, on government devices, unless a legitimate business reason exists which necessitates the installation or ongoing presence of the application.' },
-                'TECH-092': { id: 'TECH-092', domainId: 'technology', title: 'The CSO or CISO approves any legitimate business reason for the use of the TikTok', description: 'The Chief Security Officer or Chief Information Security Officer approves any legitimate business reason for the use of the TikTok ' },
-                'TECH-093': { id: 'TECH-093', domainId: 'technology', title: 'Apply temporary mitigations for legacy IT', description: 'The Australian Signals Directorate’s temporary mitigations for legacy IT are applied to manage legacy information technology that cannot yet be replaced.' },
-                'TECH-094': { id: 'TECH-094', domainId: 'technology', title: 'Store SECRET and below in appropriate security zones', description: 'Technology assets and their components, classified as SECRET or below are stored in the appropriate Security Zone based on their aggregated security classification or business impact level.' },
-                'TECH-095': { id: 'TECH-095', domainId: 'technology', title: 'Store TOP SECRET in SCEC-endorsed racks in accredited Zone Five', description: 'Technology assets and their components classified as TOP SECRET are stored in suitable SCEC-endorsed racks or compartments within an accredited Security Zone Five area meeting ASIO Technical Note 5/12 – Compartments within Zone Five areas requirements.' },
-                'TECH-096': { id: 'TECH-096', domainId: 'technology', title: 'Use certified and accredited outsourced facilities for catastrophic impact', description: 'Outsourced facilities that house technology assets and their components with a catastrophic business impact level are certified by ASIO-T4 physical security and accredited by ASD before they are used operationally.' },
-                'TECH-097': { id: 'TECH-097', domainId: 'technology', title: 'Dispose technology assets securely per ISM', description: 'Technology assets are disposed of securely in accordance with the Information Security Manual.' },
-                'TECH-098': { id: 'TECH-098', domainId: 'technology', title: 'Develop and maintain cyber security strategy and uplift plan', description: 'A cyber security strategy and uplift plan is developed, implemented and maintained to manage the entity s cyber security risks in accordance with the Information Security Manual and the Guiding Principles to Embed a Zero Trust Culture.' },
-                'TECH-099': { id: 'TECH-099', domainId: 'technology', title: 'Implement patch applications to E8 Maturity Level Two', description: 'Patch applications mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-100': { id: 'TECH-100', domainId: 'technology', title: 'Implement patch operating systems to E8 Level Two', description: 'Patch operating systems mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-101': { id: 'TECH-101', domainId: 'technology', title: 'Implement multi-factor authentication to E8 Level Two', description: 'Multi-factor authentication mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-102': { id: 'TECH-102', domainId: 'technology', title: 'Restrict administrative privileges to E8 Level Two', description: 'Restrict administrative privileges mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-103': { id: 'TECH-103', domainId: 'technology', title: 'Implement application control to E8 Level Two', description: 'Application control mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-104': { id: 'TECH-104', domainId: 'technology', title: 'Restrict Microsoft Office macros to E8 Level Two', description: 'Restrict Microsoft Office macros mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-105': { id: 'TECH-105', domainId: 'technology', title: 'Implement user application hardening to E8 Level Two', description: 'User application hardening mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-106': { id: 'TECH-106', domainId: 'technology', title: 'Implement regular back-ups to E8 Level Two', description: 'Regular back-ups mitigation strategy is implemented to Maturity Level Two under ASD’s Essential Eight Maturity Model.' },
-                'TECH-107': { id: 'TECH-107', domainId: 'technology', title: 'Consider remaining ASD mitigation strategies as required', description: 'The remaining mitigation strategies from the Strategies to Mitigate Cyber Security Incidents are considered and, where required, implemented to achieve an acceptable level of residual risk for their entity.' },
-                'TECH-108': { id: 'TECH-108', domainId: 'technology', title: 'Use PDNS or other mechanisms to block malicious endpoints', description: 'A Protective Domain Name System service or other security mechanisms is used to prevent connections to and from known malicious endpoints.' },
-
-                // Technology Domain - New/Updated 109–115
-                'TECH-109': { id: 'TECH-109', domainId: 'technology', title: 'Use IRAP-assessed CSPs within last 24 months', description: 'Cloud Service Providers that have completed an IRAP assessment against the latest version of ASD’s Information Security Manual within the previous 24 months are used.' },
-                'TECH-110': { id: 'TECH-110', domainId: 'technology', title: 'Act on IRAP recommendations using a risk-based approach', description: 'Entities consider IRAP assessment recommendations and findings, and implement on a risk-based approach.' },
-                'TECH-111': { id: 'TECH-111', domainId: 'technology', title: 'Host classified/SoGS in certified CSP and Data Centre', description: 'Security classified or systems of government significance information and data is securely hosted using a Cloud Service Provider and Data Centre Provider that has been certified against the Australian Government Hosting Certification Framework.' },
-                'TECH-112': { id: 'TECH-112', domainId: 'technology', title: 'Use Data Centre Facilities Supplies Panel for certified services', description: 'The Data Centre Facilities Supplies Panel is used when procuring certified data centre space and services.' },
-                'TECH-113': { id: 'TECH-113', domainId: 'technology', title: 'Protect inter-connected systems by a gateway (ISM & Gateways Policy)', description: 'Internet-connected technology systems, and the data they process, store or communicate, are protected by a gateway in accordance with the Information Security Manual and the Gateways Policy.' },
-                'TECH-114': { id: 'TECH-114', domainId: 'technology', title: 'Gateways or Edges that have completed an IRAP assessment within 24 months', description: 'Gateways or Secure Service Edges that have completed an IRAP assessment (or ASD assessment for TOP SECRET gateways) against the latest version of ASD\’s Information Security Manual within the previous 24 months are used.' },
-                'TECH-115': { id: 'TECH-115', domainId: 'technology', title: 'A vulnerability disclosure program and supporting processes and procedures are established', description: 'A vulnerability disclosure program and supporting processes and procedures are established to receive, verify, resolve and report on vulnerabilities disclosed by both internal and external sources.' },
-
-                // Technology Domain - New 212–217
-                'TECH-212': { id: 'TECH-212', domainId: 'technology', title: 'Use approved post‑quantum crypto per ISM cryptography guidance', description: 'Approved post-quantum cryptographic encryption algorithms are used for newly procured cryptographic equipment and software in accordance with the Information Security Manual’s guidelines for cryptography.' },
-                'TECH-213': { id: 'TECH-213', domainId: 'technology', title: 'CISO reports risk every Audit Committee; biannual strategy progress', description: 'The Chief Information Security Officer reports on the entity’s cyber security risk at each meeting of the Audit Committee and biannually on the progress of the cyber security strategy and uplift plan.' },
-                'TECH-214': { id: 'TECH-214', domainId: 'technology', title: 'Protect classified digital infrastructure via Gateway or SSE (AGGSS)', description: 'Digital Infrastructure that processes, stores or communicates Australian Government security classified information is protected by a Gateway or Security Service Edge in accordance with the Australian Government Gateway Security Standard.' },
-                'TECH-215': { id: 'TECH-215', domainId: 'technology', title: 'Participate in ASD Cyber Security Partnership; notify on risk profile change', description: 'Participate in the Australian Signals Directorate’s Cyber Security Partnership Program and notify ASD in the event of a change in the entity s risk profile.' },
-                'TECH-216': { id: 'TECH-216', domainId: 'technology', title: 'Connect to ASD’s Cyber Threat Intelligence Sharing platform', description: 'Connect to the Australian Signals Directorate’s Cyber Threat Intelligence Sharing platform.' },
-                'TECH-217': { id: 'TECH-217', domainId: 'technology', title: 'Protect SoGS in accordance with the SoGS Standard', description: 'Declared Systems of Government Significance are protected in accordance with the Australian Government Systems of Government Significance Standard.' },
-
-                // Personnel Domain - Requirements 116-188 and 218 (PSPF 2025)
-                'PERS-116': { id: 'PERS-116', domainId: 'personnel', title: 'The eligibility and suitability of personnel who have access to Au...', description: 'The eligibility and suitability of personnel who have access to Australian Government people and resources is ensured.' },
-                'PERS-117': { id: 'PERS-117', domainId: 'personnel', title: 'The pre-employment screening identity check is conducted for all p...', description: 'The pre-employment screening identity check is conducted for all personnel, to verify identity to at least Level 3 (High) of Assurance of the National Identity Proofing Guidelines.' },
-                'PERS-118': { id: 'PERS-118', domainId: 'personnel', title: 'Biographic information in identity documents is verified to ensure...', description: 'Biographic information in identity documents is verified to ensure the information matches the original record.' },
-                'PERS-119': { id: 'PERS-119', domainId: 'personnel', title: 'The pre-employment screening eligibility check is conducted for al...', description: 'The pre-employment screening eligibility check is conducted for all personnel, to confirm their eligibility to work in Australia and for the Australian Government.' },
-                'PERS-120': { id: 'PERS-120', domainId: 'personnel', title: 'The entity obtains assurance of each person\'s suitability to acces...', description: 'The entity obtains assurance of each person\'s suitability to access Australian Government resources, including their agreement to comply with the government\'s policies, standards, protocols and guidelines that safeguard resources from harm, during pre-employment screening.' },
-                'PERS-121': { id: 'PERS-121', domainId: 'personnel', title: 'Prior to granting temporary access to security classified informat...', description: 'Prior to granting temporary access to security classified information or resources, pre-employment checks are completed, and an existing Negative Vetting 1 security clearance is confirmed prior to granting temporary access to TOP SECRET information data or resources.' },
-                'PERS-122': { id: 'PERS-122', domainId: 'personnel', title: 'A risk assessment determines whether a person is granted temporary...', description: 'A risk assessment determines whether a person is granted temporary access to security classified information or resources.' },
-                'PERS-123': { id: 'PERS-123', domainId: 'personnel', title: 'Temporary access to security classified information, resources and...', description: 'Temporary access to security classified information, resources and activities is supervised.' },
-                'PERS-124': { id: 'PERS-124', domainId: 'personnel', title: 'Short-term temporary access to security classified information, re...', description: 'Short-term temporary access to security classified information, resources and activities is limited to the period in which an application for a security clearance is being processed for the particular person, or up to a total combined maximum of three months in a 12-month period for all entities.' },
-                'PERS-125': { id: 'PERS-125', domainId: 'personnel', title: 'The Authorised Vetting Agency confirms that the completed security...', description: 'The Authorised Vetting Agency confirms that the completed security clearance pack has been received, and that no initial concerns have been identified for the clearance subject, before short-term temporary access is changed to provisional temporary access.' },
-                'PERS-126': { id: 'PERS-126', domainId: 'personnel', title: 'Temporary access to classified caveated information, resources or ...', description: 'Temporary access to classified caveated information, resources or activities is not granted, other than in exceptional circumstances, and only with the approval of the caveat controlling authority.' },
-                'PERS-127': { id: 'PERS-127', domainId: 'personnel', title: 'Prior to granting temporary access, the entity obtains an undertak...', description: 'Prior to granting temporary access, the entity obtains an undertaking from the person to protect the security classified information, resources and activities they will access.' },
-                'PERS-128': { id: 'PERS-128', domainId: 'personnel', title: 'Prior to granting temporary access, the entity obtains agreement f...', description: 'Prior to granting temporary access, the entity obtains agreement from any other entity (or third party) whose security classified information, resources and activities will be accessed by the person during the temporary access period.' },
-                'PERS-129': { id: 'PERS-129', domainId: 'personnel', title: 'Access to official information is facilitated for entity personnel...', description: 'Access to official information is facilitated for entity personnel and other relevant stakeholders.' },
-                'PERS-130': { id: 'PERS-130', domainId: 'personnel', title: 'Appropriate access to official information is enabled, including c...', description: 'Appropriate access to official information is enabled, including controlling access (including remote access) to supporting technology systems, networks, infrastructure, devices and applications.' },
-                'PERS-131': { id: 'PERS-131', domainId: 'personnel', title: 'Access to security classified information or resources is only giv...', description: 'Access to security classified information or resources is only given to entity personnel with a need-to-know that information.' },
-                'PERS-132': { id: 'PERS-132', domainId: 'personnel', title: 'Personnel requiring ongoing access to security classified informat...', description: 'Personnel requiring ongoing access to security classified information or resources are security cleared to the appropriate level.' },
-                'PERS-133': { id: 'PERS-133', domainId: 'personnel', title: 'Personnel requiring access to caveated information meet any cleara...', description: 'Personnel requiring access to caveated information meet any clearance and suitability requirements imposed by the originator and caveat controlling authority.' },
-                'PERS-134': { id: 'PERS-134', domainId: 'personnel', title: 'A unique user identification, authentication and authorisation pra...', description: 'A unique user identification, authentication and authorisation practice is implemented on each occasion where system access is granted, to manage access to systems holding security classified information.' },
-                'PERS-135': { id: 'PERS-135', domainId: 'personnel', title: 'A security risk assessment of the proposed location and work envir...', description: 'A security risk assessment of the proposed location and work environment informs decisions by the Chief Security Officer to allow personnel to work in another government entity\'s facilities in Australia.' },
-                'PERS-136': { id: 'PERS-136', domainId: 'personnel', title: 'An agreement is in place to manage the security risks associated w...', description: 'An agreement is in place to manage the security risks associated with personnel working in another government entity\'s facilities in Australia.' },
-                'PERS-137': { id: 'PERS-137', domainId: 'personnel', title: 'Approval for remote access to TOP SECRET information, data or syst...', description: 'Approval for remote access to TOP SECRET information, data or systems in international locations outside of facilities meeting PSPF requirements is only granted if approved by the Australian Signals Directorate.' },
-                'PERS-138': { id: 'PERS-138', domainId: 'personnel', title: 'A security risk assessment of the proposed location and work envir...', description: 'A security risk assessment of the proposed location and work environment informs decisions to allow personnel to work remotely in international locations.' },
-                'PERS-139': { id: 'PERS-139', domainId: 'personnel', title: 'Personnel are not granted approval to work remotely in locations w...', description: 'Personnel are not granted approval to work remotely in locations where Australian Government information, or resources are exposed to extrajudicial directions from a foreign government that conflict with Australian law, unless operationally required, and the residual risks are managed and approved by the Chief Security Officer.' },
-                'PERS-140': { id: 'PERS-140', domainId: 'personnel', title: 'The Australian Government Security Vetting Agency (AGSVA) or the T...', description: 'The Australian Government Security Vetting Agency (AGSVA) or the TOP SECRET-Privileged Access Vetting Authority is used to conduct security vetting, or where authorised, the entity conducts security vetting in a manner consistent with the Personnel Security Vetting Process and Australian Government Personnel Security Adjudicative Standard.' },
-                'PERS-141': { id: 'PERS-141', domainId: 'personnel', title: 'All vetting personnel attain and maintain the required skills and ...', description: 'All vetting personnel attain and maintain the required skills and competencies for their role.' },
-                'PERS-142': { id: 'PERS-142', domainId: 'personnel', title: 'The gaining sponsoring entity establishes new clearance conditions...', description: 'The gaining sponsoring entity establishes new clearance conditions before assuming sponsorship of an existing security clearance that is subject to clearance conditions.' },
-                'PERS-143': { id: 'PERS-143', domainId: 'personnel', title: 'The gaining sponsoring entity undertakes the exceptional business ...', description: 'The gaining sponsoring entity undertakes the exceptional business requirement and risk assessment provisions prior to requesting transfer of sponsorship of an existing security clearance that is subject to an eligibility waiver.' },
-                'PERS-144': { id: 'PERS-144', domainId: 'personnel', title: 'The Authorised Vetting Agency only issues a security clearance whe...', description: 'The Authorised Vetting Agency only issues a security clearance where the clearance is sponsored by an Australian Government entity or otherwise authorised by the Australian Government.' },
-                'PERS-145': { id: 'PERS-145', domainId: 'personnel', title: 'Positions that require a security clearance are identified and the...', description: 'Positions that require a security clearance are identified and the level of clearance required is documented.' },
-                'PERS-146': { id: 'PERS-146', domainId: 'personnel', title: 'Each person working in an identified position has a valid security...', description: 'Each person working in an identified position has a valid security clearance issued by the relevant Authorised Vetting Agency.' },
-                'PERS-147': { id: 'PERS-147', domainId: 'personnel', title: 'Australian citizenship is confirmed and pre-employment screening i...', description: 'Australian citizenship is confirmed and pre-employment screening is completed before the entity seeks a security clearance for a person in a position identified as requiring a security clearance.' },
-                'PERS-148': { id: 'PERS-148', domainId: 'personnel', title: 'The Sponsoring Entity establishes an exceptional business need and...', description: 'The Sponsoring Entity establishes an exceptional business need and conducts a risk assessment before a citizenship eligibility waiver is considered for a non-Australian citizen who has a valid visa and work rights to work in an identified position.' },
-                'PERS-149': { id: 'PERS-149', domainId: 'personnel', title: 'The Accountable Authority (or the Chief Security Officer if delega...', description: 'The Accountable Authority (or the Chief Security Officer if delegated) approves a citizenship eligibility waiver (after accepting the residual risk of waiving the citizenship requirement for that person, confirming that a checkable background eligibility waiver is not in place), and maintains a record of all citizenship eligibility waivers approved.' },
-                'PERS-150': { id: 'PERS-150', domainId: 'personnel', title: 'The Sponsoring Entity establishes an exceptional business need and...', description: 'The Sponsoring Entity establishes an exceptional business need and conducts a risk assessment (including seeking advice from the Authorised Vetting Agency), before a checkable background eligibility waiver is considered for a clearance subject assessed as having an uncheckable background.' },
-                'PERS-151': { id: 'PERS-151', domainId: 'personnel', title: 'The Sponsoring Entity\'s Accountable Authority (or the Chief Securi...', description: 'The Sponsoring Entity\'s Accountable Authority (or the Chief Security Officer if delegated) approves checkable background eligibility waivers (after accepting the residual risk of waiving the checkable background requirement for each person and confirming that a citizenship eligibility waiver is not in place), and maintains a record of all checkable background eligibility waivers approved.' },
-                'PERS-152': { id: 'PERS-152', domainId: 'personnel', title: 'The Authorised Vetting Agency provides the Sponsoring Entity with ...', description: 'The Authorised Vetting Agency provides the Sponsoring Entity with information to inform a risk assessment if a clearance subject has an uncheckable background and only issues a clearance if the Accountable Authority waives the checkable background requirement and provides the Authorised Vetting Agency with a copy of the waiver.' },
-                'PERS-153': { id: 'PERS-153', domainId: 'personnel', title: 'The clearance subject\'s informed consent is given to collect, use ...', description: 'The clearance subject\'s informed consent is given to collect, use and disclose their personal information for the purposes of assessing and managing their eligibility and suitability to hold a security clearance.' },
-                'PERS-154': { id: 'PERS-154', domainId: 'personnel', title: 'The clearance subject\'s eligibility and suitability to hold a Base...', description: 'The clearance subject\'s eligibility and suitability to hold a Baseline, Negative Vetting 1, Negative Vetting 2 or Positive Vetting security clearance is assessed by considering their integrity (i.e. the character traits of maturity, trustworthiness, honesty, resilience, tolerance and loyalty) in accordance with the Australian Government Personnel Security Adjudicative Standard.' },
-                'PERS-155': { id: 'PERS-155', domainId: 'personnel', title: 'The clearance subject\'s eligibility and suitability to hold a TOP ...', description: 'The clearance subject\'s eligibility and suitability to hold a TOP SECRET-Privileged Access security clearance is assessed in accordance with the TOP SECRET-Privileged Access Standard.' },
-                'PERS-156': { id: 'PERS-156', domainId: 'personnel', title: 'The clearance subject\'s eligibility and suitability to hold a Base...', description: 'The clearance subject\'s eligibility and suitability to hold a Baseline, Negative Vetting 1, Negative Vetting 2 or Positive Vetting security clearance is assessed by conducting the minimum personnel security checks for the commensurate security clearance level.' },
-                'PERS-157': { id: 'PERS-157', domainId: 'personnel', title: 'The clearance subject\'s eligibility and suitability to hold a Base...', description: 'The clearance subject\'s eligibility and suitability to hold a Baseline, Negative Vetting 1, Negative Vetting 2 or Positive Vetting security clearance is assessed by resolving any doubt in the national interest.' },
-                'PERS-158': { id: 'PERS-158', domainId: 'personnel', title: 'Concerns that are identified during the vetting or security cleara...', description: 'Concerns that are identified during the vetting or security clearance suitability assessment process, that are not sufficient to deny a security clearance and where the related risks can be managed through conditions attached to the security clearance, the Authorised Vetting Agency must: identify the clearance conditions, provide the sponsoring entity with information about the concerns to inform a risk assessment, only issue a conditional security clearance if the Accountable Authority and the clearance subject accept the clearance conditions.' },
-                'PERS-159': { id: 'PERS-159', domainId: 'personnel', title: 'The Authorised Vetting Agency provides the sponsoring entity any r...', description: 'The Authorised Vetting Agency provides the sponsoring entity any relevant information of concern, when advising them of the outcome of the security vetting process, to inform the sponsoring entity\'s risk assessment.' },
-                'PERS-160': { id: 'PERS-160', domainId: 'personnel', title: 'The Authorised Vetting Agency applies the rules of procedural fair...', description: 'The Authorised Vetting Agency applies the rules of procedural fairness to security clearance decisions that are adverse to a clearance subject, including decisions to deny a security clearance (including grant lower level) or grant a conditional security clearance, without compromising the national interest.' },
-                'PERS-161': { id: 'PERS-161', domainId: 'personnel', title: 'The Authorised Vetting Agency reviews the conditions of conditiona...', description: 'The Authorised Vetting Agency reviews the conditions of conditional security clearances annually.' },
-                'PERS-162': { id: 'PERS-162', domainId: 'personnel', title: 'The Authorised Vetting Agency reviews the clearance holder\'s eligi...', description: 'The Authorised Vetting Agency reviews the clearance holder\'s eligibility and suitability to hold a security clearance, where concerns are identified (review for cause).' },
-                'PERS-163': { id: 'PERS-163', domainId: 'personnel', title: 'The Authorised TOP SECRET-Privileged Access Vetting Agency impleme...', description: 'The Authorised TOP SECRET-Privileged Access Vetting Agency implements the TOP SECRET-Privileged Access Standard in relation to the ongoing assessment and management of personnel with TOP SECRET-Privileged Access security clearances.' },
-                'PERS-164': { id: 'PERS-164', domainId: 'personnel', title: 'The Sponsoring Entity actively assesses, monitors and manages the ...', description: 'The Sponsoring Entity actively assesses, monitors and manages the ongoing suitability of personnel.' },
-                'PERS-165': { id: 'PERS-165', domainId: 'personnel', title: 'The Sponsoring Entity monitors and manages compliance with any con...', description: 'The Sponsoring Entity monitors and manages compliance with any conditional security clearance requirements and reports any non-compliance to the Authorised Vetting Agency.' },
-                'PERS-166': { id: 'PERS-166', domainId: 'personnel', title: 'The Sponsoring Entity monitors and manages compliance with securit...', description: 'The Sponsoring Entity monitors and manages compliance with security clearance maintenance obligations for the clearance holders they sponsor.' },
-                'PERS-167': { id: 'PERS-167', domainId: 'personnel', title: 'The Sponsoring Entity shares relevant information of concern, wher...', description: 'The Sponsoring Entity shares relevant information of concern, where appropriate.' },
-                'PERS-168': { id: 'PERS-168', domainId: 'personnel', title: 'The Sponsoring Entity conducts an annual security check with all s...', description: 'The Sponsoring Entity conducts an annual security check with all security cleared personnel.' },
-                'PERS-169': { id: 'PERS-169', domainId: 'personnel', title: 'The Sponsoring Entity reviews eligibility waivers at least annuall...', description: 'The Sponsoring Entity reviews eligibility waivers at least annually, before revalidation of a security clearance, and prior to any proposed position transfer.' },
-                'PERS-170': { id: 'PERS-170', domainId: 'personnel', title: 'The Sponsoring Entity monitors, assesses and manages personnel wit...', description: 'The Sponsoring Entity monitors, assesses and manages personnel with TOP SECRET-Privileged access security clearances in accordance with the TOP SECRET-Privileged Access Standard.' },
-                'PERS-171': { id: 'PERS-171', domainId: 'personnel', title: 'The Authorised Vetting Agency reassesses a clearance holder\'s elig...', description: 'The Authorised Vetting Agency reassesses a clearance holder\'s eligibility and suitability to hold a security clearance by revalidating minimum personnel security checks for a security clearance.' },
-                'PERS-172': { id: 'PERS-172', domainId: 'personnel', title: 'The Authorised Vetting Agency reassesses a clearance holder\'s elig...', description: 'The Authorised Vetting Agency reassesses a clearance holder\'s eligibility and suitability to hold a Baseline, Negative Vetting 1, Negative Vetting 2 or Positive Vetting security clearance by considering their integrity in accordance with the Australian Government Personnel Security Adjudicative Standard.' },
-                'PERS-173': { id: 'PERS-173', domainId: 'personnel', title: 'The TOP SECRET-Privileged Access Vetting Authority reassesses a cl...', description: 'The TOP SECRET-Privileged Access Vetting Authority reassesses a clearance holder\'s eligibility and suitability to hold a TOP SECRET-Privileged Access security clearance by assessing their trustworthiness in accordance with the TOP SECRET-Privileged Access Standard.' },
-                'PERS-174': { id: 'PERS-174', domainId: 'personnel', title: 'The Authorised Vetting Agency reassesses a clearance holder\'s elig...', description: 'The Authorised Vetting Agency reassesses a clearance holder\'s eligibility and suitability to hold a security clearance by resolving any doubt in the national interest.' },
-                'PERS-175': { id: 'PERS-175', domainId: 'personnel', title: 'The Authorised Vetting Agency commences the security clearance rev...', description: 'The Authorised Vetting Agency commences the security clearance revalidation process in sufficient time to complete the revalidation before the due date so that the security clearance does not lapse.' },
-                'PERS-176': { id: 'PERS-176', domainId: 'personnel', title: 'The Authorised Vetting Agency shares information of concern about ...', description: 'The Authorised Vetting Agency shares information of concern about security clearance holders with the Sponsoring Entity so they can decide whether to suspend or limit the clearance holder\'s access to Australian Government classified information, resources or activities until the concerns are resolved.' },
-                'PERS-177': { id: 'PERS-177', domainId: 'personnel', title: 'The Sponsoring Entity shares relevant information of security conc...', description: 'The Sponsoring Entity shares relevant information of security concern, where appropriate with the Authorised Vetting Agency.' },
-                'PERS-178': { id: 'PERS-178', domainId: 'personnel', title: 'The Authorised Vetting Agency shares information of security conce...', description: 'The Authorised Vetting Agency shares information of security concern about security clearance holders with the Sponsoring Entity.' },
-                'PERS-179': { id: 'PERS-179', domainId: 'personnel', title: 'The Authorised Vetting Agency assesses and responds to information...', description: 'The Authorised Vetting Agency assesses and responds to information of security concern about security clearance holders, including reports from Sponsoring Entities.' },
-                'PERS-180': { id: 'PERS-180', domainId: 'personnel', title: 'Negative Vetting 2 and higher clearance holders receive appropriat...', description: 'Negative Vetting 2 and higher clearance holders receive appropriate departmental travel briefings when undertaking international personal and work travel.' },
-                'PERS-181': { id: 'PERS-181', domainId: 'personnel', title: 'The Chief Security Officer, Chief Information Security Officer (or...', description: 'The Chief Security Officer, Chief Information Security Officer (or other relevant security practitioner) is advised prior to separation or transfer of any proposed cessation of employment resulting from misconduct or other adverse reasons.' },
-                'PERS-182': { id: 'PERS-182', domainId: 'personnel', title: 'Separating personnel are informed of any ongoing security obligati...', description: 'Separating personnel are informed of any ongoing security obligations under the Commonwealth Criminal Code and other relevant legislation and those holding a security clearance or access security classified information are debriefed prior to separation from the entity.' },
-                'PERS-183': { id: 'PERS-183', domainId: 'personnel', title: 'Separating personnel transferring to another Australian Government...', description: 'Separating personnel transferring to another Australian Government entity, the entity, when requested, provides the receiving entity with relevant security information, including the outcome of pre-employment screening checks and any periodic employment suitability checks.' },
-                'PERS-184': { id: 'PERS-184', domainId: 'personnel', title: 'Separating personnel transferring to another Australian Government...', description: 'Separating personnel transferring to another Australian Government entity, the entity reports any security concerns (as defined in the Australian Security Intelligence Organisation Act 1979) to the Australian Security Intelligence Organisation.' },
-                'PERS-185': { id: 'PERS-185', domainId: 'personnel', title: 'A risk assessment is completed to identify any security implicatio...', description: 'A risk assessment is completed to identify any security implications in situations where it is not possible to undertake the required separation procedures.' },
-                'PERS-186': { id: 'PERS-186', domainId: 'personnel', title: 'Separating personnel have their access to Australian Government re...', description: 'Separating personnel have their access to Australian Government resources withdrawn upon separation or transfer from the entity, including information, technology systems, and resources.' },
-                'PERS-187': { id: 'PERS-187', domainId: 'personnel', title: 'The Sponsoring Entity advises the relevant Authorised Vetting Agen...', description: 'The Sponsoring Entity advises the relevant Authorised Vetting Agency of the separation of a clearance holder, including any relevant circumstances (e.g. termination for cause) and any details, if known, of another entity or contracted service provider the clearance holder is transferring to, along with any identified risks or security concerns associated with the separation.' },
-                'PERS-188': { id: 'PERS-188', domainId: 'personnel', title: 'The Authorised Vetting Agency manages and records changes in the s...', description: 'The Authorised Vetting Agency manages and records changes in the security clearance status of separating personnel, including a change of Sponsoring Entity, and transfer personal security files where a clearance subject transfers to an entity covered by a different Authorised Vetting Agency, to the extent that their enabling legislation allows.' },
-                'PERS-218': { id: 'PERS-218', domainId: 'personnel', title: 'The Sponsoring Entity ensures clearance subjects with an eligibili...', description: 'The Sponsoring Entity ensures clearance subjects with an eligibility waiver or where a waiver is being considered, are not given temporary or provisional access to security classified information or resources until the security vetting process is complete.' },
-
-                // Physical Domain - Requirements 189-210 (PSPF 2025)
-                'PHYS-189': { id: 'PHYS-189', domainId: 'physical', title: 'Protective security is integrated in the process of planning, sel...', description: 'Protective security is integrated in the process of planning, selecting, designing and modifying entity facilities for the protection of people, information and resources.' },
-                'PHYS-190': { id: 'PHYS-190', domainId: 'physical', title: 'A facility security plan is developed for new facilities, facilit...', description: 'A facility security plan is developed for new facilities, facilities under construction or major refurbishments of existing facilities.' },
-                'PHYS-191': { id: 'PHYS-191', domainId: 'physical', title: 'Decisions on entity facility locations are informed by considerin...', description: 'Decisions on entity facility locations are informed by considering the site selection factors for Australian Government facilities.' },
-                'PHYS-192': { id: 'PHYS-192', domainId: 'physical', title: 'When designing or modifying facilities, the entity secures and co...', description: 'When designing or modifying facilities, the entity secures and controls access to facilities to meet the highest risk level to entity resources in accordance with Security Zone restricted access definitions.' },
-                'PHYS-193': { id: 'PHYS-193', domainId: 'physical', title: 'Facilities are constructed in accordance the applicable ASIO Tech...', description: 'Facilities are constructed in accordance the applicable ASIO Technical Notes to protect against the highest risk level in accordance with the entity security risk assessment in areas: accessed by the public and authorised personnel, and where physical resources and technical assets, other than security classified resources and technology, are stored.' },
-                'PHYS-194': { id: 'PHYS-194', domainId: 'physical', title: 'Facilities for Security Zones Two to Five that process, store or ...', description: 'Facilities for Security Zones Two to Five that process, store or communicate security classified information and resources are constructed in accordance with the applicable sections of ASIO Technical Note 1/15 – Physical Security Zones, and ASIO Technical Note 5/12 – Physical Security Zones (TOP SECRET) areas.' },
-                'PHYS-195': { id: 'PHYS-195', domainId: 'physical', title: 'Entity facilities are operated and maintained in accordance with ...', description: 'Entity facilities are operated and maintained in accordance with Security Zones and Physical Security Measures and Controls.' },
-                'PHYS-196': { id: 'PHYS-196', domainId: 'physical', title: 'Security Zones One to Four are certified by the Certification Aut...', description: 'Security Zones One to Four are certified by the Certification Authority in accordance with the PSPF and applicable ASIO Technical Notes before they are used operationally.' },
-                'PHYS-197': { id: 'PHYS-197', domainId: 'physical', title: 'Security Zone Five areas that contain TOP SECRET security classif...', description: 'Security Zone Five areas that contain TOP SECRET security classified information or aggregated information where the compromise of confidentiality, loss of integrity or unavailability of that information may have a catastrophic business impact level, are certified by ASIO-T4 before they are used operationally.' },
-                'PHYS-198': { id: 'PHYS-198', domainId: 'physical', title: 'Security Zones One to Five are accredited by the Accreditation Au...', description: 'Security Zones One to Five are accredited by the Accreditation Authority before they are used operationally, on the basis that the required security controls are certified and the entity determines and accepts the residual risks.' },
-                'PHYS-199': { id: 'PHYS-199', domainId: 'physical', title: 'Sensitive Compartmented Information Facility areas used to secure...', description: 'Sensitive Compartmented Information Facility areas used to secure and access TOP SECRET systems and security classified compartmented information are accredited by the Australian Signals Directorate before they are used operationally.' },
-                'PHYS-200': { id: 'PHYS-200', domainId: 'physical', title: 'Physical security measures are implemented to minimise or remove ...', description: 'Physical security measures are implemented to minimise or remove the risk of information and physical asset resources being made inoperable or inaccessible, or being accessed, used or removed without appropriate authorisation.' },
-                'PHYS-201': { id: 'PHYS-201', domainId: 'physical', title: 'Physical security measures are implemented to protect entity reso...', description: 'Physical security measures are implemented to protect entity resources, commensurate with the assessed business impact level of their compromise, loss or damage.' },
-                'PHYS-202': { id: 'PHYS-202', domainId: 'physical', title: 'Physical security measures are implemented to minimise or remove ...', description: 'Physical security measures are implemented to minimise or remove the risk of harm to people.' },
-                'PHYS-203': { id: 'PHYS-203', domainId: 'physical', title: 'The appropriate container, safe, vault, cabinet, secure room or s...', description: 'The appropriate container, safe, vault, cabinet, secure room or strong rooms is used to protect entity information and resources based on the applicable Security Zone and business impact level of the compromise, loss or damage to information or physical resources.' },
-                'PHYS-204': { id: 'PHYS-204', domainId: 'physical', title: 'Perimeter doors and hardware in areas that process, store or comm...', description: 'Perimeter doors and hardware in areas that process, store or communicate security classified information or resources are constructed and secured in accordance with the physical security measures and controls for perimeter doors and hardware.' },
-                'PHYS-205': { id: 'PHYS-205', domainId: 'physical', title: 'Access by authorised personnel, vehicles and equipment to Securit...', description: 'Access by authorised personnel, vehicles and equipment to Security Zones One to Five is controlled in accordance with the physical security measures and controls for access control for authorised personnel.' },
-                'PHYS-206': { id: 'PHYS-206', domainId: 'physical', title: 'Access by visitors to Security Zones One to Five is controlled in...', description: 'Access by visitors to Security Zones One to Five is controlled in accordance with the physical security measures and controls for access control for visitors.' },
-                'PHYS-207': { id: 'PHYS-207', domainId: 'physical', title: 'The Accountable Authority or Chief Security Officer approves ongo...', description: 'The Accountable Authority or Chief Security Officer approves ongoing (or regular) access to entity facilities for people who are not directly engaged by the entity or covered by the terms of a contract or agreement, on the basis that the person: has the required security clearance level for the Security Zone/s, and a business need supported by a business case and security risk assessment, which is reassessed at least every two years.' },
-                'PHYS-208': { id: 'PHYS-208', domainId: 'physical', title: 'Unauthorised access to Security Zones One to Five is controlled i...', description: 'Unauthorised access to Security Zones One to Five is controlled in accordance with the physical security measures and controls for security alarm systems.' },
-                'PHYS-209': { id: 'PHYS-209', domainId: 'physical', title: 'Security guard arrangements in Security Zones One to Five are est...', description: 'Security guard arrangements in Security Zones One to Five are established in accordance with the physical security measures and controls for security guards.' },
-                'PHYS-210': { id: 'PHYS-210', domainId: 'physical', title: 'Technical surveillance countermeasures for Security Zones One to ...', description: 'Technical surveillance countermeasures for Security Zones One to Five are established in accordance with the physical security measures and controls for technical surveillance countermeasures.' }
-            };
-
-            this.essentialEightControls = [
-                { id: 'TECH-103', label: 'Application control' },
-                { id: 'TECH-099', label: 'Patch applications' },
-                { id: 'TECH-104', label: 'Configure macros' },
-                { id: 'TECH-105', label: 'User application hardening' },
-                { id: 'TECH-102', label: 'Restrict admin privileges' },
-                { id: 'TECH-100', label: 'Patch operating systems' },
-                { id: 'TECH-101', label: 'Multi-factor authentication' },
-                { id: 'TECH-106', label: 'Regular backups' }
-            ];
+            // Requirements are loaded from domain module files
+            // See: scripts/domains/*.js for individual domain requirements
+            this.requirements = PSPFDomainsData.requirements;
+            
+            // Essential Eight controls are defined in scripts/domains/technology.js
+            this.essentialEightControls = PSPFDomainsData.essentialEightControls;
         }
 
         setupEventListeners() {
@@ -989,6 +728,37 @@ export class PSPFExplorer {
             }).join('');
         }
 
+        renderDomainRequirementHeatmap() {
+            const heatmapGrid = document.getElementById('domainRequirementsGrid');
+            if (!heatmapGrid) return;
+
+            heatmapGrid.innerHTML = this.domains.map(domain => {
+                const health = this.calculateDomainHealth(domain.id);
+                const requirementIds = Array.isArray(domain.requirements) ? domain.requirements : [];
+                const totalRequirements = requirementIds.length;
+                const requirementTiles = requirementIds.map(reqId => {
+                    const status = this.compliance[reqId]?.status || 'not-set';
+                    const label = `${reqId}: ${this.getStatusText(status)}`;
+                    return `<span class="requirement-chip ${status}" title="${label}" aria-label="${label}"></span>`;
+                }).join('');
+
+                return `
+                    <article class="domain-requirements-card ${health.status}">
+                        <header class="domain-card-header">
+                            <div>
+                                <h4>${domain.title}</h4>
+                                <p>${Math.min(health.met, totalRequirements)}/${totalRequirements} requirements · ${health.text}</p>
+                            </div>
+                            <span class="domain-health-pill ${health.status}">${health.text}</span>
+                        </header>
+                        <div class="requirement-chip-grid">
+                            ${requirementTiles}
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
         updateDashboardStats() {
             const totalRequirements = this.domains.reduce((sum, domain) => sum + domain.requirements.length, 0);
             const totalProjects = this.projects.length;
@@ -997,7 +767,7 @@ export class PSPFExplorer {
 
             const totalReqEl = document.getElementById('totalRequirements');
             const totalDomainsEl = document.getElementById('totalDomains');
-            const totalProjectsEl = document.getElementById('totalProjects');
+            const totalProjectsEl = document.getElementById('totalProjectsDashboard');
             const complianceRateEl = document.getElementById('complianceRate');
 
             if (totalReqEl) totalReqEl.textContent = totalRequirements;
@@ -1454,7 +1224,7 @@ export class PSPFExplorer {
             const domain = this.domains.find(d => d.id === domainId);
             if (!domain) return { status: 'critical', met: 0, total: 0, text: 'Unknown' };
 
-            const requirements = domain.requirements;
+            const requirements = Array.isArray(domain.requirements) ? domain.requirements : [];
             let totalRequirements = requirements.length;
             let metRequirements = 0;
             let partialRequirements = 0;
@@ -1496,7 +1266,8 @@ export class PSPFExplorer {
                 });
             });
 
-            const compliancePercentage = totalRequirements > 0 ? Math.round((metRequirements / totalRequirements) * 100) : 0;
+            const rawCompliancePercentage = totalRequirements > 0 ? (metRequirements / totalRequirements) * 100 : 0;
+            const complianceLabel = this.formatPercentDisplay(rawCompliancePercentage);
 
             const totalProjects = this.projects.length;
             const totalTasks = this.tasks.length;
@@ -1505,17 +1276,17 @@ export class PSPFExplorer {
             const taskCompletionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
             // Animate number updates
-            this.animateNumber('totalProjects', totalProjects);
+            this.animateNumber('totalProjectsProgress', totalProjects);
             this.animateNumber('totalTasks', totalTasks);
             this.animateNumber('completedTasks', completedTasks);
             this.animateNumber('totalRisks', totalRisks);
             
             // Update main compliance display
-            document.getElementById('overallCompliance').textContent = compliancePercentage + '%';
+            document.getElementById('overallCompliance').textContent = complianceLabel;
             
             // Update progress rings
             this.updateProgressRing('taskCompletionRing', 'taskCompletionPercent', taskCompletionPercentage);
-            this.updateProgressRing('complianceRing', 'compliancePercent', compliancePercentage);
+            this.updateProgressRing('complianceRing', 'compliancePercent', rawCompliancePercentage);
             
             // Update mini charts
             this.updateMiniChart('projectsChart', Math.min(totalProjects * 10, 100));
@@ -1523,7 +1294,9 @@ export class PSPFExplorer {
             this.updateMiniChart('risksChart', Math.min(totalRisks * 15, 100));
             
             // Update trend indicators
-            this.updateTrendIndicators(totalProjects, totalTasks, completedTasks, compliancePercentage, totalRisks);
+            this.updateTrendIndicators(totalProjects, totalTasks, completedTasks, rawCompliancePercentage, totalRisks);
+
+            this.renderDomainRequirementHeatmap();
 
             // Refresh Essential Eight summary
             this.renderEssentialEightWidget();
@@ -1556,23 +1329,40 @@ export class PSPFExplorer {
             const ring = document.getElementById(ringId);
             const text = document.getElementById(textId);
             if (!ring || !text) return;
-            
+
             const circle = ring.querySelector('.progress-ring-progress');
             const radius = 26;
             const circumference = 2 * Math.PI * radius;
-            const offset = circumference - (percentage / 100) * circumference;
-            
+            const validPercentage = Math.max(0, Math.min(percentage, 100));
+            const offset = circumference - (validPercentage / 100) * circumference;
+
             circle.style.strokeDashoffset = offset;
-            text.textContent = percentage + '%';
-            
+            text.textContent = this.formatPercentDisplay(validPercentage);
+
             // Color based on percentage
-            if (percentage >= 80) {
+            if (validPercentage >= 80) {
                 circle.style.stroke = 'var(--success-color)';
-            } else if (percentage >= 60) {
+            } else if (validPercentage >= 60) {
                 circle.style.stroke = 'var(--warning-color)';
             } else {
                 circle.style.stroke = 'var(--danger-color)';
             }
+        }
+
+        formatPercentDisplay(value) {
+            if (typeof value !== 'number' || Number.isNaN(value)) {
+                return '0%';
+            }
+            if (value >= 100) {
+                return '100%';
+            }
+            if (value >= 1) {
+                return `${Math.round(value)}%`;
+            }
+            if (value > 0) {
+                return `${value.toFixed(1)}%`;
+            }
+            return '0%';
         }
         
         updateMiniChart(chartId, percentage) {
@@ -3391,7 +3181,7 @@ export class PSPFExplorer {
                         <input type="text" id="requirementSearch" placeholder="Search requirements..." style="flex: 1;">
                     </div>
                     
-                    <div id="requirementsList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; background: var(--bg-secondary);">
+                    <div id="requirementsManagerList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: 8px; padding: 1rem; background: var(--bg-secondary);">
                         <!-- Requirements list will be populated here -->
                     </div>
                     
@@ -3407,14 +3197,14 @@ export class PSPFExplorer {
             modal.addTrackedListener(modal.querySelector('#addReqBtn'), 'click', () => this.showAddRequirementModal());
             modal.addTrackedListener(modal.querySelector('#exportReqBtn'), 'click', () => this.exportRequirements());
             modal.addTrackedListener(modal.querySelector('#closeReqMgrBtn'), 'click', () => modal.remove());
-            modal.addTrackedListener(modal.querySelector('#domainFilter'), 'change', () => this.filterRequirements());
-            modal.addTrackedListener(modal.querySelector('#requirementSearch'), 'input', () => this.filterRequirements());
+            modal.addTrackedListener(modal.querySelector('#domainFilter'), 'change', () => this.filterRequirements('requirementsManagerList'));
+            modal.addTrackedListener(modal.querySelector('#requirementSearch'), 'input', () => this.filterRequirements('requirementsManagerList'));
             
-            this.renderRequirementsList();
+            this.renderRequirementsList('requirementsManagerList');
         }
 
-        renderRequirementsList() {
-            const container = document.getElementById('requirementsList');
+        renderRequirementsList(targetId = 'requirementsList') {
+            const container = document.getElementById(targetId);
             if (!container) return;
             
             // Populate tag filters first
@@ -3488,8 +3278,8 @@ export class PSPFExplorer {
             }
         }
 
-        filterRequirements() {
-            this.renderRequirementsList();
+        filterRequirements(targetId = 'requirementsList') {
+            this.renderRequirementsList(targetId);
         }
 
         showAddRequirementModal() {
@@ -3627,6 +3417,7 @@ export class PSPFExplorer {
             
             this.saveData();
             this.renderRequirementsList();
+            this.renderRequirementsList('requirementsManagerList');
             this.renderDomainsGrid();
             this.showNotification(`Requirement ${reqId} ${existingRequirement ? 'updated' : 'created'} successfully!`, 'success');
         }
@@ -3688,6 +3479,7 @@ export class PSPFExplorer {
             
             this.saveData();
             this.renderRequirementsList();
+            this.renderRequirementsList('requirementsManagerList');
             this.renderDomainsGrid();
             this.showNotification(`Requirement ${requirement.id} deleted successfully.`, 'success');
         }
@@ -3770,7 +3562,10 @@ export class PSPFExplorer {
     }
 
     if (typeof document !== 'undefined') {
-        document.addEventListener('DOMContentLoaded', () => {
-            bootstrapPSPFExplorer();
-        });
+        const bootstrap = () => bootstrapPSPFExplorer();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrap);
+        } else {
+            bootstrap();
+        }
     }

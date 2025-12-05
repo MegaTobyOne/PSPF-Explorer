@@ -5,9 +5,15 @@ archive/
 *.xlsx
 *.pdf
 *.zip
+*.json
 copilot-instructions.md
 pspf-explorer-design.md
 update_requirements.js
+
+# Test artifacts
+tests/
+test-results/
+playwright-report/
 
 # Editor and OS files
 .vscode/
