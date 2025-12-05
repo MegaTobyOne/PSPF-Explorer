@@ -466,7 +466,10 @@ export class PSPFExplorer {
                 // Domain actions
                 case 'view-domain':
                     const domainId = target.dataset.domainId;
-                    if (domainId) this.showDomainRequirements(domainId);
+                    if (domainId) {
+                        this.showView('home');
+                        this.showDomainRequirements(domainId);
+                    }
                     break;
 
                 // Requirement actions
@@ -475,6 +478,7 @@ export class PSPFExplorer {
                     if (reqId) {
                         const requirement = this.requirements[reqId];
                         if (requirement) {
+                            this.showView('home');
                             this.showDomainRequirements(requirement.domainId);
                         }
                         this.showRequirementDetails(reqId);
@@ -485,7 +489,10 @@ export class PSPFExplorer {
                 // Project actions
                 case 'view-project':
                     const projectId = target.dataset.projectId;
-                    if (projectId) this.showProjectDetails(projectId);
+                    if (projectId) {
+                        this.showView('project');
+                        this.showProjectDetails(projectId);
+                    }
                     break;
 
                 case 'edit-project':
