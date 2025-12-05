@@ -37,6 +37,8 @@ export class PSPFExplorer {
             this.risks = this.readStorage('pspf_risks', []);
             this.incidents = this.readStorage('pspf_incidents', []);
             this.compliance = this.readStorage('pspf_compliance', {});
+            this.progressHistory = this.readStorage('pspf_progress_history', {});
+            this.normalizeProgressHistory();
 
             this.userProfiles = this.readStorage('pspf_user_profiles', {});
             this.currentUserProfile = null;
@@ -1101,6 +1103,11 @@ export class PSPFExplorer {
                     <h5>Comments</h5>
                     <textarea class="compliance-comment" data-req="${reqId}" placeholder="Add implementation notes, evidence, or comments..." onblur="window.pspfExplorer.updateComplianceComment('${reqId}', this.value)">${compliance.comment}</textarea>
                 </div>
+
+                    <div class="requirement-history">
+                        <h5>Progress Timeline</h5>
+                        ${this.renderRequirementProgressHistory(reqId)}
+                    </div>
                 
                 <div class="linked-projects-section">
                     <h5>Linked Projects</h5>
@@ -1231,14 +1238,20 @@ export class PSPFExplorer {
         }
 
         updateCompliance(reqId, status) {
-            if (!this.compliance[reqId]) {
-                this.compliance[reqId] = {};
+            const compliance = this.ensureComplianceEntry(reqId);
+            const previousStatus = compliance.status;
+            compliance.status = status;
+            if (previousStatus !== status) {
+                this.recordComplianceHistory(reqId, status);
+                const domainId = this.requirements[reqId]?.domainId;
+                if (domainId) {
+                    this.recordDomainSnapshot(domainId);
+                }
             }
-            this.compliance[reqId].status = status;
             this.saveData();
             this.renderDomainsGrid();
             this.updateStats();
-            
+
             // Update the sidebar item status
             const sidebarItem = document.querySelector(`[data-req="${reqId}"] .requirement-status`);
             if (sidebarItem) {
@@ -1247,19 +1260,40 @@ export class PSPFExplorer {
             }
         }
 
-        updateComplianceComment(reqId, comment) {
+        ensureComplianceEntry(reqId) {
             if (!this.compliance[reqId]) {
-                this.compliance[reqId] = {};
+                this.compliance[reqId] = { status: 'not-set', comment: '', url: '', history: [] };
             }
-            this.compliance[reqId].comment = comment;
+            if (!Array.isArray(this.compliance[reqId].history)) {
+                this.compliance[reqId].history = [];
+            }
+            return this.compliance[reqId];
+        }
+
+        recordComplianceHistory(reqId, status) {
+            const requirement = this.requirements[reqId];
+            if (!requirement) return;
+            const compliance = this.ensureComplianceEntry(reqId);
+            const lastEntry = compliance.history[compliance.history.length - 1];
+            if (lastEntry && lastEntry.status === status) {
+                return;
+            }
+            compliance.history.push({
+                status,
+                timestamp: new Date().toISOString(),
+                domainId: requirement.domainId
+            });
+        }
+
+        updateComplianceComment(reqId, comment) {
+            const compliance = this.ensureComplianceEntry(reqId);
+            compliance.comment = comment;
             this.saveData();
         }
 
         updateComplianceUrl(reqId, url) {
-            if (!this.compliance[reqId]) {
-                this.compliance[reqId] = {};
-            }
-            this.compliance[reqId].url = url.trim();
+            const compliance = this.ensureComplianceEntry(reqId);
+            compliance.url = url.trim();
             this.saveData();
             
             // Refresh the requirement details to show/hide URL section
@@ -1296,6 +1330,34 @@ export class PSPFExplorer {
             } else {
                 return { status: 'critical', met: metRequirements, total: totalRequirements, text: 'Needs Attention' };
             }
+        }
+
+        recordDomainSnapshot(domainId) {
+            if (!domainId) return;
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) return;
+            const requirements = Array.isArray(domain.requirements) ? domain.requirements : [];
+            const met = requirements.filter(reqId => {
+                const status = this.compliance[reqId]?.status;
+                return status === 'yes' || status === 'na';
+            }).length;
+            const snapshot = {
+                timestamp: new Date().toISOString(),
+                met,
+                total: requirements.length,
+                percentage: requirements.length ? Math.round((met / requirements.length) * 100) : 0
+            };
+            const history = Array.isArray(this.progressHistory[domainId]) ? this.progressHistory[domainId] : [];
+            const last = history[history.length - 1];
+            if (last && last.met === snapshot.met && last.percentage === snapshot.percentage) {
+                this.progressHistory[domainId] = history;
+                return;
+            }
+            history.push(snapshot);
+            if (history.length > 40) {
+                history.shift();
+            }
+            this.progressHistory[domainId] = history;
         }
 
         updateStats() {
@@ -1572,7 +1634,128 @@ export class PSPFExplorer {
                     </div>
                 `;
             }).join('');
+
+                this.renderProgressHistorySection();
         }
+
+            renderProgressHistorySection() {
+                const grid = document.getElementById('domainHistoryGrid');
+                if (grid) {
+                    const cards = this.domains.map(domain => this.renderDomainHistoryCard(domain)).join('');
+                    grid.innerHTML = cards || '<p class="history-empty-msg">No progress history yet. Update a requirement status to start tracking the trend.</p>';
+                }
+                this.renderRecentUpdatesList();
+            }
+
+            renderDomainHistoryCard(domain) {
+                const history = Array.isArray(this.progressHistory[domain.id]) ? this.progressHistory[domain.id] : [];
+                if (!history.length) {
+                    return `
+                        <div class="history-card empty">
+                            <div class="history-card-header">
+                                <h4>${this.escapeHtml(domain.title)}</h4>
+                                <span class="history-trend trend-neutral">No updates yet</span>
+                            </div>
+                            <p class="history-empty-msg">Change a requirement status to capture the first snapshot.</p>
+                        </div>
+                    `;
+                }
+                const latest = history[history.length - 1];
+                const previous = history.length > 1 ? history[history.length - 2] : null;
+                const delta = previous ? latest.percentage - previous.percentage : 0;
+                const trendClass = delta > 0 ? 'trend-up' : delta < 0 ? 'trend-down' : 'trend-neutral';
+                const deltaText = previous ? `${delta > 0 ? '+' : ''}${delta}% since last update` : 'Baseline snapshot';
+                const markers = history.slice(-4).map(entry => `<span class="history-dot" title="${this.formatTimestamp(entry.timestamp)}">${entry.percentage}%</span>`).join('');
+                return `
+                    <div class="history-card">
+                        <div class="history-card-header">
+                            <div>
+                                <h4>${this.escapeHtml(domain.title)}</h4>
+                                <p class="history-meta">Last update ${this.formatTimestamp(latest.timestamp)}</p>
+                            </div>
+                            <span class="history-trend ${trendClass}">${deltaText}</span>
+                        </div>
+                        <div class="history-dots">${markers}</div>
+                        <div class="history-summary">
+                            <span><strong>${latest.met}</strong> met</span>
+                            <span><strong>${latest.total}</strong> total</span>
+                            <span>${latest.percentage}% compliance</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            getRecentRequirementUpdates(limit = 6) {
+                const entries = [];
+                Object.keys(this.compliance).forEach(reqId => {
+                    const history = Array.isArray(this.compliance[reqId]?.history) ? this.compliance[reqId].history : [];
+                    if (!history.length) return;
+                    const last = history[history.length - 1];
+                    const previous = history.length > 1 ? history[history.length - 2] : null;
+                    entries.push({
+                        reqId,
+                        status: last.status,
+                        timestamp: last.timestamp,
+                        previousStatus: previous?.status || null,
+                        domainId: last.domainId || this.requirements[reqId]?.domainId,
+                        domainTitle: this.domains.find(d => d.id === (last.domainId || this.requirements[reqId]?.domainId))?.title || 'Unknown domain',
+                        title: this.requirements[reqId]?.title || ''
+                    });
+                });
+                entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                return entries.slice(0, limit);
+            }
+
+            renderRecentUpdatesList(limit = 6) {
+                const container = document.getElementById('recentUpdatesList');
+                if (!container) return;
+                const updates = this.getRecentRequirementUpdates(limit);
+                if (!updates.length) {
+                    container.innerHTML = '<p class="empty-history">No requirement updates recorded yet. Change a status to begin tracking progress.</p>';
+                    return;
+                }
+                container.innerHTML = updates.map(update => `
+                    <article class="recent-update">
+                        <div>
+                            <p class="recent-update-title">${this.escapeHtml(update.reqId)} · ${this.escapeHtml(update.title)}</p>
+                            <p class="recent-update-meta">${this.escapeHtml(update.domainTitle)} · ${this.getStatusText(update.status)} · ${this.formatTimestamp(update.timestamp)}</p>
+                        </div>
+                        <span class="recent-update-status ${update.status}">
+                            ${update.previousStatus ? `${this.getStatusText(update.previousStatus)} → ` : ''}${this.getStatusText(update.status)}
+                        </span>
+                    </article>
+                `).join('');
+            }
+
+            renderRequirementProgressHistory(reqId) {
+                const history = Array.isArray(this.compliance[reqId]?.history) ? this.compliance[reqId].history : [];
+                if (!history.length) {
+                    return '<p class="history-empty-msg">No status updates yet. Set a compliance state to start the timeline.</p>';
+                }
+                return `
+                    <ul class="requirement-history-list">
+                        ${history.slice(-5).reverse().map(entry => `
+                            <li>
+                                <span class="history-entry-status ${entry.status}">${this.getStatusText(entry.status)}</span>
+                                <span class="history-entry-meta">${this.formatTimestamp(entry.timestamp)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                `;
+            }
+
+            formatTimestamp(timestamp) {
+                if (!timestamp) return 'Unknown time';
+                const date = new Date(timestamp);
+                if (Number.isNaN(date.getTime())) return 'Invalid date';
+                return date.toLocaleString('en-AU', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
 
         renderMyWorkView() {
             if (!this.currentUserProfile) return;
@@ -3819,7 +4002,13 @@ export class PSPFExplorer {
             localStorage.setItem('pspf_risks', JSON.stringify(this.risks));
             localStorage.setItem('pspf_incidents', JSON.stringify(this.incidents));
             localStorage.setItem('pspf_compliance', JSON.stringify(this.compliance));
+            this.saveProgressHistory();
             localStorage.setItem('pspf_last_modified', new Date().toISOString());
+        }
+
+        saveProgressHistory() {
+            if (!this.storageAvailable) return;
+            localStorage.setItem('pspf_progress_history', JSON.stringify(this.progressHistory));
         }
 
         readStorage(key, fallback) {
@@ -3834,6 +4023,21 @@ export class PSPFExplorer {
                 console.warn(`Failed to read storage key "${key}":`, error);
                 return this.cloneFallback(fallback);
             }
+        }
+
+        normalizeProgressHistory() {
+            if (!this.progressHistory || typeof this.progressHistory !== 'object') {
+                this.progressHistory = {};
+                return;
+            }
+            Object.keys(this.progressHistory).forEach(domainId => {
+                const entry = this.progressHistory[domainId];
+                if (!Array.isArray(entry)) {
+                    this.progressHistory[domainId] = [];
+                    return;
+                }
+                this.progressHistory[domainId] = entry.filter(item => item && item.timestamp && typeof item.percentage === 'number');
+            });
         }
 
         cloneFallback(value) {
