@@ -770,15 +770,54 @@ body {
     font-weight: 600;
 }
 
-.compliance-select {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    padding: 0.75rem;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    width: 100%;
+.compliance-status-picker {
     margin-bottom: 1rem;
+}
+
+.compliance-status-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.compliance-status-button {
+    border: 1px solid var(--border-light);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    padding: 0.65rem 0.95rem;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.compliance-status-button:hover {
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+}
+
+.compliance-status-button.active {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+}
+
+.compliance-status-button.status-yes {
+    border-color: #22c55e;
+}
+
+.compliance-status-button.status-no {
+    border-color: #ef4444;
+}
+
+.compliance-status-button.status-partial {
+    border-color: #f59e0b;
+}
+
+.compliance-status-button.status-na {
+    border-color: #0ea5e9;
 }
 
 .compliance-comment {
@@ -807,7 +846,7 @@ body {
 }
 
 /* Focus states for form controls */
-.compliance-select:focus-visible,
+.compliance-status-button:focus-visible,
 .compliance-comment:focus-visible,
 .compliance-url:focus-visible,
 input[type="text"]:focus-visible,

@@ -1075,9 +1075,6 @@ export class PSPFExplorer {
                 <h4>${requirement.title}</h4>
                 <p><strong>Requirement ID:</strong> ${reqId}</p>
                 <p>${requirement.description}</p>
-                
-                ${this.renderTagsInDetails(reqId)}
-                
                 ${compliance.url ? `
                     <div class="requirement-url-section">
                         <h5>📎 Reference Link</h5>
@@ -1091,14 +1088,29 @@ export class PSPFExplorer {
                 ` : ''}
                 
                 <div class="compliance-controls">
-                    <h5>Compliance Status</h5>
-                    <select class="compliance-select" data-req="${reqId}" onchange="window.pspfExplorer.updateCompliance('${reqId}', this.value)">
-                        <option value="not-set" ${compliance.status === 'not-set' ? 'selected' : ''}>Not Set</option>
-                        <option value="yes" ${compliance.status === 'yes' ? 'selected' : ''}>Yes</option>
-                        <option value="no" ${compliance.status === 'no' ? 'selected' : ''}>No</option>
-                        <option value="partial" ${compliance.status === 'partial' ? 'selected' : ''}>Risk Managed</option>
-                        <option value="na" ${compliance.status === 'na' ? 'selected' : ''}>Not Applicable</option>
-                    </select>
+                    <div class="compliance-status-picker" role="group" aria-label="Compliance status">
+                        <h5>Compliance Status</h5>
+                        <div class="compliance-status-buttons">
+                            ${[
+                                { id: 'not-set', label: 'Not Set' },
+                                { id: 'yes', label: 'Met' },
+                                { id: 'no', label: 'Not Met' },
+                                { id: 'partial', label: 'Risk Managed' },
+                                { id: 'na', label: 'N/A' }
+                            ].map(statusOption => {
+                                const isActive = compliance.status === statusOption.id;
+                                return `
+                                    <button type="button"
+                                            class="compliance-status-button ${isActive ? 'active' : ''} status-${statusOption.id}"
+                                            data-status="${statusOption.id}"
+                                            aria-pressed="${isActive}"
+                                            onclick="window.pspfExplorer.updateCompliance('${reqId}', '${statusOption.id}')">
+                                        ${statusOption.label}
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
                     
                     <h5>Reference URL</h5>
                     <input type="url" class="compliance-url" data-req="${reqId}" 
@@ -1136,6 +1148,7 @@ export class PSPFExplorer {
                         + Link Project
                     </button>
                 </div>
+                ${this.renderTagsInDetails(reqId)}
             `;
         }
 
@@ -1258,6 +1271,9 @@ export class PSPFExplorer {
             this.saveData();
             this.renderDomainsGrid();
             this.updateStats();
+
+            // Refresh detail panel in case it is open so the new button state is visible
+            this.showRequirementDetails(reqId);
 
             // Update the sidebar item status
             const sidebarItem = document.querySelector(`[data-req="${reqId}"] .requirement-status`);
