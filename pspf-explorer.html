@@ -398,6 +398,29 @@
                             <p>Download all your projects, risks, and events as a backup file.</p>
                             <button id="exportDataBtn" class="btn btn-primary">Export All Data</button>
                         </div>
+
+                        <div class="data-card">
+                            <h3>🎯 Scoped Reports</h3>
+                            <p>Share domain- or project-specific extracts without exposing unrelated data.</p>
+                            <div class="scoped-export">
+                                <label for="domainExportSelect">Domain export</label>
+                                <div class="scoped-export-controls">
+                                    <select id="domainExportSelect">
+                                        <option value="">Select a domain…</option>
+                                    </select>
+                                    <button id="exportDomainBtn" class="btn btn-secondary" disabled>Export Domain</button>
+                                </div>
+                            </div>
+                            <div class="scoped-export">
+                                <label for="projectExportSelect">Project export</label>
+                                <div class="scoped-export-controls">
+                                    <select id="projectExportSelect">
+                                        <option value="">Select a project…</option>
+                                    </select>
+                                    <button id="exportProjectBtn" class="btn btn-secondary" disabled>Export Project</button>
+                                </div>
+                            </div>
+                        </div>
                         
                         <div class="data-card">
                             <h3>📥 Import Data</h3>
@@ -451,6 +474,28 @@
                             <div class="stat-item">
                                 <span class="stat-label">Last Modified:</span>
                                 <span class="stat-value" id="dataLastModified">Never</span>
+                            </div>
+                        </div>
+                        <div class="data-trends">
+                            <div class="trend-card" aria-live="polite">
+                                <div class="trend-header">
+                                    <div>
+                                        <p class="trend-label">Incident trend</p>
+                                        <p class="trend-period">Last 6 months</p>
+                                    </div>
+                                    <span class="trend-change" id="incidentTrendChange">0 vs prev.</span>
+                                </div>
+                                <div class="trend-sparkline" id="incidentSparkline" aria-label="Incidents recorded per month"></div>
+                            </div>
+                            <div class="trend-card" aria-live="polite">
+                                <div class="trend-header">
+                                    <div>
+                                        <p class="trend-label">Evidence coverage</p>
+                                        <p class="trend-value" id="evidenceCoverageValue">0%</p>
+                                    </div>
+                                    <span class="trend-change" id="evidenceCoverageDelta">0%</span>
+                                </div>
+                                <p class="trend-subtext" id="evidenceCoverageSubtitle">0 of 0 requirements include reference links.</p>
                             </div>
                         </div>
                     </div>

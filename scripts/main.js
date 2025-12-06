@@ -29,6 +29,9 @@ const DEFAULT_TAG_DEFINITIONS = Object.freeze({
     }
 });
 
+const MY_WORK_USER_NAME_KEY = 'pspf_mywork_user_name';
+const MY_WORK_FILTERS_KEY = 'pspf_mywork_tag_filters';
+
 const createDefaultTagDefinitions = () => {
     return Object.keys(DEFAULT_TAG_DEFINITIONS).reduce((acc, key) => {
         acc[key] = { ...DEFAULT_TAG_DEFINITIONS[key] };
@@ -110,6 +113,7 @@ export class PSPFExplorer {
             this.loadSavedRequirements();
             this.initializeUserProfile();
             this.loadUserTagAssignments();
+            this.loadMyWorkPreferences();
             this.initializeRequirementUUIDs();
 
             if (typeof document === 'undefined') {
@@ -254,6 +258,28 @@ export class PSPFExplorer {
             const exportDataBtn = document.getElementById('exportDataBtn');
             if (exportDataBtn) {
                 exportDataBtn.addEventListener('click', () => this.exportData());
+            }
+
+            const domainExportSelect = document.getElementById('domainExportSelect');
+            const domainExportBtn = document.getElementById('exportDomainBtn');
+            if (domainExportSelect && domainExportBtn) {
+                domainExportSelect.addEventListener('change', () => {
+                    domainExportBtn.disabled = !domainExportSelect.value;
+                });
+                domainExportBtn.addEventListener('click', () => {
+                    this.exportDomainData(domainExportSelect.value);
+                });
+            }
+
+            const projectExportSelect = document.getElementById('projectExportSelect');
+            const projectExportBtn = document.getElementById('exportProjectBtn');
+            if (projectExportSelect && projectExportBtn) {
+                projectExportSelect.addEventListener('change', () => {
+                    projectExportBtn.disabled = !projectExportSelect.value;
+                });
+                projectExportBtn.addEventListener('click', () => {
+                    this.exportProjectData(projectExportSelect.value);
+                });
             }
 
             const importDataBtn = document.getElementById('importDataBtn');
@@ -823,33 +849,10 @@ export class PSPFExplorer {
             
             const selectedDomainTitle = document.getElementById('selectedDomainTitle');
             const selectedDomainDescription = document.getElementById('selectedDomainDescription');
-            const requirementsList = document.getElementById('requirementsList');
-
             if (selectedDomainTitle) selectedDomainTitle.textContent = domain.title + ' Requirements';
             if (selectedDomainDescription) selectedDomainDescription.textContent = domain.description;
 
-            if (requirementsList) {
-                requirementsList.innerHTML = domain.requirements.map(reqId => {
-                    const requirement = this.requirements[reqId];
-                    // Skip if requirement is not defined
-                    if (!requirement) {
-                        console.warn(`Requirement ${reqId} not found in definitions`);
-                        return '';
-                    }
-                    const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
-                    
-                    return `
-                        <div class="requirement-item" data-req="${reqId}" data-action="view-requirement" data-requirement-id="${reqId}" tabindex="0" role="button">
-                            <div class="requirement-info">
-                                <span class="requirement-code">${reqId}</span>
-                                ${compliance.url ? '<span class="url-indicator" title="Has reference link">🔗</span>' : ''}
-                                <div class="requirement-tags">${this.renderTagsInList(requirement)}</div>
-                            </div>
-                            <span class="requirement-status ${compliance.status}">${this.getStatusText(compliance.status)}</span>
-                        </div>
-                    `;
-                }).join('');
-            }
+            this.renderRequirementsList();
 
             if (requirementsSection) {
                 requirementsSection.classList.remove('hidden');
@@ -1011,15 +1014,28 @@ export class PSPFExplorer {
             `;
         }
 
-        renderTagsInList(requirement) {
-            const tags = this.getUserRequirementTags(requirement.id);
-            if (tags.length === 0) return '';
-            
-            return tags.map(tagId => {
-                const tag = this.tagDefinitions[tagId];
-                if (!tag) return '';
-                return `<span class="tag" style="background-color: ${tag.color}">${tag.name}</span>`;
-            }).join('');
+        renderRequirementListItem(reqId) {
+            const requirement = this.requirements[reqId];
+            if (!requirement) {
+                console.warn(`Requirement ${reqId} not found in definitions`);
+                return '';
+            }
+            const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
+            const hasUrl = Boolean(compliance.url);
+            const title = this.escapeHtml(requirement.title || '');
+
+            return `
+                <div class="requirement-item" data-req="${reqId}" data-action="view-requirement" data-requirement-id="${reqId}" tabindex="0" role="button">
+                    <div class="requirement-info">
+                        <div class="requirement-code-row">
+                            <span class="requirement-code">${reqId}</span>
+                            ${hasUrl ? '<span class="url-indicator" title="Has reference link">🔗</span>' : ''}
+                        </div>
+                        <p class="requirement-name">${title}</p>
+                    </div>
+                    <span class="requirement-status ${compliance.status}">${this.getStatusText(compliance.status)}</span>
+                </div>
+            `;
         }
 
         showRequirementDetails(reqId) {
@@ -1784,10 +1800,7 @@ export class PSPFExplorer {
             if (userNameInput) {
                 userNameInput.value = displayName;
                 userNameInput.onblur = (event) => {
-                    const trimmed = (event.target.value || '').trim();
-                    this.currentUserProfile.name = trimmed || 'You';
-                    this.saveUserProfile();
-                    this.renderMyWorkView();
+                    this.persistMyWorkUserName(event?.target?.value || '');
                 };
             }
         }
@@ -1827,12 +1840,14 @@ export class PSPFExplorer {
             } else {
                 this.myWorkActiveTagFilters.add(tagId);
             }
+            this.saveMyWorkFilters();
             this.renderMyWorkView();
         }
 
         clearMyWorkFilters() {
             if (!this.myWorkActiveTagFilters.size) return;
             this.myWorkActiveTagFilters.clear();
+            this.saveMyWorkFilters();
             this.renderMyWorkView();
         }
 
@@ -2783,6 +2798,189 @@ export class PSPFExplorer {
             document.getElementById('dataIncidentCount').textContent = incidentCount;
             document.getElementById('dataLastModified').textContent = 
                 lastModified ? new Date(lastModified).toLocaleDateString() : 'Never';
+
+            this.renderIncidentTrend();
+            this.renderEvidenceCoverageSummary();
+            this.populateScopedExportSelectors();
+        }
+
+        renderIncidentTrend() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const sparklineEl = document.getElementById('incidentSparkline');
+            const changeEl = document.getElementById('incidentTrendChange');
+            if (!sparklineEl || !changeEl) {
+                return;
+            }
+
+            const buckets = this.buildIncidentTrendBuckets();
+            const totalEvents = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
+
+            if (totalEvents === 0) {
+                sparklineEl.innerHTML = '<div class="trend-empty">No events recorded yet.</div>';
+                changeEl.textContent = '0 vs prev.';
+                changeEl.classList.remove('trend-up', 'trend-down');
+                return;
+            }
+
+            const maxCount = Math.max(...buckets.map(bucket => bucket.count), 1);
+            sparklineEl.innerHTML = buckets.map(bucket => {
+                const percent = Math.max((bucket.count / maxCount) * 100, 4);
+                return `
+                    <div class="spark-bar" style="height:${percent.toFixed(2)}%;" role="img" aria-label="${bucket.label}: ${bucket.count} incidents">
+                        <span>${bucket.label}: ${bucket.count}</span>
+                    </div>
+                `;
+            }).join('');
+
+            const lastBucket = buckets[buckets.length - 1];
+            const prevBucket = buckets.length > 1 ? buckets[buckets.length - 2] : { count: 0 };
+            const delta = lastBucket.count - prevBucket.count;
+            const prefix = delta > 0 ? '+' : '';
+            changeEl.textContent = `${prefix}${delta} vs prev.`;
+            changeEl.classList.remove('trend-up', 'trend-down');
+            if (delta > 0) {
+                changeEl.classList.add('trend-up');
+            } else if (delta < 0) {
+                changeEl.classList.add('trend-down');
+            }
+        }
+
+        buildIncidentTrendBuckets(monthCount = 6) {
+            const now = new Date();
+            const buckets = [];
+            for (let offset = monthCount - 1; offset >= 0; offset--) {
+                const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+                const key = `${date.getFullYear()}-${date.getMonth()}`;
+                buckets.push({
+                    key,
+                    label: date.toLocaleString('default', { month: 'short' }),
+                    count: 0
+                });
+            }
+
+            const bucketMap = buckets.reduce((acc, bucket) => {
+                acc[bucket.key] = bucket;
+                return acc;
+            }, {});
+
+            if (!Array.isArray(this.incidents)) {
+                return buckets;
+            }
+
+            this.incidents.forEach(incident => {
+                const rawDate = incident.date || incident.createdAt;
+                if (!rawDate) return;
+                const incidentDate = new Date(rawDate);
+                if (Number.isNaN(incidentDate.getTime())) return;
+
+                const key = `${incidentDate.getFullYear()}-${incidentDate.getMonth()}`;
+                const bucket = bucketMap[key];
+                if (bucket) {
+                    bucket.count += 1;
+                }
+            });
+
+            return buckets;
+        }
+
+        renderEvidenceCoverageSummary() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const valueEl = document.getElementById('evidenceCoverageValue');
+            const subtitleEl = document.getElementById('evidenceCoverageSubtitle');
+            const deltaEl = document.getElementById('evidenceCoverageDelta');
+            if (!valueEl || !subtitleEl || !deltaEl) {
+                return;
+            }
+
+            const requirementIds = Object.keys(this.requirements || {});
+            const totalRequirements = requirementIds.length;
+            const withEvidence = requirementIds.reduce((count, reqId) => {
+                const url = this.compliance[reqId]?.url;
+                return url && url.trim().length ? count + 1 : count;
+            }, 0);
+            const percentage = totalRequirements ? Math.round((withEvidence / totalRequirements) * 100) : 0;
+
+            valueEl.textContent = `${percentage}%`;
+            subtitleEl.textContent = `${withEvidence} of ${totalRequirements} requirements include reference links.`;
+
+            let previousValue = null;
+            if (this.storageAvailable) {
+                const stored = localStorage.getItem('pspf_evidence_coverage_last');
+                if (stored !== null && stored !== undefined) {
+                    const parsed = Number(stored);
+                    if (!Number.isNaN(parsed)) {
+                        previousValue = parsed;
+                    }
+                }
+                localStorage.setItem('pspf_evidence_coverage_last', String(percentage));
+            }
+
+            if (previousValue === null) {
+                deltaEl.textContent = '—';
+                deltaEl.classList.remove('trend-up', 'trend-down');
+            } else {
+                const delta = percentage - previousValue;
+                const prefix = delta > 0 ? '+' : '';
+                deltaEl.textContent = `${prefix}${delta}%`;
+                deltaEl.classList.remove('trend-up', 'trend-down');
+                if (delta > 0) {
+                    deltaEl.classList.add('trend-up');
+                } else if (delta < 0) {
+                    deltaEl.classList.add('trend-down');
+                }
+            }
+        }
+
+        populateScopedExportSelectors() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const domainSelect = document.getElementById('domainExportSelect');
+            const domainBtn = document.getElementById('exportDomainBtn');
+            if (domainSelect) {
+                const previousValue = domainSelect.value;
+                const domainOptions = this.domains
+                    .slice()
+                    .sort((a, b) => a.title.localeCompare(b.title))
+                    .map(domain => `<option value="${this.escapeHtml(domain.id)}">${this.escapeHtml(domain.title)}</option>`)
+                    .join('');
+                domainSelect.innerHTML = `<option value="">Select a domain…</option>${domainOptions}`;
+                if (previousValue && this.domains.some(domain => domain.id === previousValue)) {
+                    domainSelect.value = previousValue;
+                } else {
+                    domainSelect.value = '';
+                }
+                if (domainBtn) {
+                    domainBtn.disabled = !domainSelect.value;
+                }
+            }
+
+            const projectSelect = document.getElementById('projectExportSelect');
+            const projectBtn = document.getElementById('exportProjectBtn');
+            if (projectSelect) {
+                const previousProject = projectSelect.value;
+                const projectOptions = this.projects
+                    .slice()
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                    .map(project => `<option value="${this.escapeHtml(project.id)}">${this.escapeHtml(project.name || 'Untitled Project')}</option>`)
+                    .join('');
+                projectSelect.innerHTML = `<option value="">Select a project…</option>${projectOptions}`;
+                if (previousProject && this.projects.some(project => project.id === previousProject)) {
+                    projectSelect.value = previousProject;
+                } else {
+                    projectSelect.value = '';
+                }
+                if (projectBtn) {
+                    projectBtn.disabled = !projectSelect.value;
+                }
+            }
         }
 
         // Requirements linking
@@ -2904,6 +3102,27 @@ export class PSPFExplorer {
             this.renderProjectRequirementWidget();
         }
 
+        downloadJsonFile(payload, filenamePrefix) {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const blob = new Blob([JSON.stringify(payload, null, 2)], {
+                type: 'application/json'
+            });
+
+            const url = URL.createObjectURL(blob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = url;
+            const dateStamp = new Date().toISOString().split('T')[0];
+            downloadLink.download = `${filenamePrefix}-${dateStamp}.json`;
+
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(url);
+        }
+
         exportData() {
             try {
                 const exportData = {
@@ -2917,24 +3136,135 @@ export class PSPFExplorer {
                     }
                 };
 
-                const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-                    type: 'application/json'
-                });
-
-                const url = URL.createObjectURL(blob);
-                const downloadLink = document.createElement('a');
-                downloadLink.href = url;
-                downloadLink.download = `pspf-explorer-backup-${new Date().toISOString().split('T')[0]}.json`;
-                
-                document.body.appendChild(downloadLink);
-                downloadLink.click();
-                document.body.removeChild(downloadLink);
-                
+                this.downloadJsonFile(exportData, 'pspf-explorer-backup');
                 this.showNotification('Data exported successfully!', 'success');
                 
             } catch (error) {
                 console.error('Export failed:', error);
                 this.showNotification('Export failed. Please try again.', 'error');
+            }
+        }
+
+        buildRequirementExportDetails(requirementIds = []) {
+            const requirementArray = Array.isArray(requirementIds) ? requirementIds : [];
+            return requirementArray.map(reqId => {
+                const requirement = this.requirements[reqId] || {};
+                const domain = requirement.domainId ? this.domains.find(d => d.id === requirement.domainId) : null;
+                const complianceRecord = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
+
+                return {
+                    id: reqId,
+                    title: requirement.title || '',
+                    description: requirement.description || '',
+                    domainId: requirement.domainId || null,
+                    domainTitle: domain?.title || '',
+                    compliance: {
+                        status: complianceRecord.status || 'not-set',
+                        comment: complianceRecord.comment || '',
+                        url: complianceRecord.url || ''
+                    }
+                };
+            });
+        }
+
+        exportDomainData(domainId) {
+            if (!domainId) {
+                this.showNotification('Select a domain to export.', 'warning');
+                return;
+            }
+
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) {
+                this.showNotification('Unable to find the selected domain.', 'error');
+                return;
+            }
+
+            try {
+                const requirementIds = Array.isArray(domain.requirements) ? domain.requirements : [];
+                const requirements = this.buildRequirementExportDetails(requirementIds);
+                const requirementSet = new Set(requirementIds);
+                const relatedProjects = this.projects.filter(project => 
+                    Array.isArray(project.requirements) && project.requirements.some(reqId => requirementSet.has(reqId))
+                );
+                const projectIds = new Set(relatedProjects.map(project => project.id));
+                const relatedIncidents = this.incidents.filter(incident => incident.projectId && projectIds.has(incident.projectId));
+
+                const payload = {
+                    version: '1.0',
+                    exportedAt: new Date().toISOString(),
+                    scope: {
+                        type: 'domain',
+                        id: domain.id,
+                        title: domain.title
+                    },
+                    summary: {
+                        requirements: requirements.length,
+                        projects: relatedProjects.length,
+                        incidents: relatedIncidents.length
+                    },
+                    data: {
+                        domain: {
+                            id: domain.id,
+                            title: domain.title,
+                            description: domain.description
+                        },
+                        requirements,
+                        projects: relatedProjects,
+                        incidents: relatedIncidents
+                    }
+                };
+
+                this.downloadJsonFile(payload, `pspf-domain-${domain.id}`);
+                this.showNotification(`Exported ${domain.title} report`, 'success');
+            } catch (error) {
+                console.error('Domain export failed:', error);
+                this.showNotification('Domain export failed. Please try again.', 'error');
+            }
+        }
+
+        exportProjectData(projectId) {
+            if (!projectId) {
+                this.showNotification('Select a project to export.', 'warning');
+                return;
+            }
+
+            const project = this.projects.find(p => p.id === projectId);
+            if (!project) {
+                this.showNotification('Unable to find the selected project.', 'error');
+                return;
+            }
+
+            try {
+                const requirementDetails = this.buildRequirementExportDetails(project.requirements || []);
+                const projectRisks = this.risks.filter(risk => risk.projectId === projectId);
+                const projectIncidents = this.incidents.filter(incident => incident.projectId === projectId);
+
+                const payload = {
+                    version: '1.0',
+                    exportedAt: new Date().toISOString(),
+                    scope: {
+                        type: 'project',
+                        id: project.id,
+                        name: project.name
+                    },
+                    summary: {
+                        requirements: requirementDetails.length,
+                        risks: projectRisks.length,
+                        incidents: projectIncidents.length
+                    },
+                    data: {
+                        project,
+                        requirements: requirementDetails,
+                        risks: projectRisks,
+                        incidents: projectIncidents
+                    }
+                };
+
+                this.downloadJsonFile(payload, `pspf-project-${project.id}`);
+                this.showNotification(`Exported ${project.name || 'project'} report`, 'success');
+            } catch (error) {
+                console.error('Project export failed:', error);
+                this.showNotification('Project export failed. Please try again.', 'error');
             }
         }
 
@@ -3335,6 +3665,8 @@ export class PSPFExplorer {
                     localStorage.removeItem('pspf_incidents');
                     localStorage.removeItem('pspf_compliance');
                     localStorage.removeItem('pspf_last_modified');
+                    localStorage.removeItem(MY_WORK_USER_NAME_KEY);
+                    localStorage.removeItem(MY_WORK_FILTERS_KEY);
                 }
 
                 this.updateDataStats();
@@ -3576,6 +3908,50 @@ export class PSPFExplorer {
             localStorage.setItem('pspf_user_tag_assignments', JSON.stringify(this.userTagAssignments));
         }
 
+        loadMyWorkPreferences() {
+            const storedName = this.readStorage(MY_WORK_USER_NAME_KEY, null);
+            if (typeof storedName === 'string' && storedName.trim()) {
+                if (!this.currentUserProfile) {
+                    this.currentUserProfile = { id: `user-${Date.now().toString(36)}`, name: storedName };
+                } else {
+                    this.currentUserProfile.name = storedName;
+                }
+            }
+
+            const storedFilters = this.readStorage(MY_WORK_FILTERS_KEY, []);
+            if (Array.isArray(storedFilters)) {
+                const validFilters = storedFilters.filter(tagId => !!this.tagDefinitions[tagId]);
+                this.myWorkActiveTagFilters = new Set(validFilters);
+                if (this.storageAvailable && storedFilters.length !== validFilters.length) {
+                    this.saveMyWorkFilters();
+                }
+            } else {
+                this.myWorkActiveTagFilters = new Set();
+            }
+        }
+
+        persistMyWorkUserName(rawName) {
+            const normalized = (rawName || '').trim() || 'You';
+            if (!this.currentUserProfile) {
+                this.currentUserProfile = { id: `user-${Date.now().toString(36)}`, name: normalized };
+            } else {
+                this.currentUserProfile.name = normalized;
+            }
+            this.saveUserProfile();
+            this.saveMyWorkUserName(normalized);
+            this.renderMyWorkView();
+        }
+
+        saveMyWorkUserName(name) {
+            if (!this.storageAvailable) return;
+            localStorage.setItem(MY_WORK_USER_NAME_KEY, JSON.stringify(name));
+        }
+
+        saveMyWorkFilters() {
+            if (!this.storageAvailable) return;
+            localStorage.setItem(MY_WORK_FILTERS_KEY, JSON.stringify(Array.from(this.myWorkActiveTagFilters)));
+        }
+
         // Requirement Management System
         initializeRequirementUUIDs() {
             // Add UUIDs to existing requirements if they don't have them
@@ -3631,12 +4007,14 @@ export class PSPFExplorer {
         }
 
         renderRequirementsList(targetId = 'requirementsList') {
+            if (targetId === 'requirementsList') {
+                this.renderDomainRequirementsSidebar();
+                return;
+            }
+
             const container = document.getElementById(targetId);
             if (!container) return;
-            
-            // Populate tag filters first
-            this.populateTagFilters();
-            
+
             const domainFilter = document.getElementById('domainFilter')?.value || '';
             const searchFilter = document.getElementById('requirementSearch')?.value.toLowerCase() || '';
             
@@ -3652,14 +4030,6 @@ export class PSPFExplorer {
                     req.title.toLowerCase().includes(searchFilter) ||
                     req.description.toLowerCase().includes(searchFilter)
                 );
-            }
-            
-            // Apply tag filters
-            if (this.activeTagFilters && this.activeTagFilters.size > 0) {
-                requirementsToShow = requirementsToShow.filter(req => {
-                    const reqTags = this.getUserRequirementTags(req.id);
-                    return Array.from(this.activeTagFilters).some(tagId => reqTags.includes(tagId));
-                });
             }
             
             requirementsToShow.sort((a, b) => a.id.localeCompare(b.id));
@@ -3703,6 +4073,47 @@ export class PSPFExplorer {
             if (requirementsToShow.length === 0) {
                 container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 2rem;">No requirements found matching your criteria.</div>';
             }
+        }
+
+        renderDomainRequirementsSidebar() {
+            const requirementsList = document.getElementById('requirementsList');
+            if (!requirementsList) return;
+
+            this.populateTagFilters();
+
+            const domain = this.domains.find(d => d.id === this.selectedDomain);
+            if (!domain) {
+                requirementsList.innerHTML = `
+                    <div class="empty-state">
+                        <h4>Select a domain</h4>
+                        <p>Choose a domain above to see its requirements and assign tags.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let requirementIds = [...domain.requirements];
+
+            if (this.activeTagFilters.size > 0) {
+                requirementIds = requirementIds.filter(reqId => {
+                    const userTags = this.getUserRequirementTags(reqId);
+                    return userTags.some(tag => this.activeTagFilters.has(tag));
+                });
+            }
+
+            if (!requirementIds.length) {
+                requirementsList.innerHTML = `
+                    <div class="empty-state">
+                        <h4>No requirements match these tags</h4>
+                        <p>Clear the tag filter to view all requirements in this domain.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            requirementsList.innerHTML = requirementIds
+                .map(reqId => this.renderRequirementListItem(reqId))
+                .join('');
         }
 
         filterRequirements(targetId = 'requirementsList') {
