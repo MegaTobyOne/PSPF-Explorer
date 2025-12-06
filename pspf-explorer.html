@@ -233,8 +233,8 @@
                 <div class="view-header">
                     <h2 id="search-heading">Search</h2>
                     <div class="search-bar" role="search">
-                        <label for="searchInput" class="visually-hidden">Search projects, tasks, activities, or events</label>
-                        <input type="text" id="searchInput" placeholder="Search projects, tasks, activities, or events..." aria-describedby="search-help">
+                        <label for="searchInput" class="visually-hidden">Search projects, risks, incidents, or requirements</label>
+                        <input type="text" id="searchInput" placeholder="Search projects, risks, incidents, or requirements..." aria-describedby="search-help">
                         <button id="searchSubmit" class="btn btn-primary" aria-label="Submit search">Search</button>
                     </div>
                     <span id="search-help" class="visually-hidden">Enter keywords to search across all your data</span>
@@ -243,7 +243,7 @@
                     <div class="spinner" id="searchSpinner"></div>
                     <div class="empty-state">
                         <h3>🔍 Search Your Data</h3>
-                        <p>Enter a search term above to find projects, tasks, risks, or requirements across your entire dataset.</p>
+                        <p>Enter a search term above to find projects, risks, incidents, or requirements across your entire dataset.</p>
                     </div>
                 </div>
             </section>
@@ -268,40 +268,6 @@
                             <div class="mini-chart-bar" id="projectsChart"></div>
                         </div>
                         <div class="stat-trend trend-neutral" id="projectsTrend">
-                            <span>→</span> No change
-                        </div>
-                    </div>
-                    <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View all tasks">
-                        <div class="stat-header">
-                            <div>
-                                <span class="stat-number" id="totalTasks">0</span>
-                                <span class="stat-label">Total Tasks</span>
-                            </div>
-                            <span class="stat-icon">✅</span>
-                        </div>
-                        <div class="mini-chart">
-                            <div class="mini-chart-bar" id="tasksChart"></div>
-                        </div>
-                        <div class="stat-trend trend-neutral" id="tasksTrend">
-                            <span>→</span> No change
-                        </div>
-                    </div>
-                    <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View task completion">
-                        <div class="stat-header">
-                            <div>
-                                <span class="stat-number" id="completedTasks">0</span>
-                                <span class="stat-label">Completed Tasks</span>
-                            </div>
-                            <div class="progress-ring" id="taskCompletionRing">
-                                <svg>
-                                    <circle class="progress-ring-background" cx="30" cy="30" r="26"></circle>
-                                    <circle class="progress-ring-progress" cx="30" cy="30" r="26" 
-                                            stroke-dasharray="163.36" stroke-dashoffset="163.36"></circle>
-                                </svg>
-                                <div class="progress-ring-text" id="taskCompletionPercent">0%</div>
-                            </div>
-                        </div>
-                        <div class="stat-trend trend-neutral" id="completionTrend">
                             <span>→</span> No change
                         </div>
                     </div>
@@ -337,6 +303,21 @@
                         </div>
                         <div class="stat-trend trend-neutral" id="risksTrend">
                             <span>→</span> Risk level stable
+                        </div>
+                    </div>
+                    <div class="stat-card" data-action="nav-view" data-view="data" data-nav-btn="dataBtn" tabindex="0" role="button" title="View event log">
+                        <div class="stat-header">
+                            <div>
+                                <span class="stat-number" id="totalIncidentsStat">0</span>
+                                <span class="stat-label">Recorded Events</span>
+                            </div>
+                            <span class="stat-icon">📝</span>
+                        </div>
+                        <div class="mini-chart">
+                            <div class="mini-chart-bar incident-chart" id="incidentsChart"></div>
+                        </div>
+                        <div class="stat-trend trend-neutral" id="incidentsTrend">
+                            <span>→</span> No change
                         </div>
                     </div>
                 </div>
@@ -414,7 +395,7 @@
                         
                         <div class="data-card">
                             <h3>🗂️ Export Data</h3>
-                            <p>Download all your projects, tasks, activities, and events as a backup file.</p>
+                            <p>Download all your projects, risks, and events as a backup file.</p>
                             <button id="exportDataBtn" class="btn btn-primary">Export All Data</button>
                         </div>
                         
@@ -460,11 +441,7 @@
                                 <span class="stat-value" id="dataProjectCount">0</span>
                             </div>
                             <div class="stat-item">
-                                <span class="stat-label">Tasks:</span>
-                                <span class="stat-value" id="dataTaskCount">0</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-label">Activities:</span>
+                                <span class="stat-label">Risks:</span>
                                 <span class="stat-value" id="dataRiskCount">0</span>
                             </div>
                             <div class="stat-item">
@@ -487,6 +464,16 @@
                     <p class="subtitle">Manage your compliance projects and activities</p>
                     <button id="addProjectBtn" class="btn btn-primary">Add New Project</button>
                 </div>
+
+                <div class="project-requirements-widget">
+                    <div class="widget-header">
+                        <h3>Project requirement alignment</h3>
+                        <p class="subtitle-sm">For each project, see the PSPF requirements it is tagged against and their current compliance status.</p>
+                    </div>
+                    <div id="projectRequirementsWidget" class="project-requirements-grid" aria-live="polite">
+                        <p class="empty-state">Loading project requirement data...</p>
+                    </div>
+                </div>
                 
                 <div class="projects-layout">
                     <div class="projects-list-panel">
@@ -499,7 +486,7 @@
                         <div class="project-detail-content" id="projectDetails">
                             <div class="placeholder-content">
                                 <h4>Select a Project</h4>
-                                <p>Choose a project from the list to view its details and manage tasks.</p>
+                                    <p>Choose a project from the list to view its details and track risks or events.</p>
                             </div>
                         </div>
                     </div>
@@ -610,8 +597,8 @@
                             <li><strong>Domains</strong> → Core PSPF areas (fixed structure)</li>
                             <li><strong>Requirements</strong> → Specific security requirements within each domain (fixed structure)</li>
                             <li><strong>Projects</strong> → Your work initiatives to meet requirements (you can create and manage these)</li>
-                            <li><strong>Tasks</strong> → Specific actions within projects (you can create and manage these)</li>
                             <li><strong>Risks</strong> → Potential issues to track (you can create and manage these)</li>
+                            <li><strong>Events</strong> → Significant incidents or milestones captured for audit trails</li>
                         </ul>
                     </div>
 
@@ -625,8 +612,8 @@
                     <div class="help-section">
                         <h3>🎯 Working with Projects</h3>
                         <p><strong>Create projects:</strong> Go to the Projects tab to create new compliance initiatives. Projects help organize your work toward meeting specific requirements.</p>
-                        <p><strong>Manage tasks:</strong> Within each project, create tasks for specific actions that need to be completed.</p>
-                        <p><strong>Track risks:</strong> Identify and track potential issues that could impact your compliance work.</p>
+                        <p><strong>Document key risks:</strong> Identify and track potential issues that could impact your compliance work.</p>
+                        <p><strong>Record notable events:</strong> Capture incidents or milestones as they occur so lessons learned stay discoverable.</p>
                         <p><strong>Two-column layout:</strong> The Projects page uses a list-and-details layout - select a project from the left to see its details on the right.</p>
                     </div>
 
@@ -634,7 +621,7 @@
                         <h3>📈 Progress Overview</h3>
                         <p>The Progress tab provides a comprehensive view of your compliance journey:</p>
                         <ul>
-                            <li><strong>Statistics cards:</strong> See key metrics like active projects, total tasks, completion rates, and compliance percentages</li>
+                            <li><strong>Statistics cards:</strong> See key metrics like active projects, compliance percentages, risk posture, and recorded events</li>
                             <li><strong>Domain progress:</strong> Visual representation of progress across all PSPF domains</li>
                             <li><strong>Trends:</strong> Track how your compliance posture is improving over time</li>
                         </ul>
@@ -642,7 +629,7 @@
 
                     <div class="help-section">
                         <h3>🔍 Search & Data Management</h3>
-                        <p><strong>Search functionality:</strong> Use the Search tab to find specific projects, tasks, risks, or requirements across your entire dataset.</p>
+                        <p><strong>Search functionality:</strong> Use the Search tab to find specific projects, risks, incidents, or requirements across your entire dataset.</p>
                         <p><strong>Data backup:</strong> The Data tab allows you to export your work for backup or import data from previous sessions.</p>
                         <p><strong>Local storage:</strong> Your data is stored locally in your browser, so it persists between sessions on the same device.</p>
                     </div>
@@ -742,44 +729,6 @@
                 <button type="button" id="cancelLinkRequirements" class="btn btn-secondary">Cancel</button>
                 <button type="button" id="saveLinkRequirements" class="btn btn-primary">Save Links</button>
             </div>
-        </div>
-    </div>
-
-    <!-- Task Modal -->
-    <div id="taskModal" class="modal">
-        <div class="modal-content">
-            <h3 id="taskModalTitle">Add Task</h3>
-            <form id="taskForm">
-                <div class="form-group">
-                    <label for="taskName">Task Name</label>
-                    <input type="text" id="taskName" required>
-                </div>
-                <div class="form-group">
-                    <label for="taskDesc">Description</label>
-                    <textarea id="taskDesc" rows="3"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="taskStatus">Status</label>
-                    <select id="taskStatus">
-                        <option value="not-started">Not Started</option>
-                        <option value="in-progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                        <option value="blocked">Blocked</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="taskAssignee">Assignee</label>
-                    <input type="text" id="taskAssignee">
-                </div>
-                <div class="form-group">
-                    <label for="taskDueDate">Due Date</label>
-                    <input type="date" id="taskDueDate">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelTask">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Task</button>
-                </div>
-            </form>
         </div>
     </div>
 

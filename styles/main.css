@@ -949,6 +949,104 @@ select:focus-visible {
     margin-top: 1.5rem;
 }
 
+.project-requirements-widget {
+    margin-top: 1.5rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-sm);
+}
+
+.project-requirements-widget .widget-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.project-requirements-grid {
+    margin-top: 1.25rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+}
+
+.project-requirement-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 130px;
+}
+
+.project-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.project-requirement-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 230px;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.project-requirement-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0.5rem;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.02);
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.project-requirement-row:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.project-requirement-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.project-requirement-meta {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    margin-top: 0.1rem;
+}
+
+.project-requirement-meta .requirement-code {
+    font-family: 'Inter', 'SFMono-Regular', 'Roboto Mono', monospace;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+}
+
+.project-requirement-row .requirement-status {
+    margin: 0;
+}
+
+.project-requirement-card .empty-state {
+    margin: 0;
+    border: none;
+    background: transparent;
+}
+
 .projects-list-panel {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
@@ -1320,15 +1418,13 @@ select:focus-visible {
     color: var(--text-primary);
 }
 
-/* Project Tasks and Risks Sections */
-.project-tasks-section,
+/* Project Risks Section */
 .project-risks-section {
     margin-top: 1.5rem;
     padding-top: 1.5rem;
     border-top: 1px solid var(--border-light);
 }
 
-.project-tasks-section h5,
 .project-risks-section h5 {
     margin: 0 0 1rem 0;
     color: var(--text-primary);
@@ -1336,14 +1432,12 @@ select:focus-visible {
     font-weight: 600;
 }
 
-.tasks-list,
 .risks-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
 }
 
-.task-item,
 .risk-item {
     background: var(--bg-secondary);
     border: 1px solid var(--border-light);
@@ -1355,13 +1449,11 @@ select:focus-visible {
     gap: 1rem;
 }
 
-.task-content,
 .risk-content {
     flex: 1;
     min-width: 0;
 }
 
-.task-content h6,
 .risk-content h6 {
     margin: 0 0 0.25rem 0;
     color: var(--text-primary);
@@ -1369,7 +1461,6 @@ select:focus-visible {
     font-weight: 600;
 }
 
-.task-content p,
 .risk-content p {
     margin: 0 0 0.5rem 0;
     color: var(--text-secondary);
@@ -1377,27 +1468,11 @@ select:focus-visible {
     line-height: 1.4;
 }
 
-.task-meta,
 .risk-meta {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
-}
-
-.task-status {
-    font-size: 0.7rem;
-    padding: 0.2rem 0.4rem;
-    border-radius: var(--radius-sm);
-    font-weight: 500;
-}
-
-.task-due {
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    background: var(--bg-tertiary);
-    padding: 0.2rem 0.4rem;
-    border-radius: var(--radius-sm);
 }
 
 .risk-severity {
@@ -1430,7 +1505,6 @@ select:focus-visible {
     border-radius: var(--radius-sm);
 }
 
-.task-actions,
 .risk-actions {
     display: flex;
     gap: 0.5rem;
@@ -2656,6 +2730,10 @@ select:focus-visible {
     background: linear-gradient(90deg, var(--warning-color), var(--danger-color));
 }
 
+.mini-chart-bar.incident-chart {
+    background: linear-gradient(90deg, var(--info-color), var(--primary-color));
+}
+
 .mini-chart-bar::after {
     content: '';
     position: absolute;
@@ -2920,99 +2998,6 @@ select:focus-visible {
     border-top: 1px solid var(--border-light);
     background: var(--bg-elevated);
     border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-}
-
-/* Task Management Styles */
-.task-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
-    padding: 1.25rem;
-    margin-bottom: 1rem;
-    transition: all 0.3s ease;
-    box-shadow: var(--shadow-sm);
-}
-
-.task-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
-}
-
-.task-card.completed {
-    background: rgba(16, 185, 129, 0.1);
-    border-color: var(--success-color);
-}
-
-.task-card.in-progress {
-    border-left: 4px solid var(--info-color);
-}
-
-.task-card.blocked {
-    border-left: 4px solid var(--danger-color);
-}
-
-.task-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 0.75rem;
-}
-
-.task-header h4 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 1.125rem;
-    font-weight: 600;
-}
-
-.task-description {
-    color: var(--text-secondary);
-    margin: 0.75rem 0;
-    line-height: 1.5;
-}
-
-.task-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin: 1rem 0;
-    font-size: 0.875rem;
-}
-
-.task-meta .assignee {
-    background: var(--bg-elevated);
-    color: var(--text-primary);
-    padding: 0.25rem 0.75rem;
-    border-radius: var(--radius-md);
-    font-weight: 500;
-}
-
-.task-meta .due-date {
-    background: #fef3c7;
-    color: #92400e;
-    padding: 0.25rem 0.75rem;
-    border-radius: var(--radius-md);
-    font-weight: 500;
-}
-
-.task-meta .due-date.overdue {
-    background: #fee2e2;
-    color: #991b1b;
-}
-
-.task-meta .overdue-indicator {
-    background: var(--danger-color);
-    color: white;
-    padding: 0.25rem 0.75rem;
-    border-radius: var(--radius-md);
-    font-size: 0.8rem;
-    font-weight: 600;
-}
-
-.task-actions {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 1rem;
 }
 
 .status-badge {
@@ -3416,11 +3401,6 @@ select:focus-visible {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.025em;
-}
-
-.result-type.task {
-    background: rgba(59, 130, 246, 0.2);
-    color: var(--primary-color);
 }
 
 .result-type.risk {

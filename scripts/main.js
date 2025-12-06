@@ -1,6 +1,41 @@
 // Import domain data from module files
 let PSPFDomainsData;
 
+const DEFAULT_TAG_DEFINITIONS = Object.freeze({
+    critical: {
+        name: 'Critical Priority',
+        color: '#dc2626',
+        description: 'Immediate action required to remain compliant.'
+    },
+    high: {
+        name: 'High Priority',
+        color: '#ea580c',
+        description: 'Needs attention during the current review cycle.'
+    },
+    medium: {
+        name: 'Medium Priority',
+        color: '#d97706',
+        description: 'Track upcoming tasks or dependencies.'
+    },
+    low: {
+        name: 'Low Priority',
+        color: '#0ea5e9',
+        description: 'Monitor as capacity allows.'
+    },
+    info: {
+        name: 'Information Gap',
+        color: '#6366f1',
+        description: 'Requires additional evidence or documentation.'
+    }
+});
+
+const createDefaultTagDefinitions = () => {
+    return Object.keys(DEFAULT_TAG_DEFINITIONS).reduce((acc, key) => {
+        acc[key] = { ...DEFAULT_TAG_DEFINITIONS[key] };
+        return acc;
+    }, {});
+};
+
 if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
     PSPFDomainsData = {
         domains: [],
@@ -33,7 +68,6 @@ export class PSPFExplorer {
 
             // Initialize data structures
             this.projects = this.readStorage('pspf_projects', []);
-            this.tasks = this.readStorage('pspf_tasks', []);
             this.risks = this.readStorage('pspf_risks', []);
             this.incidents = this.readStorage('pspf_incidents', []);
             this.compliance = this.readStorage('pspf_compliance', {});
@@ -44,17 +78,53 @@ export class PSPFExplorer {
             this.currentUserProfile = null;
             this.userTagAssignments = this.readStorage('pspf_user_tag_assignments', {});
             this.myWorkActiveTagFilters = new Set();
+            this.activeTagFilters = new Set();
+            this.tagDefinitions = createDefaultTagDefinitions();
+            const rawDomains = Array.isArray(PSPFDomainsData?.domains) ? PSPFDomainsData.domains : [];
+            this.domains = rawDomains.map(domain => ({
+                ...domain,
+                requirements: Array.isArray(domain.requirements) ? [...domain.requirements] : []
+            }));
+            const rawRequirements = PSPFDomainsData?.requirements || {};
+            this.requirements = Object.keys(rawRequirements).reduce((acc, key) => {
+                acc[key] = { ...rawRequirements[key] };
+                return acc;
+            }, {});
+            this.essentialEightControls = Array.isArray(PSPFDomainsData?.essentialEightControls)
+                ? PSPFDomainsData.essentialEightControls.map(control => ({ ...control }))
+                : [];
             
             this.currentView = 'home';
             this.selectedDomain = null;
             this.editingProject = null;
-            this.editingTask = null;
             this.editingRisk = null;
             this.editingIncident = null;
             
             if (this.options.autoInit) {
                 this.init();
             }
+        }
+
+        init() {
+            this.loadTagDefinitions();
+            this.loadSavedRequirements();
+            this.initializeUserProfile();
+            this.loadUserTagAssignments();
+            this.initializeRequirementUUIDs();
+
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            this.setupEventListeners();
+            this.setupEventDelegation();
+            this.renderHome();
+            this.renderProjects();
+            this.renderTagManagement();
+            this.renderMyWorkView();
+            this.renderProgress();
+            this.renderDomainRequirementHeatmap();
+            this.showWelcomeModalIfFirstTime();
         }
 
         /**
@@ -77,7 +147,7 @@ export class PSPFExplorer {
 
             const notification = document.createElement('div');
             notification.className = `notification notification-${type}`;
-            
+
             const icons = {
                 success: '✓',
                 error: '✕',
@@ -87,120 +157,47 @@ export class PSPFExplorer {
 
             notification.innerHTML = `
                 <span class="notification-icon">${icons[type] || icons.info}</span>
-                <span class="notification-message">${this.escapeHtml(message)}</span>
+                <span class="notification-message">${this.escapeHtml(message || '')}</span>
                 <button class="notification-close" aria-label="Close notification">×</button>
             `;
 
             container.appendChild(notification);
 
-            // Trigger animation
             requestAnimationFrame(() => {
                 notification.classList.add('notification-show');
             });
 
-            // Close button handler
             const closeBtn = notification.querySelector('.notification-close');
             const removeNotification = () => {
                 notification.classList.remove('notification-show');
                 notification.classList.add('notification-hide');
                 setTimeout(() => notification.remove(), 300);
             };
-            closeBtn.addEventListener('click', removeNotification);
 
-            // Auto-remove after duration
+            if (closeBtn) {
+                closeBtn.addEventListener('click', removeNotification);
+            }
+
             if (duration > 0) {
                 setTimeout(removeNotification, duration);
             }
         }
 
-        /**
-         * Escape HTML to prevent XSS
-         */
         escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        /**
-         * Create a modal with proper event listener cleanup
-         * @param {string} content - HTML content for the modal
-         * @param {Object} options - Modal options
-         * @returns {HTMLElement} The modal element
-         */
-        createModal(content, options = {}) {
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            if (options.id) modal.id = options.id;
-            modal.innerHTML = content;
-            
-            // Store event listeners for cleanup
-            modal._eventListeners = [];
-            
-            // Helper to add tracked event listeners
-            modal.addTrackedListener = (element, event, handler) => {
-                element.addEventListener(event, handler);
-                modal._eventListeners.push({ element, event, handler });
-            };
-            
-            // Enhanced remove method that cleans up listeners
-            const originalRemove = modal.remove.bind(modal);
-            modal.remove = () => {
-                // Clean up all tracked event listeners
-                modal._eventListeners.forEach(({ element, event, handler }) => {
-                    element.removeEventListener(event, handler);
-                });
-                modal._eventListeners = [];
-                this.activeModals.delete(modal);
-                originalRemove();
-            };
-            
-            document.body.appendChild(modal);
-            modal.style.display = 'block';
-            this.activeModals.add(modal);
-            
-            return modal;
-        }
-
-        init() {
-            this.loadDomainData();
-            this.loadTagDefinitions(); // Load custom tag definitions
-            this.initializeUserProfile();
-            this.loadUserTagAssignments();
-            this.loadSavedRequirements(); // Load saved tags
-            this.initializeRequirementUUIDs();
-
             if (typeof document !== 'undefined') {
-                this.setupEventListeners();
-                this.setupEventDelegation();
-                this.showWelcomeModalIfFirstTime();
-                this.renderHome();
-                this.updateDataStats();
+                const div = document.createElement('div');
+                div.textContent = text == null ? '' : text;
+                return div.innerHTML;
             }
-        }
-
-        loadDomainData() {
-            // Initialize tag definitions
-            this.tagDefinitions = {
-                'critical': { name: 'Critical', color: '#ef4444', description: 'Critical priority requirements' },
-                'high': { name: 'High', color: '#f97316', description: 'High priority requirements' },
-                'medium': { name: 'Medium', color: '#eab308', description: 'Medium priority requirements' },
-                'low': { name: 'Low', color: '#22c55e', description: 'Low priority requirements' }
-            };
-
-            // Initialize active tag filters
-            this.activeTagFilters = new Set();
-
-            // Domain definitions are loaded from domain modules
-            // See: scripts/domains/index.js for the consolidated exports
-            this.domains = PSPFDomainsData.domains;
-
-            // Requirements are loaded from domain module files
-            // See: scripts/domains/*.js for individual domain requirements
-            this.requirements = PSPFDomainsData.requirements;
-            
-            // Essential Eight controls are defined in scripts/domains/technology.js
-            this.essentialEightControls = PSPFDomainsData.essentialEightControls;
+            if (text == null) {
+                return '';
+            }
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         setupEventListeners() {
@@ -321,18 +318,6 @@ export class PSPFExplorer {
                 addProjectBtn.addEventListener('click', () => this.showProjectModal());
             }
 
-            // Back button in project detail view
-            const backToProjectsBtn = document.getElementById('backToProjectsBtn');
-            if (backToProjectsBtn) {
-                backToProjectsBtn.addEventListener('click', () => {
-                    const listView = document.getElementById('projectListView');
-                    const detailView = document.getElementById('projectDetailView');
-                    if (detailView) detailView.classList.add('hidden');
-                    if (listView) listView.classList.remove('hidden');
-                    this.renderProjects();
-                });
-            }
-
             // Modal event listeners
             this.setupModalEventListeners();
         }
@@ -347,17 +332,6 @@ export class PSPFExplorer {
             }
             if (cancelProject) {
                 cancelProject.addEventListener('click', () => this.hideModal('projectModal'));
-            }
-
-            // Task modal
-            const taskForm = document.getElementById('taskForm');
-            const cancelTask = document.getElementById('cancelTask');
-            
-            if (taskForm) {
-                taskForm.addEventListener('submit', (e) => this.handleTaskForm(e));
-            }
-            if (cancelTask) {
-                cancelTask.addEventListener('click', () => this.hideModal('taskModal'));
             }
 
             // Risk modal
@@ -382,38 +356,16 @@ export class PSPFExplorer {
                 cancelIncident.addEventListener('click', () => this.hideModal('incidentModal'));
             }
 
-            // Project view tab switching
-            const tabBtns = document.querySelectorAll('.tab-btn');
-            tabBtns.forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const tabName = e.target.getAttribute('data-tab');
+            // Project detail tabs (event delegation on container so re-renders are handled)
+            const projectDetails = document.getElementById('projectDetails');
+            if (projectDetails) {
+                projectDetails.addEventListener('click', (event) => {
+                    const tabBtn = event.target.closest('.tab-btn');
+                    if (!tabBtn) return;
+                    const tabName = tabBtn.getAttribute('data-tab');
                     if (tabName) {
                         this.switchProjectTab(tabName);
                     }
-                });
-            });
-
-            // Add Task button in project view
-            const addTaskBtn = document.getElementById('addTaskBtn');
-            if (addTaskBtn) {
-                addTaskBtn.addEventListener('click', () => {
-                    this.showTaskModal(null, this.currentProjectId);
-                });
-            }
-
-            // Add Risk button in project view
-            const addRiskBtn = document.getElementById('addRiskBtn');
-            if (addRiskBtn) {
-                addRiskBtn.addEventListener('click', () => {
-                    this.showRiskModal(null, this.currentProjectId);
-                });
-            }
-
-            // Link Requirements button in project view
-            const linkReqBtn = document.getElementById('linkRequirementBtn');
-            if (linkReqBtn) {
-                linkReqBtn.addEventListener('click', () => {
-                    this.showLinkRequirementsModal();
                 });
             }
         }
@@ -505,36 +457,51 @@ export class PSPFExplorer {
                     if (deleteProjectId) this.deleteProject(deleteProjectId);
                     break;
 
-                case 'add-task':
-                    const taskProjectId = target.dataset.projectId;
-                    if (taskProjectId) this.addTask(taskProjectId);
-                    break;
-
                 case 'add-risk':
                     const riskProjectId = target.dataset.projectId;
                     if (riskProjectId) this.addRisk(riskProjectId);
                     break;
 
-                // Task actions
-                case 'edit-task':
-                    const editTaskId = target.dataset.taskId;
-                    if (editTaskId) this.editTask(editTaskId);
+                case 'link-requirements': {
+                    const linkProjectId = target.dataset.projectId;
+                    if (linkProjectId) {
+                        this.currentProjectId = linkProjectId;
+                    }
+                    if (this.currentProjectId) {
+                        this.showLinkRequirementsModal();
+                    } else {
+                        this.showNotification('Select a project to link requirements.', 'warning');
+                    }
                     break;
+                }
 
-                case 'delete-task':
-                    const deleteTaskId = target.dataset.taskId;
-                    if (deleteTaskId) this.deleteTask(deleteTaskId);
+                case 'add-incident': {
+                    const incidentProjectId = target.dataset.projectId || this.currentProjectId;
+                    if (incidentProjectId) {
+                        this.showIncidentModal(null, incidentProjectId);
+                    } else {
+                        this.showNotification('Select a project before logging an event.', 'warning');
+                    }
                     break;
+                }
 
-                case 'complete-task':
-                    const completeTaskId = target.dataset.taskId;
-                    if (completeTaskId) this.markTaskComplete(completeTaskId);
+                case 'edit-incident': {
+                    const editIncidentId = target.dataset.incidentId;
+                    if (editIncidentId) {
+                        const incident = this.incidents.find(i => i.id === editIncidentId);
+                        const projectId = incident?.projectId || this.currentProjectId;
+                        this.showIncidentModal(editIncidentId, projectId);
+                    }
                     break;
+                }
 
-                case 'reopen-task':
-                    const reopenTaskId = target.dataset.taskId;
-                    if (reopenTaskId) this.markTaskIncomplete(reopenTaskId);
+                case 'delete-incident': {
+                    const deleteIncidentId = target.dataset.incidentId;
+                    if (deleteIncidentId) {
+                        this.deleteIncident(deleteIncidentId);
+                    }
                     break;
+                }
 
                 // Risk actions
                 case 'edit-risk':
@@ -555,11 +522,6 @@ export class PSPFExplorer {
                         this.showView(viewName);
                         if (navBtn) this.updateNavButtons(navBtn);
                     }
-                    break;
-
-                case 'view-task':
-                    const taskId = target.dataset.taskId;
-                    if (taskId) this.showTaskModal(taskId);
                     break;
 
                 case 'view-risk':
@@ -699,16 +661,16 @@ export class PSPFExplorer {
 
             // Special handling for project view
             if (viewName === 'project') {
-                const listView = document.getElementById('projectListView');
-                const detailView = document.getElementById('projectDetailView');
-                if (listView) listView.classList.remove('hidden');
-                if (detailView) detailView.classList.add('hidden');
                 this.renderProjects();
             }
 
             // Special handling for data view
             if (viewName === 'data') {
                 this.renderTagManagement();
+            }
+
+            if (viewName === 'myWork') {
+                this.renderMyWorkView();
             }
         }
 
@@ -717,10 +679,7 @@ export class PSPFExplorer {
                 btn.classList.remove('active');
                 btn.removeAttribute('aria-current');
             });
-            
-                if (viewName === 'myWork') {
-                    this.renderMyWorkView();
-                }
+
             const activeBtn = document.getElementById(activeId);
             if (activeBtn) {
                 activeBtn.classList.add('active');
@@ -1014,29 +973,39 @@ export class PSPFExplorer {
             if (!requirement) return '';
             const tags = this.getUserRequirementTags(requirementId);
             
+            const tagOptions = Object.keys(this.tagDefinitions).map(tagId => {
+                const tag = this.tagDefinitions[tagId];
+                if (!tag) {
+                    return '';
+                }
+                const isSelected = tags.includes(tagId);
+                return `
+                    <div class="tag-option ${isSelected ? 'selected' : ''}" 
+                         style="background-color: ${isSelected ? tag.color : ''};border-color: ${tag.color}"
+                         data-action="toggle-tag" data-requirement-id="${requirementId}" data-tag-id="${tagId}"
+                         tabindex="0" role="button"
+                         title="${tag.description}">
+                        ${tag.name}
+                    </div>
+                `;
+            }).join('');
+
+            const appliedTags = tags.map(tagId => {
+                const tag = this.tagDefinitions[tagId];
+                if (!tag) {
+                    return '';
+                }
+                return `<span class="tag" style="background-color: ${tag.color}">${tag.name}</span>`;
+            }).join('');
+
             return `
                 <div class="tag-manager">
                     <h5>Tags</h5>
                     <div class="tag-selector">
-                        ${Object.keys(this.tagDefinitions).map(tagId => {
-                            const tag = this.tagDefinitions[tagId];
-                            const isSelected = tags.includes(tagId);
-                            return `
-                                <div class="tag-option ${isSelected ? 'selected' : ''}" 
-                                     style="background-color: ${isSelected ? tag.color : ''};border-color: ${tag.color}"
-                                     data-action="toggle-tag" data-requirement-id="${requirementId}" data-tag-id="${tagId}"
-                                     tabindex="0" role="button"
-                                     title="${tag.description}">
-                                    ${tag.name}
-                                </div>
-                            `;
-                        }).join('')}
+                        ${tagOptions}
                     </div>
                     <div class="tags-display">
-                        ${tags.map(tagId => {
-                            const tag = this.tagDefinitions[tagId];
-                            return `<span class="tag" style="background-color: ${tag.color}">${tag.name}</span>`;
-                        }).join('')}
+                        ${appliedTags || '<span class="tag-empty">No tags assigned yet.</span>'}
                     </div>
                 </div>
             `;
@@ -1227,6 +1196,7 @@ export class PSPFExplorer {
                 if (this.currentProjectId === projectId) {
                     this.showProjectDetails(projectId);
                 }
+                this.renderProjectRequirementWidget();
             }
         }
 
@@ -1401,31 +1371,27 @@ export class PSPFExplorer {
             const complianceLabel = this.formatPercentDisplay(rawCompliancePercentage);
 
             const totalProjects = this.projects.length;
-            const totalTasks = this.tasks.length;
-            const completedTasks = this.tasks.filter(t => t.status === 'completed').length;
             const totalRisks = this.risks.length;
-            const taskCompletionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+            const totalIncidents = this.incidents.length;
 
             // Animate number updates
             this.animateNumber('totalProjectsProgress', totalProjects);
-            this.animateNumber('totalTasks', totalTasks);
-            this.animateNumber('completedTasks', completedTasks);
             this.animateNumber('totalRisks', totalRisks);
+            this.animateNumber('totalIncidentsStat', totalIncidents);
             
             // Update main compliance display
             document.getElementById('overallCompliance').textContent = complianceLabel;
             
             // Update progress rings
-            this.updateProgressRing('taskCompletionRing', 'taskCompletionPercent', taskCompletionPercentage);
             this.updateProgressRing('complianceRing', 'compliancePercent', rawCompliancePercentage);
             
             // Update mini charts
             this.updateMiniChart('projectsChart', Math.min(totalProjects * 10, 100));
-            this.updateMiniChart('tasksChart', Math.min(totalTasks * 5, 100));
             this.updateMiniChart('risksChart', Math.min(totalRisks * 15, 100));
+            this.updateMiniChart('incidentsChart', Math.min(totalIncidents * 12, 100));
             
             // Update trend indicators
-            this.updateTrendIndicators(totalProjects, totalTasks, completedTasks, rawCompliancePercentage, totalRisks);
+            this.updateTrendIndicators(totalProjects, rawCompliancePercentage, totalRisks, totalIncidents);
 
             this.renderDomainRequirementHeatmap();
 
@@ -1505,21 +1471,19 @@ export class PSPFExplorer {
             }, 300);
         }
         
-        updateTrendIndicators(projects, tasks, completed, compliance, risks) {
+        updateTrendIndicators(projects, compliance, risks, incidents) {
             // Simple trend logic - in a real app, you'd compare with historical data
             const trends = {
                 projects: projects > 0 ? 'up' : 'neutral',
-                tasks: tasks > 0 ? 'up' : 'neutral', 
-                completion: completed > 0 ? 'up' : 'neutral',
                 compliance: compliance > 50 ? 'up' : compliance > 0 ? 'neutral' : 'down',
-                risks: risks > 0 ? 'down' : 'neutral' // More risks = negative trend
+                risks: risks > 0 ? 'down' : 'neutral',
+                incidents: incidents > 0 ? 'up' : 'neutral'
             };
             
             this.setTrend('projectsTrend', trends.projects, 'Active projects');
-            this.setTrend('tasksTrend', trends.tasks, 'Total tasks');
-            this.setTrend('completionTrend', trends.completion, 'Task completion');
             this.setTrend('complianceTrend', trends.compliance, 'Compliance level');
             this.setTrend('risksTrend', trends.risks, 'Risk level');
+            this.setTrend('incidentsTrend', trends.incidents, 'Recorded events');
         }
         
         setTrend(elementId, trend, label) {
@@ -1985,19 +1949,6 @@ export class PSPFExplorer {
                 }
             });
 
-            // Search tasks
-            this.tasks.forEach(task => {
-                if (task.name.toLowerCase().includes(query) || 
-                    task.description.toLowerCase().includes(query)) {
-                    results.push({
-                        type: 'Task',
-                        title: task.name,
-                        description: task.description,
-                        id: task.id
-                    });
-                }
-            });
-
             // Search risks
             this.risks.forEach(risk => {
                 if (risk.name.toLowerCase().includes(query) || 
@@ -2039,15 +1990,13 @@ export class PSPFExplorer {
             const renderSearchResult = (result) => {
                 const action = result.reqId ? 'view-requirement'
                     : result.type === 'Project' ? 'view-project'
-                        : result.type === 'Task' ? 'view-task'
-                            : result.type === 'Risk' ? 'view-risk'
-                                : result.domainId ? 'view-domain'
-                                    : '';
+                        : result.type === 'Risk' ? 'view-risk'
+                            : result.domainId ? 'view-domain'
+                                : '';
                 const datasetAttrs = [
                     result.reqId ? `data-requirement-id="${result.reqId}"` : '',
                     result.projectId ? `data-project-id="${result.projectId}"` : (result.id && result.type === 'Project') ? `data-project-id="${result.id}"` : '',
                     result.domainId ? `data-domain-id="${result.domainId}"` : '',
-                    result.taskId ? `data-task-id="${result.taskId}"` : (result.type === 'Task' && result.id) ? `data-task-id="${result.id}"` : '',
                     result.riskId ? `data-risk-id="${result.riskId}"` : (result.type === 'Risk' && result.id) ? `data-risk-id="${result.id}"` : ''
                 ].filter(Boolean).join(' ');
                 const actionAttr = action ? `data-action="${action}"` : '';
@@ -2084,127 +2033,213 @@ export class PSPFExplorer {
                         <p>Create your first project to start tracking compliance work.</p>
                     </div>
                 `;
+                this.currentProjectId = null;
+                this.clearProjectDetails();
+                this.renderProjectRequirementWidget();
                 return;
             }
 
+            const selectedProjectExists = this.currentProjectId && this.projects.some(p => p.id === this.currentProjectId);
+
             projectsList.innerHTML = this.projects.map(project => `
-                <div class="project-item" data-project="${project.id}" data-action="view-project" data-project-id="${project.id}" tabindex="0" role="button">
-                    <div class="project-name">${project.name}</div>
+                <div class="project-item ${selectedProjectExists && this.currentProjectId === project.id ? 'active' : ''}" data-project="${project.id}" data-action="view-project" data-project-id="${project.id}" tabindex="0" role="button">
+                    <div class="project-name">${this.escapeHtml(project.name)}</div>
                     <div class="project-meta">
                         <span class="project-status ${project.status}">${this.getStatusText(project.status)}</span>
-                        <span>${this.getProjectTasksCount(project.id)} tasks</span>
+                        <span>${this.getProjectRisksCount(project.id)} risks</span>
                     </div>
                 </div>
             `).join('');
             
-            // Clear the details panel
-            this.clearProjectDetails();
+            if (selectedProjectExists) {
+                this.showProjectDetails(this.currentProjectId);
+            } else {
+                this.currentProjectId = null;
+                this.clearProjectDetails();
+            }
+
+            this.renderProjectRequirementWidget();
+        }
+
+        renderProjectRequirementWidget() {
+            const container = document.getElementById('projectRequirementsWidget');
+            if (!container) return;
+
+            if (this.projects.length === 0) {
+                container.innerHTML = `
+                    <div class="project-requirement-card">
+                        <p class="empty-state">Create a project to start mapping requirements.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = this.projects.map(project => {
+                const requirements = Array.isArray(project.requirements) ? project.requirements : [];
+                const requirementRows = requirements.length > 0 ? requirements.map(reqId => {
+                    const requirement = this.requirements[reqId];
+                    const title = requirement ? requirement.title : 'Unknown requirement';
+                    const domain = requirement ? this.domains.find(d => d.id === requirement.domainId) : null;
+                    const domainLabel = domain ? domain.title : '';
+                    const status = this.compliance[reqId]?.status || 'not-set';
+                    return `
+                        <div class="project-requirement-row">
+                            <div>
+                                <div class="project-requirement-title">${this.escapeHtml(title)}</div>
+                                <div class="project-requirement-meta">
+                                    <span class="requirement-code">${this.escapeHtml(reqId)}</span>
+                                    ${domainLabel ? `<span>• ${this.escapeHtml(domainLabel)}</span>` : ''}
+                                </div>
+                            </div>
+                            <span class="requirement-status ${status}">${this.getStatusText(status)}</span>
+                        </div>
+                    `;
+                }).join('') : `
+                    <div class="project-requirement-row empty-state">
+                        <p class="subtitle-sm">No requirements tagged yet.</p>
+                    </div>
+                `;
+
+                return `
+                    <div class="project-requirement-card">
+                        <div class="project-card-header">
+                            <div>
+                                <h4>${this.escapeHtml(project.name)}</h4>
+                                <p class="subtitle-sm">${requirements.length} linked requirement${requirements.length === 1 ? '' : 's'}</p>
+                            </div>
+                            <span class="project-status ${project.status}">${this.getStatusText(project.status)}</span>
+                        </div>
+                        <div class="project-requirement-list">
+                            ${requirementRows}
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
         showProjectDetails(projectId) {
-            const project = this.projects.find(p => p.id === projectId);
             const projectDetails = document.getElementById('projectDetails');
-            
-            if (!project || !projectDetails) return;
+            if (!projectDetails) return;
 
-            // Update active state in sidebar
+            const project = this.projects.find(p => p.id === projectId);
+            if (!project) {
+                this.clearProjectDetails();
+                return;
+            }
+
+            if (!Array.isArray(project.requirements)) {
+                project.requirements = [];
+            }
+
+            this.currentProjectId = projectId;
+
+            this.updateBreadcrumb([
+                { text: 'PSPF Domains', level: 'home' },
+                { text: 'Projects', level: 'projects' },
+                { text: project.name, level: 'project' }
+            ]);
+
             document.querySelectorAll('.project-item').forEach(item => {
-                item.classList.remove('active');
+                item.classList.toggle('active', item.dataset.project === projectId);
             });
-            document.querySelector(`[data-project="${projectId}"]`).classList.add('active');
 
-            const tasksCount = this.getProjectTasksCount(projectId);
-            const risksCount = this.getProjectRisksCount(projectId);
+            const safeName = this.escapeHtml(project.name);
+            const safeDescription = project.description ? this.escapeHtml(project.description) : 'No description provided yet.';
+            const createdLabel = project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Unknown';
             const requirementsCount = this.getProjectRequirementsCount(projectId);
-
-            // Get tasks and risks for this project
-            const projectTasks = this.tasks.filter(task => task.projectId === projectId);
-            const projectRisks = this.risks.filter(risk => risk.projectId === projectId);
+            const risksCount = this.getProjectRisksCount(projectId);
+            const incidentsCount = this.getProjectIncidentsCount(projectId);
+            const linkedRequirements = Array.isArray(project.requirements) ? project.requirements : [];
+            const metRequirements = linkedRequirements.filter(reqId => this.compliance[reqId]?.status === 'yes').length;
+            const progressPercent = linkedRequirements.length ? Math.round((metRequirements / linkedRequirements.length) * 100) : 0;
 
             projectDetails.innerHTML = `
-                <h4>${project.name}</h4>
-                <p><strong>Description:</strong> ${project.description || 'No description provided'}</p>
-                
-                <div class="project-detail-meta">
-                    <div class="project-detail-meta-item">
-                        <div class="project-detail-meta-label">Status</div>
-                        <div class="project-detail-meta-value">
+                <div class="project-header">
+                    <div class="project-header-main">
+                        <div class="project-meta-row">
                             <span class="project-status ${project.status}">${this.getStatusText(project.status)}</span>
+                            <span class="text-secondary">Created ${createdLabel}</span>
+                        </div>
+                        <h3>${safeName}</h3>
+                        <p class="subtitle-sm">${safeDescription}</p>
+                        <div class="project-progress-compact">
+                            <div class="progress-compact" aria-label="Project requirement progress">
+                                <div class="progress-compact-fill" id="projectProgressFill" style="width:${progressPercent}%"></div>
+                            </div>
+                            <span id="projectProgressText">${progressPercent}% complete</span>
                         </div>
                     </div>
-                    <div class="project-detail-meta-item">
-                        <div class="project-detail-meta-label">Created</div>
-                        <div class="project-detail-meta-value">${project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                    <div class="project-header-actions">
+                        <button class="btn btn-primary" data-action="edit-project" data-project-id="${project.id}">Edit Project</button>
+                        <button class="btn btn-outline" data-action="link-requirements" data-project-id="${project.id}">Link Requirements</button>
+                        <button class="btn btn-outline" data-action="add-risk" data-project-id="${project.id}">Add Risk</button>
+                        <button class="btn btn-outline" data-action="add-incident" data-project-id="${project.id}">Add Event</button>
+                        <button class="btn btn-danger" data-action="delete-project" data-project-id="${project.id}">Delete Project</button>
                     </div>
+                </div>
+
+                <div class="project-detail-meta">
                     <div class="project-detail-meta-item">
-                        <div class="project-detail-meta-label">Tasks</div>
-                        <div class="project-detail-meta-value">${tasksCount}</div>
+                        <div class="project-detail-meta-label">Requirements</div>
+                        <div class="project-detail-meta-value">${requirementsCount}</div>
                     </div>
                     <div class="project-detail-meta-item">
                         <div class="project-detail-meta-label">Risks</div>
                         <div class="project-detail-meta-value">${risksCount}</div>
                     </div>
                     <div class="project-detail-meta-item">
-                        <div class="project-detail-meta-label">Requirements</div>
-                        <div class="project-detail-meta-value">${requirementsCount}</div>
+                        <div class="project-detail-meta-label">Events</div>
+                        <div class="project-detail-meta-value">${incidentsCount}</div>
+                    </div>
+                    <div class="project-detail-meta-item">
+                        <div class="project-detail-meta-label">Met Requirements</div>
+                        <div class="project-detail-meta-value">${metRequirements}</div>
                     </div>
                 </div>
 
-                <div class="project-actions">
-                    <button class="btn btn-primary" data-action="edit-project" data-project-id="${project.id}">Edit Project</button>
-                    <button class="btn btn-secondary" data-action="add-task" data-project-id="${project.id}">Add Task</button>
-                    <button class="btn btn-outline" data-action="add-risk" data-project-id="${project.id}">Add Risk</button>
-                    <button class="btn btn-danger" data-action="delete-project" data-project-id="${project.id}">Delete Project</button>
+                <div class="content-tabs">
+                    <div class="tab-nav">
+                        <button class="tab-btn active" data-tab="risks">Risks <span class="tab-count" id="risksCount">${risksCount}</span></button>
+                        <button class="tab-btn" data-tab="requirements">Requirements <span class="tab-count" id="requirementsCount">${requirementsCount}</span></button>
+                        <button class="tab-btn" data-tab="incidents">Events <span class="tab-count" id="incidentsCount">${incidentsCount}</span></button>
+                    </div>
+                    <div class="tab-content">
+                        <div class="tab-pane active" id="risksTab">
+                            <div class="section-header">
+                                <div>
+                                    <h3>Risks</h3>
+                                    <p class="subtitle-sm">Identify and monitor threats impacting this project.</p>
+                                </div>
+                                <button class="btn btn-outline" data-action="add-risk" data-project-id="${project.id}">Add Risk</button>
+                            </div>
+                            <div id="risksList" aria-live="polite"></div>
+                        </div>
+                        <div class="tab-pane" id="requirementsTab">
+                            <div class="section-header">
+                                <div>
+                                    <h3>Linked Requirements</h3>
+                                    <p class="subtitle-sm">Map the PSPF obligations this project supports.</p>
+                                </div>
+                                <button class="btn btn-outline" data-action="link-requirements" data-project-id="${project.id}">Link Requirements</button>
+                            </div>
+                            <div id="projectRequirementsList" aria-live="polite"></div>
+                        </div>
+                        <div class="tab-pane" id="incidentsTab">
+                            <div class="section-header">
+                                <div>
+                                    <h3>Events & Lessons</h3>
+                                    <p class="subtitle-sm">Capture incidents, milestones, and outcomes.</p>
+                                </div>
+                                <button class="btn btn-outline" data-action="add-incident" data-project-id="${project.id}">Add Event</button>
+                            </div>
+                            <div id="incidentsList" aria-live="polite"></div>
+                        </div>
+                    </div>
                 </div>
-
-                ${projectTasks.length > 0 ? `
-                    <div class="project-tasks-section">
-                        <h5>📋 Tasks (${projectTasks.length})</h5>
-                        <div class="tasks-list">
-                            ${projectTasks.map(task => `
-                                <div class="task-item">
-                                    <div class="task-content">
-                                        <h6>${task.title}</h6>
-                                        <p>${task.description || 'No description'}</p>
-                                        <div class="task-meta">
-                                            <span class="task-status status-${task.status}">${this.getStatusText(task.status)}</span>
-                                            ${task.dueDate ? `<span class="task-due">Due: ${new Date(task.dueDate).toLocaleDateString()}</span>` : ''}
-                                        </div>
-                                    </div>
-                                    <div class="task-actions">
-                                        <button class="btn btn-small btn-outline" data-action="edit-task" data-task-id="${task.id}">Edit</button>
-                                        <button class="btn btn-small btn-danger" data-action="delete-task" data-task-id="${task.id}">Delete</button>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : ''}
-
-                ${projectRisks.length > 0 ? `
-                    <div class="project-risks-section">
-                        <h5>⚠️ Risks (${projectRisks.length})</h5>
-                        <div class="risks-list">
-                            ${projectRisks.map(risk => `
-                                <div class="risk-item">
-                                    <div class="risk-content">
-                                        <h6>${risk.title}</h6>
-                                        <p>${risk.description || 'No description'}</p>
-                                        <div class="risk-meta">
-                                            <span class="risk-severity severity-${risk.severity}">${risk.severity ? risk.severity.charAt(0).toUpperCase() + risk.severity.slice(1) : 'Unknown'}</span>
-                                            <span class="risk-probability">Probability: ${risk.probability || 'Unknown'}</span>
-                                        </div>
-                                    </div>
-                                    <div class="risk-actions">
-                                        <button class="btn btn-small btn-outline" data-action="edit-risk" data-risk-id="${risk.id}">Edit</button>
-                                        <button class="btn btn-small btn-danger" data-action="delete-risk" data-risk-id="${risk.id}">Delete</button>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : ''}
             `;
+
+            this.switchProjectTab('risks');
+            this.updateProjectTabCounts();
         }
 
         clearProjectDetails() {
@@ -2213,14 +2248,10 @@ export class PSPFExplorer {
                 projectDetails.innerHTML = `
                     <div class="placeholder-content">
                         <h4>Select a Project</h4>
-                        <p>Choose a project from the list to view its details and manage tasks.</p>
+                        <p>Choose a project from the list to view its details and track risks or events.</p>
                     </div>
                 `;
             }
-        }
-
-        getProjectTasksCount(projectId) {
-            return this.tasks.filter(task => task.projectId === projectId).length;
         }
 
         getProjectRisksCount(projectId) {
@@ -2232,14 +2263,13 @@ export class PSPFExplorer {
             return (project && project.requirements) ? project.requirements.length : 0;
         }
 
-        addTask(projectId) {
-            this.currentProjectId = projectId;
-            this.showTaskModal();
+        getProjectIncidentsCount(projectId) {
+            return this.incidents.filter(incident => incident.projectId === projectId).length;
         }
 
         addRisk(projectId) {
             this.currentProjectId = projectId;
-            this.showRiskModal();
+            this.showRiskModal(null, projectId);
         }
 
         showProjectModal(projectId = null) {
@@ -2296,8 +2326,8 @@ export class PSPFExplorer {
         deleteProject(projectId) {
             if (confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
                 this.projects = this.projects.filter(p => p.id !== projectId);
-                // Also delete associated tasks
-                this.tasks = this.tasks.filter(t => t.projectId !== projectId);
+                this.risks = this.risks.filter(risk => risk.projectId !== projectId);
+                this.incidents = this.incidents.filter(incident => incident.projectId !== projectId);
                 this.saveData();
                 this.renderProjects();
                 this.clearProjectDetails();
@@ -2306,91 +2336,11 @@ export class PSPFExplorer {
             }
         }
 
-        showProjectTasks(projectId) {
-            const project = this.projects.find(p => p.id === projectId);
-            if (!project) return;
-
-            // Ensure requirements array exists (migration for legacy data)
-            if (!Array.isArray(project.requirements)) {
-                project.requirements = [];
-                this.saveData();
-            }
-
-            this.currentProjectId = projectId;
-            this.showView('project');
-            this.updateNavButtons('projectBtn');
-
-            // Toggle list/detail panes
-            const listView = document.getElementById('projectListView');
-            const detailView = document.getElementById('projectDetailView');
-            if (listView) listView.classList.add('hidden');
-            if (detailView) detailView.classList.remove('hidden');
-
-            // Update project view header
-            document.getElementById('projectTitle').textContent = project.name;
-            document.getElementById('projectDescription').textContent = project.description;
-            // Status chip
-            const statusChip = document.getElementById('projectStatusChip');
-            if (statusChip) {
-                statusChip.textContent = project.status?.replace('-', ' ') || 'Unknown';
-                statusChip.className = `status-badge ${project.status || ''}`;
-            }
-            // Due chip
-            const dueChip = document.getElementById('projectDueChip');
-            if (dueChip) {
-                if (project.endDate) {
-                    const end = new Date(project.endDate);
-                    const now = new Date();
-                    const days = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
-                    let cls = 'ok';
-                    let label = '';
-                    if (days < 0) { cls = 'overdue'; label = `Overdue by ${Math.abs(days)}d`; }
-                    else if (days <= 7) { cls = 'soon'; label = `Due in ${days}d`; }
-                    else { label = `Due in ${days}d`; }
-                    dueChip.textContent = label;
-                    dueChip.className = `due-chip ${cls}`;
-                } else {
-                    dueChip.className = 'due-chip hidden';
-                }
-            }
-            // Compact progress based on tasks in this project
-            const projectTasks = this.tasks.filter(t => t.projectId === projectId);
-            const completed = projectTasks.filter(t => t.status === 'completed').length;
-            const percent = projectTasks.length ? Math.round((completed / projectTasks.length) * 100) : 0;
-            const progressFill = document.getElementById('projectProgressFill');
-            const progressText = document.getElementById('projectProgressText');
-            if (progressFill) progressFill.style.width = `${percent}%`;
-            if (progressText) progressText.textContent = `${percent}% complete`;
-
-            // Header quick actions
-            const headerAddTaskBtn = document.getElementById('headerAddTaskBtn');
-            if (headerAddTaskBtn) headerAddTaskBtn.onclick = () => this.showTaskModal(null, this.currentProjectId);
-            const headerAddRiskBtn = document.getElementById('headerAddRiskBtn');
-            if (headerAddRiskBtn) headerAddRiskBtn.onclick = () => this.showRiskModal(null, this.currentProjectId);
-            const headerExportBtn = document.getElementById('headerExportBtn');
-            if (headerExportBtn) headerExportBtn.onclick = () => this.exportData();
-
-            // Set up breadcrumb
-            this.updateBreadcrumb([
-                { text: 'PSPF Domains', level: 'home' },
-                { text: 'Projects', level: 'projects' },
-                { text: project.name, level: 'project' }
-            ]);
-
-            // Show tasks tab by default and render tasks
-            this.switchProjectTab('tasks');
-            this.renderTasks(projectId);
-            this.updateProjectTabCounts();
-            this.renderProjectRequirements();
-        }
-
         updateProjectTabCounts() {
-            const tasksCountEl = document.getElementById('tasksCount');
             const risksCountEl = document.getElementById('risksCount');
             const incidentsCountEl = document.getElementById('incidentsCount');
             const reqCountEl = document.getElementById('requirementsCount');
             const pid = this.currentProjectId;
-            if (tasksCountEl) tasksCountEl.textContent = this.tasks.filter(t => t.projectId === pid).length;
             if (risksCountEl) risksCountEl.textContent = this.risks.filter(r => r.projectId === pid).length;
             if (incidentsCountEl) incidentsCountEl.textContent = this.incidents.filter(i => i.projectId === pid).length;
             const project = this.projects.find(p => p.id === pid);
@@ -2404,165 +2354,16 @@ export class PSPFExplorer {
                 modal.style.display = 'none';
             }
             this.editingProject = null;
-            this.editingTask = null;
             this.editingRisk = null;
             this.editingIncident = null;
-        }
-
-        // Task Management CRUD Operations
-        showTaskModal(taskId = null, projectId = null) {
-            this.editingTask = taskId;
-            this.currentProjectId = projectId;
-            const modal = document.getElementById('taskModal');
-            const title = document.getElementById('taskModalTitle');
-            const form = document.getElementById('taskForm');
-
-            if (taskId) {
-                const task = this.tasks.find(t => t.id === taskId);
-                if (task) {
-                    title.textContent = 'Edit Task';
-                    document.getElementById('taskName').value = task.name;
-                    document.getElementById('taskDesc').value = task.description;
-                    document.getElementById('taskStatus').value = task.status;
-                    document.getElementById('taskAssignee').value = task.assignee || '';
-                    document.getElementById('taskDueDate').value = task.dueDate || '';
-                }
-            } else {
-                title.textContent = 'Add Task';
-                form.reset();
-            }
-
-            modal.style.display = 'block';
-        }
-
-        handleTaskForm(e) {
-            e.preventDefault();
-            this.saveTask();
-        }
-
-        saveTask() {
-            const taskData = {
-                name: document.getElementById('taskName').value,
-                description: document.getElementById('taskDesc').value,
-                status: document.getElementById('taskStatus').value,
-                assignee: document.getElementById('taskAssignee').value,
-                dueDate: document.getElementById('taskDueDate').value,
-                projectId: this.currentProjectId,
-                createdAt: new Date().toISOString()
-            };
-
-            if (this.editingTask) {
-                const index = this.tasks.findIndex(t => t.id === this.editingTask);
-                if (index !== -1) {
-                    this.tasks[index] = { ...this.tasks[index], ...taskData };
-                }
-            } else {
-                taskData.id = Date.now().toString();
-                this.tasks.push(taskData);
-            }
-
-            this.saveData();
-            this.hideModal('taskModal');
-            this.renderTasks();
-            this.updateStats();
-            this.updateDataStats();
-            this.updateProjectTabCounts();
-        }
-
-        editTask(taskId) {
-            const task = this.tasks.find(t => t.id === taskId);
-            if (task) {
-                this.showTaskModal(taskId, task.projectId);
-            }
-        }
-
-        deleteTask(taskId) {
-            if (confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
-                this.tasks = this.tasks.filter(t => t.id !== taskId);
-                this.saveData();
-                this.renderTasks();
-                this.updateStats();
-                this.updateDataStats();
-            }
-        }
-
-        renderTasks(projectId = null) {
-            const tasksList = document.getElementById('tasksList');
-            if (!tasksList) return;
-
-            let tasksToShow = this.tasks;
-            if (projectId) {
-                tasksToShow = this.tasks.filter(t => t.projectId === projectId);
-            }
-
-            if (tasksToShow.length === 0) {
-                tasksList.innerHTML = `
-                    <div class="empty-state">
-                        <h3>No tasks yet</h3>
-                        <p>Create your first task to start tracking work.</p>
-                    </div>
-                `;
-                return;
-            }
-
-            tasksList.innerHTML = tasksToShow.map(task => {
-                const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-                const isOverdue = dueDate && dueDate < new Date() && task.status !== 'completed';
-                const dueDateClass = isOverdue ? 'overdue' : '';
-
-                return `
-                    <div class="task-card ${task.status}">
-                        <div class="task-header">
-                            <h4>${task.name}</h4>
-                            <span class="status-badge ${task.status}">${task.status.replace('-', ' ')}</span>
-                        </div>
-                        <p class="task-description">${task.description}</p>
-                        <div class="task-meta">
-                            ${task.assignee ? `<span class="assignee">👤 ${task.assignee}</span>` : ''}
-                            ${task.dueDate ? `<span class="due-date ${dueDateClass}">📅 Due: ${new Date(task.dueDate).toLocaleDateString()}</span>` : ''}
-                            ${isOverdue ? '<span class="overdue-indicator">⚠️ Overdue</span>' : ''}
-                        </div>
-                        <div class="task-actions">
-                            <button class="btn btn-outline btn-small" data-action="edit-task" data-task-id="${task.id}">Edit</button>
-                            <button class="btn btn-danger btn-small" data-action="delete-task" data-task-id="${task.id}">Delete</button>
-                            ${task.status !== 'completed' ? 
-                                `<button class="btn btn-success btn-small" data-action="complete-task" data-task-id="${task.id}">Complete</button>` : 
-                                `<button class="btn btn-secondary btn-small" data-action="reopen-task" data-task-id="${task.id}">Reopen</button>`
-                            }
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        markTaskComplete(taskId) {
-            const task = this.tasks.find(t => t.id === taskId);
-            if (task) {
-                task.status = 'completed';
-                task.completedAt = new Date().toISOString();
-                this.saveData();
-                this.renderTasks();
-                this.updateStats();
-                this.updateProjectTabCounts();
-            }
-        }
-
-        markTaskIncomplete(taskId) {
-            const task = this.tasks.find(t => t.id === taskId);
-            if (task) {
-                task.status = 'in-progress';
-                delete task.completedAt;
-                this.saveData();
-                this.renderTasks();
-                this.updateStats();
-                this.updateProjectTabCounts();
-            }
         }
 
         // Risk Management CRUD Operations
         showRiskModal(riskId = null, projectId = null) {
             this.editingRisk = riskId;
-            this.currentProjectId = projectId;
+            if (projectId) {
+                this.currentProjectId = projectId;
+            }
             const modal = document.getElementById('riskModal');
             const title = document.getElementById('riskModalTitle');
             const form = document.getElementById('riskForm');
@@ -2570,6 +2371,9 @@ export class PSPFExplorer {
             if (riskId) {
                 const risk = this.risks.find(r => r.id === riskId);
                 if (risk) {
+                    if (!projectId && risk.projectId) {
+                        this.currentProjectId = risk.projectId;
+                    }
                     title.textContent = 'Edit Risk';
                     document.getElementById('riskName').value = risk.name;
                     document.getElementById('riskDesc').value = risk.description;
@@ -2726,19 +2530,213 @@ export class PSPFExplorer {
             return icons[severity] || '⚪';
         }
 
-        // Placeholder methods for Incident CRUD operations
+        // Incident CRUD operations
         handleIncidentForm(e) {
             e.preventDefault();
+            this.saveIncident();
+        }
+
+        showIncidentModal(incidentId = null, projectId = null) {
+            const modal = document.getElementById('incidentModal');
+            const title = document.getElementById('incidentModalTitle');
+            const form = document.getElementById('incidentForm');
+            if (!modal || !form) return;
+
+            if (projectId) {
+                this.currentProjectId = projectId;
+            }
+
+            if (!this.currentProjectId) {
+                this.showNotification('Select a project before logging an event.', 'warning');
+                return;
+            }
+
+            if (incidentId) {
+                const incident = this.incidents.find(i => i.id === incidentId);
+                if (incident) {
+                    if (!projectId && incident.projectId) {
+                        this.currentProjectId = incident.projectId;
+                    }
+                    this.editingIncident = incidentId;
+                    title.textContent = 'Edit Event';
+                    document.getElementById('incidentName').value = incident.name || '';
+                    document.getElementById('incidentDesc').value = incident.description || '';
+                    document.getElementById('incidentDate').value = this.formatDateTimeLocal(incident.date);
+                    document.getElementById('incidentSeverity').value = incident.severity || 'low';
+                    document.getElementById('incidentResolution').value = incident.resolution || '';
+                }
+            } else {
+                this.editingIncident = null;
+                title.textContent = 'Add Event';
+                form.reset();
+                const dateInput = document.getElementById('incidentDate');
+                if (dateInput) {
+                    dateInput.value = this.formatDateTimeLocal(new Date().toISOString());
+                }
+            }
+
+            modal.style.display = 'block';
+        }
+
+        saveIncident() {
+            if (!this.currentProjectId) {
+                this.showNotification('Select a project before saving an event.', 'error');
+                return;
+            }
+
+            const nameInput = document.getElementById('incidentName');
+            const descriptionInput = document.getElementById('incidentDesc');
+            const dateInput = document.getElementById('incidentDate');
+            const severityInput = document.getElementById('incidentSeverity');
+            const resolutionInput = document.getElementById('incidentResolution');
+
+            const dateValue = dateInput?.value;
+            const parsedDate = dateValue ? new Date(dateValue) : new Date();
+            if (Number.isNaN(parsedDate.getTime())) {
+                this.showNotification('Please provide a valid date for the event.', 'error');
+                return;
+            }
+
+            const incidentData = {
+                name: nameInput?.value.trim() || 'Untitled event',
+                description: descriptionInput?.value.trim() || '',
+                date: parsedDate.toISOString(),
+                severity: severityInput?.value || 'low',
+                resolution: resolutionInput?.value.trim() || '',
+                projectId: this.currentProjectId,
+                updatedAt: new Date().toISOString()
+            };
+
+            if (this.editingIncident) {
+                const index = this.incidents.findIndex(i => i.id === this.editingIncident);
+                if (index !== -1) {
+                    this.incidents[index] = { ...this.incidents[index], ...incidentData };
+                }
+            } else {
+                incidentData.id = Date.now().toString();
+                incidentData.createdAt = incidentData.updatedAt;
+                this.incidents.push(incidentData);
+            }
+
+            this.saveData();
             this.hideModal('incidentModal');
+            this.renderIncidents(this.currentProjectId);
+            this.updateProjectTabCounts();
+            this.updateDataStats();
+            this.showNotification('Event saved successfully.', 'success');
+        }
+
+        deleteIncident(incidentId) {
+            if (!incidentId) return;
+            if (!confirm('Delete this event? This action cannot be undone.')) {
+                return;
+            }
+            this.incidents = this.incidents.filter(incident => incident.id !== incidentId);
+            this.saveData();
+            this.renderIncidents(this.currentProjectId);
+            this.updateProjectTabCounts();
+            this.updateDataStats();
+            this.showNotification('Event deleted.', 'success');
+        }
+
+        renderIncidents(projectId = null) {
+            const incidentsList = document.getElementById('incidentsList');
+            if (!incidentsList) return;
+
+            const targetProjectId = projectId || this.currentProjectId;
+            let incidentsToShow = this.incidents;
+            if (targetProjectId) {
+                incidentsToShow = incidentsToShow.filter(incident => incident.projectId === targetProjectId);
+            }
+
+            if (incidentsToShow.length === 0) {
+                incidentsList.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No events recorded</h3>
+                        <p>Log security incidents, milestones, or lessons learned for this project.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const sortedIncidents = [...incidentsToShow].sort((a, b) => {
+                const aDate = new Date(a.date || a.createdAt || 0).getTime();
+                const bDate = new Date(b.date || b.createdAt || 0).getTime();
+                return bDate - aDate;
+            });
+
+            incidentsList.innerHTML = sortedIncidents.map(incident => {
+                const severity = incident.severity || 'low';
+                const severityIcon = this.getIncidentSeverityIcon(severity);
+                const parsedDate = incident.date ? new Date(incident.date) : null;
+                const readableDate = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toLocaleString() : 'Date not set';
+                const safeName = this.escapeHtml(incident.name || 'Untitled event');
+                const safeDescription = incident.description ? this.escapeHtml(incident.description) : 'No description provided.';
+                const safeResolution = incident.resolution ? this.escapeHtml(incident.resolution) : '';
+                return `
+                    <div class="risk-card incident-card">
+                        <div class="risk-header">
+                            <h4>${safeName}</h4>
+                            <div class="risk-severity">
+                                <span class="severity-badge ${severity}">${severityIcon} ${severity.toUpperCase()}</span>
+                            </div>
+                        </div>
+                        <p class="risk-description">${safeDescription}</p>
+                        <div class="risk-matrix">
+                            <div class="risk-factor">
+                                <span class="factor-label">Occurred:</span>
+                                <span class="factor-value">${readableDate}</span>
+                            </div>
+                            <div class="risk-factor">
+                                <span class="factor-label">Severity:</span>
+                                <span class="factor-value ${severity}">${severity.toUpperCase()}</span>
+                            </div>
+                        </div>
+                        ${safeResolution ? `
+                            <div class="risk-mitigation">
+                                <strong>Resolution:</strong>
+                                <p>${safeResolution}</p>
+                            </div>
+                        ` : ''}
+                        <div class="risk-actions">
+                            <button class="btn btn-outline btn-small" data-action="edit-incident" data-incident-id="${incident.id}">Edit</button>
+                            <button class="btn btn-danger btn-small" data-action="delete-incident" data-incident-id="${incident.id}">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        getIncidentSeverityIcon(severity) {
+            const icons = {
+                low: '🟢',
+                medium: '🟡',
+                high: '🟠',
+                critical: '🔴'
+            };
+            return icons[severity] || '⚪';
+        }
+
+        formatDateTimeLocal(value) {
+            const date = value instanceof Date ? value : new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            const tzOffsetMs = date.getTimezoneOffset() * 60000;
+            const local = new Date(date.getTime() - tzOffsetMs);
+            return local.toISOString().slice(0, 16);
         }
 
         switchProjectTab(tabName) {
+            const projectDetails = document.getElementById('projectDetails');
+            if (!projectDetails) return;
+
             // Remove active class from all tab buttons and panes
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+            projectDetails.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            projectDetails.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
 
             // Add active class to selected tab button and pane
-            const activeBtn = document.querySelector(`[data-tab="${tabName}"]`);
+            const activeBtn = projectDetails.querySelector(`[data-tab="${tabName}"]`);
             const activePane = document.getElementById(`${tabName}Tab`);
 
             if (activeBtn) activeBtn.classList.add('active');
@@ -2746,10 +2744,6 @@ export class PSPFExplorer {
 
             // Render content based on tab
             switch (tabName) {
-                case 'tasks':
-                    this.renderTasks(this.currentProjectId);
-                    this.updateProjectTabCounts();
-                    break;
                 case 'risks':
                     this.renderRisks(this.currentProjectId);
                     this.updateProjectTabCounts();
@@ -2759,7 +2753,7 @@ export class PSPFExplorer {
                     this.updateProjectTabCounts();
                     break;
                 case 'incidents':
-                    // TODO: Implement incident rendering
+                    this.renderIncidents(this.currentProjectId);
                     this.updateProjectTabCounts();
                     break;
             }
@@ -2780,13 +2774,11 @@ export class PSPFExplorer {
         // Data Management
         updateDataStats() {
             const projectCount = this.projects.length;
-            const taskCount = this.tasks.length;
             const riskCount = this.risks.length;
             const incidentCount = this.incidents.length;
             const lastModified = localStorage.getItem('pspf_last_modified');
 
             document.getElementById('dataProjectCount').textContent = projectCount;
-            document.getElementById('dataTaskCount').textContent = taskCount;
             document.getElementById('dataRiskCount').textContent = riskCount;
             document.getElementById('dataIncidentCount').textContent = incidentCount;
             document.getElementById('dataLastModified').textContent = 
@@ -2795,7 +2787,7 @@ export class PSPFExplorer {
 
         // Requirements linking
         renderProjectRequirements() {
-            const list = document.getElementById('requirementsList');
+            const list = document.getElementById('projectRequirementsList');
             if (!list) return;
             const project = this.projects.find(p => p.id === this.currentProjectId);
             if (!project) return;
@@ -2814,15 +2806,20 @@ export class PSPFExplorer {
             const items = linked.map(reqId => {
                 const req = this.requirements[reqId];
                 const domain = req ? this.domains.find(d => d.id === req.domainId) : null;
-                const title = req ? req.title : reqId;
-                const domainTitle = domain ? domain.title : 'Unknown domain';
+                const title = req ? this.escapeHtml(req.title) : this.escapeHtml(reqId);
+                const domainTitle = domain ? this.escapeHtml(domain.title) : 'Unknown domain';
+                const status = this.compliance[reqId]?.status || 'not-set';
                 return `
-                    <div class="requirement-item" style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="project-requirement-row">
                         <div>
-                            <div style="font-weight:600; color: var(--text-primary);">${title}</div>
-                            <div style="font-size: 0.9rem; color: var(--text-secondary);">${reqId} • ${domainTitle}</div>
+                            <div class="project-requirement-title">${title}</div>
+                            <div class="project-requirement-meta">
+                                <span class="requirement-code">${this.escapeHtml(reqId)}</span>
+                                <span>• ${domainTitle}</span>
+                            </div>
                         </div>
-                        <div>
+                        <div class="requirement-row-actions">
+                            <span class="requirement-status ${status}">${this.getStatusText(status)}</span>
                             <button class="btn btn-outline btn-small" data-action="unlink-requirement" data-requirement-id="${reqId}">Unlink</button>
                         </div>
                     </div>
@@ -2889,6 +2886,7 @@ export class PSPFExplorer {
                     this.saveData();
                     this.updateProjectTabCounts();
                     this.renderProjectRequirements();
+                    this.renderProjectRequirementWidget();
                 }
                 this.hideModal('linkRequirementsModal');
             };
@@ -2903,6 +2901,7 @@ export class PSPFExplorer {
             this.saveData();
             this.updateProjectTabCounts();
             this.renderProjectRequirements();
+            this.renderProjectRequirementWidget();
         }
 
         exportData() {
@@ -2912,7 +2911,6 @@ export class PSPFExplorer {
                     timestamp: new Date().toISOString(),
                     data: {
                         projects: this.projects,
-                        tasks: this.tasks,
                         risks: this.risks,
                         incidents: this.incidents,
                         compliance: this.compliance
@@ -2972,7 +2970,6 @@ export class PSPFExplorer {
                     const sanitizedData = this.sanitizeImportData(importData.data);
                     
                     this.projects = sanitizedData.projects;
-                    this.tasks = sanitizedData.tasks;
                     this.risks = sanitizedData.risks;
                     this.incidents = sanitizedData.incidents;
                     this.compliance = sanitizedData.compliance;
@@ -2981,7 +2978,7 @@ export class PSPFExplorer {
                     this.updateDataStats();
                     this.renderHome();
 
-                    const summary = `Imported: ${this.projects.length} projects, ${this.tasks.length} tasks, ${this.risks.length} risks, ${this.incidents.length} events, ${Object.keys(this.compliance).length} compliance records`;
+                    const summary = `Imported: ${this.projects.length} projects, ${this.risks.length} risks, ${this.incidents.length} events, ${Object.keys(this.compliance).length} compliance records`;
                     
                     this.showNotification(summary, 'success', 6000);
                     
@@ -3036,17 +3033,6 @@ export class PSPFExplorer {
                 }
             }
 
-            // Validate tasks array
-            if (data.tasks !== undefined) {
-                if (!Array.isArray(data.tasks)) {
-                    errors.push('Tasks must be an array');
-                } else {
-                    const taskValidation = this.validateTasksArray(data.tasks);
-                    errors.push(...taskValidation.errors);
-                    warnings.push(...taskValidation.warnings);
-                }
-            }
-
             // Validate risks array
             if (data.risks !== undefined) {
                 if (!Array.isArray(data.risks)) {
@@ -3084,9 +3070,6 @@ export class PSPFExplorer {
             const maxItems = 10000;
             if (data.projects?.length > maxItems) {
                 errors.push(`Too many projects (${data.projects.length}). Maximum allowed: ${maxItems}`);
-            }
-            if (data.tasks?.length > maxItems) {
-                errors.push(`Too many tasks (${data.tasks.length}). Maximum allowed: ${maxItems}`);
             }
             if (data.risks?.length > maxItems) {
                 errors.push(`Too many risks (${data.risks.length}). Maximum allowed: ${maxItems}`);
@@ -3142,50 +3125,6 @@ export class PSPFExplorer {
 
                 if (project.requirements !== undefined && !Array.isArray(project.requirements)) {
                     warnings.push(`${prefix}: Requirements should be an array`);
-                }
-            });
-
-            return { errors, warnings };
-        }
-
-        validateTasksArray(tasks) {
-            const errors = [];
-            const warnings = [];
-            const seenIds = new Set();
-
-            tasks.forEach((task, index) => {
-                const prefix = `Task ${index + 1}`;
-
-                if (!task || typeof task !== 'object') {
-                    errors.push(`${prefix}: Invalid task object`);
-                    return;
-                }
-
-                if (!task.id || typeof task.id !== 'string') {
-                    errors.push(`${prefix}: Missing or invalid id`);
-                } else {
-                    if (seenIds.has(task.id)) {
-                        errors.push(`${prefix}: Duplicate task id "${task.id}"`);
-                    }
-                    seenIds.add(task.id);
-                }
-
-                if (!task.name || typeof task.name !== 'string') {
-                    errors.push(`${prefix}: Missing or invalid name`);
-                }
-
-                if (task.status !== undefined) {
-                    const validStatuses = ['not-started', 'in-progress', 'completed', 'blocked'];
-                    if (!validStatuses.includes(task.status)) {
-                        warnings.push(`${prefix}: Unknown status "${task.status}"`);
-                    }
-                }
-
-                if (task.dueDate !== undefined && task.dueDate !== '') {
-                    const date = new Date(task.dueDate);
-                    if (isNaN(date.getTime())) {
-                        warnings.push(`${prefix}: Invalid due date format`);
-                    }
                 }
             });
 
@@ -3331,19 +3270,6 @@ export class PSPFExplorer {
                     : []
             }));
 
-            // Sanitize tasks
-            const tasks = (data.tasks || []).map(task => ({
-                id: sanitizeId(task.id),
-                name: sanitizeString(task.name, 500),
-                description: sanitizeString(task.description, 5000),
-                status: ['not-started', 'in-progress', 'completed', 'blocked'].includes(task.status) 
-                    ? task.status : 'not-started',
-                assignee: sanitizeString(task.assignee, 200),
-                dueDate: task.dueDate || '',
-                projectId: task.projectId ? sanitizeId(task.projectId) : null,
-                createdAt: task.createdAt || new Date().toISOString()
-            }));
-
             // Sanitize risks
             const risks = (data.risks || []).map(risk => ({
                 id: sanitizeId(risk.id),
@@ -3389,7 +3315,7 @@ export class PSPFExplorer {
                 });
             }
 
-            return { projects, tasks, risks, incidents, compliance };
+            return { projects, risks, incidents, compliance };
         }
 
         clearAllData() {
@@ -3399,14 +3325,12 @@ export class PSPFExplorer {
 
             try {
                 this.projects = [];
-                this.tasks = [];
                 this.risks = [];
                 this.incidents = [];
                 this.compliance = {};
 
                 if (this.storageAvailable) {
                     localStorage.removeItem('pspf_projects');
-                    localStorage.removeItem('pspf_tasks');
                     localStorage.removeItem('pspf_risks');
                     localStorage.removeItem('pspf_incidents');
                     localStorage.removeItem('pspf_compliance');
@@ -4021,7 +3945,6 @@ export class PSPFExplorer {
                 return;
             }
             localStorage.setItem('pspf_projects', JSON.stringify(this.projects));
-            localStorage.setItem('pspf_tasks', JSON.stringify(this.tasks));
             localStorage.setItem('pspf_risks', JSON.stringify(this.risks));
             localStorage.setItem('pspf_incidents', JSON.stringify(this.incidents));
             localStorage.setItem('pspf_compliance', JSON.stringify(this.compliance));
