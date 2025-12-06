@@ -790,7 +790,6 @@ export class PSPFExplorer {
                                 <h4>${domain.title}</h4>
                                 <p>${Math.min(health.met, totalRequirements)}/${totalRequirements} requirements · ${health.text}</p>
                             </div>
-                            <span class="domain-health-pill ${health.status}">${health.text}</span>
                         </header>
                         <div class="requirement-chip-grid">
                             ${requirementTiles}
@@ -1025,13 +1024,12 @@ export class PSPFExplorer {
             const title = this.escapeHtml(requirement.title || '');
 
             return `
-                <div class="requirement-item" data-req="${reqId}" data-action="view-requirement" data-requirement-id="${reqId}" tabindex="0" role="button">
+                <div class="requirement-item" data-req="${reqId}" data-action="view-requirement" data-requirement-id="${reqId}" tabindex="0" role="button" aria-label="${reqId} ${title}" title="${title}">
                     <div class="requirement-info">
                         <div class="requirement-code-row">
                             <span class="requirement-code">${reqId}</span>
                             ${hasUrl ? '<span class="url-indicator" title="Has reference link">🔗</span>' : ''}
                         </div>
-                        <p class="requirement-name">${title}</p>
                     </div>
                     <span class="requirement-status ${compliance.status}">${this.getStatusText(compliance.status)}</span>
                 </div>
@@ -1045,11 +1043,15 @@ export class PSPFExplorer {
             
             if (!requirement || !requirementDetails) return;
 
-            // Update active state in sidebar
-            document.querySelectorAll('.requirement-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            document.querySelector(`[data-req="${reqId}"]`).classList.add('active');
+            // Update active state in sidebar (if the list is currently rendered)
+            const sidebarItems = document.querySelectorAll('.requirement-item');
+            if (sidebarItems.length) {
+                sidebarItems.forEach(item => item.classList.remove('active'));
+            }
+            const activeSidebarItem = document.querySelector(`[data-req="${reqId}"]`);
+            if (activeSidebarItem) {
+                activeSidebarItem.classList.add('active');
+            }
 
             // Get linked projects
             const linkedProjects = this.projects.filter(project => 
