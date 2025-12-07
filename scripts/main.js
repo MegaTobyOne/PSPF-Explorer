@@ -31,6 +31,27 @@ const DEFAULT_TAG_DEFINITIONS = Object.freeze({
 
 const MY_WORK_USER_NAME_KEY = 'pspf_mywork_user_name';
 const MY_WORK_FILTERS_KEY = 'pspf_mywork_tag_filters';
+const REQUIREMENT_DETAIL_MODE_KEY = 'pspf_requirement_detail_mode';
+const EVIDENCE_CHECKLIST_ITEMS = Object.freeze([
+    {
+        key: 'policy',
+        label: 'Policy or directive captured',
+        description: 'Link to the approved policy, SOP, or directive that proves intent.',
+        icon: '📘'
+    },
+    {
+        key: 'process',
+        label: 'Process & ownership documented',
+        description: 'Describe who is accountable and how the requirement is executed day to day.',
+        icon: '🧩'
+    },
+    {
+        key: 'evidence',
+        label: 'Evidence reference attached',
+        description: 'Attach logs, tickets, or attestations that demonstrate the control in action.',
+        icon: '🔗'
+    }
+]);
 
 const createDefaultTagDefinitions = () => {
     return Object.keys(DEFAULT_TAG_DEFINITIONS).reduce((acc, key) => {
@@ -99,11 +120,17 @@ export class PSPFExplorer {
             
             this.currentView = 'home';
             this.selectedDomain = null;
+            this.gapReportPreferredDomainId = null;
             this.editingProject = null;
             this.editingRisk = null;
             this.editingIncident = null;
             this.isDomainGridCollapsed = false;
             this.isTagFiltersCollapsed = false;
+            this.currentRequirementId = null;
+            this.requirementDetailMode = this.readStorage(REQUIREMENT_DETAIL_MODE_KEY, 'summary');
+            if (!['summary', 'control'].includes(this.requirementDetailMode)) {
+                this.requirementDetailMode = 'summary';
+            }
             
             if (this.options.autoInit) {
                 this.init();
@@ -417,7 +444,17 @@ export class PSPFExplorer {
             mainContainer.addEventListener('click', (e) => {
                 const target = e.target.closest('[data-action]');
                 if (!target) return;
+                if (target.matches('input[type="checkbox"][data-action="toggle-evidence"]')) {
+                    return;
+                }
 
+                const action = target.dataset.action;
+                this.handleDelegatedAction(action, target, e);
+            });
+
+            mainContainer.addEventListener('change', (e) => {
+                const target = e.target.closest('[data-action]');
+                if (!target) return;
                 const action = target.dataset.action;
                 this.handleDelegatedAction(action, target, e);
             });
@@ -457,6 +494,7 @@ export class PSPFExplorer {
                 case 'view-domain':
                     const domainId = target.dataset.domainId;
                     if (domainId) {
+                        this.syncGapReportSelection(domainId, { updateList: true });
                         this.showView('home');
                         this.showDomainRequirements(domainId);
                     }
@@ -630,6 +668,22 @@ export class PSPFExplorer {
                     const deleteReqUuid = target.dataset.reqUuid;
                     if (deleteReqUuid) this.deleteRequirement(deleteReqUuid);
                     break;
+
+                case 'set-detail-mode':
+                    const mode = target.dataset.mode;
+                    if (mode) {
+                        this.setRequirementDetailMode(mode);
+                    }
+                    break;
+
+                case 'toggle-evidence': {
+                    const evidenceReqId = target.dataset.requirementId || this.currentRequirementId;
+                    const evidenceKey = target.dataset.evidenceKey;
+                    if (evidenceReqId && evidenceKey != null && typeof target.checked === 'boolean') {
+                        this.setRequirementEvidenceItem(evidenceReqId, evidenceKey, target.checked);
+                    }
+                    break;
+                }
 
                 default:
                     console.warn(`Unknown delegated action: ${action}`);
@@ -911,17 +965,29 @@ export class PSPFExplorer {
                 <option value="${this.escapeHtml(domain.id)}">${this.escapeHtml(domain.title)}</option>
             `).join('');
 
-            let selectedDomainId = previousValue && this.domains.some(domain => domain.id === previousValue)
-                ? previousValue
-                : (this.selectedDomain || this.domains[0]?.id || '');
+            const preferred = this.gapReportPreferredDomainId;
+            let selectedDomainId = '';
+
+            if (preferred && this.domains.some(domain => domain.id === preferred)) {
+                selectedDomainId = preferred;
+            } else if (previousValue && this.domains.some(domain => domain.id === previousValue)) {
+                selectedDomainId = previousValue;
+            } else if (this.selectedDomain && this.domains.some(domain => domain.id === this.selectedDomain)) {
+                selectedDomainId = this.selectedDomain;
+            } else {
+                selectedDomainId = this.domains[0]?.id || '';
+            }
 
             if (selectedDomainId) {
                 select.value = selectedDomainId;
             }
+            this.gapReportPreferredDomainId = selectedDomainId || null;
 
             if (!select.dataset.listenerAdded) {
                 select.addEventListener('change', (event) => {
-                    this.updateGapReportList(event.target.value);
+                    const chosenDomainId = event.target.value;
+                    this.gapReportPreferredDomainId = chosenDomainId || null;
+                    this.updateGapReportList(chosenDomainId);
                 });
                 select.dataset.listenerAdded = 'true';
             }
@@ -939,11 +1005,31 @@ export class PSPFExplorer {
             }
         }
 
+        syncGapReportSelection(domainId, { updateList = false } = {}) {
+            this.gapReportPreferredDomainId = domainId || null;
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const select = document.getElementById('gapReportDomainSelect');
+            if (select) {
+                select.value = domainId || '';
+            }
+
+            if (updateList && domainId) {
+                this.updateGapReportList(domainId);
+            }
+        }
+
         updateGapReportList(domainId) {
             const summaryEl = document.getElementById('gapReportSummary');
             const listEl = document.getElementById('gapReportList');
             if (!summaryEl || !listEl) {
                 return;
+            }
+
+            if (domainId) {
+                this.gapReportPreferredDomainId = domainId;
             }
 
             const domain = this.domains.find(d => d.id === domainId);
@@ -1390,6 +1476,109 @@ export class PSPFExplorer {
             `;
         }
 
+        setRequirementDetailMode(mode) {
+            if (!['summary', 'control'].includes(mode)) {
+                return;
+            }
+            this.requirementDetailMode = mode;
+            if (this.storageAvailable) {
+                localStorage.setItem(REQUIREMENT_DETAIL_MODE_KEY, JSON.stringify(mode));
+            }
+            if (this.currentRequirementId) {
+                this.showRequirementDetails(this.currentRequirementId);
+            }
+        }
+
+        getRequirementNarrative(requirement) {
+            if (!requirement) {
+                return { summaryText: '', controlText: '' };
+            }
+            const description = requirement.description || '';
+            const summaryText = requirement.summary || description;
+            const controlText = requirement.controlText || requirement.pspfText || description;
+            return { summaryText, controlText };
+        }
+
+        getRequirementNextActions(reqId) {
+            const requirement = this.requirements[reqId];
+            if (!requirement) return [];
+            const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
+            const tags = this.getUserRequirementTags(reqId);
+            const actions = [];
+            const status = compliance.status || 'not-set';
+
+            if (status === 'not-set') {
+                actions.push({ icon: '🧭', text: 'Set an initial compliance status so trend tracking can begin.' });
+            }
+            if (status === 'no') {
+                actions.push({ icon: '🚨', text: 'Log a remediation project or risk treatment plan for this gap.' });
+            }
+            if (status === 'partial') {
+                actions.push({ icon: '⚙️', text: 'Capture residual risk details and map supporting projects.' });
+            }
+            if (!compliance.url) {
+                actions.push({ icon: '🔗', text: 'Attach evidence or policy URLs so audits have a paper trail.' });
+            }
+            if (!compliance.comment) {
+                actions.push({ icon: '📝', text: 'Add implementation notes or context for future reviewers.' });
+            }
+            if (!tags.length) {
+                actions.push({ icon: '🏷️', text: 'Assign a priority tag or owner so accountability is clear.' });
+            }
+
+            return actions;
+        }
+
+        getRequirementEvidenceState(reqId) {
+            const compliance = this.ensureComplianceEntry(reqId);
+            if (!compliance.evidenceChecklist || typeof compliance.evidenceChecklist !== 'object') {
+                compliance.evidenceChecklist = {};
+            }
+            EVIDENCE_CHECKLIST_ITEMS.forEach(item => {
+                if (typeof compliance.evidenceChecklist[item.key] !== 'boolean') {
+                    compliance.evidenceChecklist[item.key] = false;
+                }
+            });
+            return compliance.evidenceChecklist;
+        }
+
+        setRequirementEvidenceItem(reqId, key, value) {
+            const compliance = this.ensureComplianceEntry(reqId);
+            if (!compliance.evidenceChecklist || typeof compliance.evidenceChecklist !== 'object') {
+                compliance.evidenceChecklist = {};
+            }
+            compliance.evidenceChecklist[key] = !!value;
+            this.saveData();
+            this.showRequirementDetails(reqId);
+        }
+
+        renderRequirementEvidenceChecklist(reqId) {
+            const evidenceState = this.getRequirementEvidenceState(reqId);
+            return `
+                <div class="evidence-checklist">
+                    <h5>Evidence checklist</h5>
+                    <ul>
+                        ${EVIDENCE_CHECKLIST_ITEMS.map(item => {
+                            const checked = evidenceState[item.key];
+                            return `
+                                <li class="evidence-item">
+                                    <label>
+                                        <input type="checkbox" 
+                                               ${checked ? 'checked' : ''}
+                                               data-action="toggle-evidence" 
+                                               data-requirement-id="${reqId}" 
+                                               data-evidence-key="${item.key}">
+                                        <span class="evidence-label">${item.icon} ${this.escapeHtml(item.label)}</span>
+                                    </label>
+                                    <p>${this.escapeHtml(item.description)}</p>
+                                </li>
+                            `;
+                        }).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
         renderRequirementListItem(reqId) {
             const requirement = this.requirements[reqId];
             if (!requirement) {
@@ -1397,18 +1586,49 @@ export class PSPFExplorer {
                 return '';
             }
             const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
+            const statusText = this.getStatusText(compliance.status);
             const hasUrl = Boolean(compliance.url);
             const title = this.escapeHtml(requirement.title || '');
+            const safeReqId = this.escapeHtml(reqId);
+            const userTags = this.getUserRequirementTags(reqId);
+            const tagPills = userTags.slice(0, 2).map(tagId => {
+                const tag = this.tagDefinitions[tagId];
+                if (!tag) return '';
+                return `<span class="tag-pill" style="border-color:${tag.color};color:${tag.color}">${this.escapeHtml(tag.name)}</span>`;
+            }).join('');
+            const extraTags = userTags.length > 2
+                ? `<span class="tag-pill muted">+${userTags.length - 2}</span>`
+                : '';
+
+            const indicators = [];
+            if (!hasUrl) {
+                indicators.push('<span class="meta-chip warning">Add evidence link</span>');
+            }
+            if (!compliance.comment) {
+                indicators.push('<span class="meta-chip info">Add notes</span>');
+            }
+
+            const nextAction = this.getRequirementNextActions(reqId)[0];
+            const hint = nextAction ? `
+                <p class="requirement-hint"><span class="hint-icon">${nextAction.icon}</span>${this.escapeHtml(nextAction.text)}</p>
+            ` : '';
+
+            const metaMarkup = (tagPills || extraTags || indicators.length)
+                ? `<div class="requirement-meta">${tagPills}${extraTags}${indicators.join('')}</div>`
+                : '';
 
             return `
-                <div class="requirement-item" data-req="${reqId}" data-action="view-requirement" data-requirement-id="${reqId}" tabindex="0" role="button" aria-label="${reqId} ${title}" title="${title}">
+                <div class="requirement-item" data-req="${safeReqId}" data-action="view-requirement" data-requirement-id="${safeReqId}" tabindex="0" role="button" aria-label="${safeReqId} ${title}" title="${title}">
                     <div class="requirement-info">
                         <div class="requirement-code-row">
-                            <span class="requirement-code">${reqId}</span>
+                            <span class="requirement-code">${safeReqId}</span>
                             ${hasUrl ? '<span class="url-indicator" title="Has reference link">🔗</span>' : ''}
                         </div>
+                        <p class="requirement-title">${title}</p>
+                        ${metaMarkup}
+                        ${hint}
                     </div>
-                    <span class="requirement-status ${compliance.status}">${this.getStatusText(compliance.status)}</span>
+                    <span class="requirement-status ${compliance.status}">${statusText}</span>
                 </div>
             `;
         }
@@ -1419,6 +1639,7 @@ export class PSPFExplorer {
             const requirementDetails = document.getElementById('requirementDetails');
             
             if (!requirement || !requirementDetails) return;
+            this.currentRequirementId = reqId;
 
             // Update active state in sidebar (if the list is currently rendered)
             const sidebarItems = document.querySelectorAll('.requirement-item');
@@ -1435,10 +1656,80 @@ export class PSPFExplorer {
                 Array.isArray(project.requirements) && project.requirements.includes(reqId)
             );
 
+            const domain = this.domains.find(d => d.id === requirement.domainId);
+            const detailMode = this.requirementDetailMode === 'control' ? 'control' : 'summary';
+            const { summaryText, controlText } = this.getRequirementNarrative(requirement);
+            const narrativeText = detailMode === 'control' ? controlText : summaryText;
+            const narrativeLabel = detailMode === 'control' ? 'PSPF control wording' : 'Plain-language summary';
+            const tags = this.getUserRequirementTags(reqId);
+            const tagsMarkup = tags.length ? `
+                <div class="detail-tag-row">
+                    ${tags.map(tagId => {
+                        const tag = this.tagDefinitions[tagId];
+                        if (!tag) return '';
+                        return `<span class="tag-pill" style="border-color:${tag.color};color:${tag.color}">${this.escapeHtml(tag.name)}</span>`;
+                    }).join('')}
+                </div>
+            ` : '';
+
+            const nextActions = this.getRequirementNextActions(reqId);
+            const nextActionsMarkup = nextActions.length ? `
+                <ul class="next-actions-list">
+                    ${nextActions.map(action => `
+                        <li>
+                            <span class="action-icon">${action.icon}</span>
+                            <span>${this.escapeHtml(action.text)}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+            ` : '<p class="empty-state-sm">All known follow-up tasks are captured. Great work!</p>';
+
+            const detailToggle = `
+                <div class="detail-mode-toggle" role="group" aria-label="Requirement wording toggle">
+                    <button type="button" 
+                            class="detail-mode-btn ${detailMode === 'summary' ? 'active' : ''}" 
+                            data-action="set-detail-mode" 
+                            data-mode="summary">
+                        Plain summary
+                    </button>
+                    <button type="button" 
+                            class="detail-mode-btn ${detailMode === 'control' ? 'active' : ''}" 
+                            data-action="set-detail-mode" 
+                            data-mode="control">
+                        PSPF wording
+                    </button>
+                </div>
+            `;
+
             requirementDetails.innerHTML = `
-                <h4>${requirement.title}</h4>
-                <p><strong>Requirement ID:</strong> ${reqId}</p>
-                <p>${requirement.description}</p>
+                <div class="requirement-detail-heading">
+                    <div>
+                        <h4>${this.escapeHtml(requirement.title || reqId)}</h4>
+                        <p class="requirement-detail-subtitle">
+                            ${domain ? this.escapeHtml(domain.title) : 'PSPF Requirement'} • ${reqId}
+                        </p>
+                    </div>
+                    <span class="requirement-status ${compliance.status}">${this.getStatusText(compliance.status)}</span>
+                </div>
+                ${tagsMarkup}
+                <div class="requirement-narrative">
+                    <div class="narrative-header">
+                        <h5>${narrativeLabel}</h5>
+                        ${detailToggle}
+                    </div>
+                    <p>${this.escapeHtml(narrativeText || 'No description available yet.')}</p>
+                </div>
+                <div class="requirement-insights">
+                    <div class="insight-card">
+                        <div class="insight-card-header">
+                            <h5>Next steps</h5>
+                        </div>
+                        ${nextActionsMarkup}
+                    </div>
+                    <div class="insight-card">
+                        ${this.renderRequirementEvidenceChecklist(reqId)}
+                    </div>
+                </div>
                 ${compliance.url ? `
                     <div class="requirement-url-section">
                         <h5>📎 Reference Link</h5>
@@ -1450,7 +1741,7 @@ export class PSPFExplorer {
                         </div>
                     </div>
                 ` : ''}
-                
+
                 <div class="compliance-controls">
                     <div class="compliance-status-picker" role="group" aria-label="Compliance status">
                         <h5>Compliance Status</h5>
@@ -1984,44 +2275,354 @@ export class PSPFExplorer {
             `;
         }
 
-        renderProgress() {
-            this.renderEssentialEightWidget();
+        buildDomainProgressMetric(domain) {
+            if (!domain) {
+                return null;
+            }
+            const requirements = Array.isArray(domain.requirements) ? domain.requirements : [];
+            const breakdown = { yes: 0, partial: 0, no: 0, na: 0, 'not-set': 0 };
+            requirements.forEach(reqId => {
+                const status = this.compliance[reqId]?.status || 'not-set';
+                if (!Object.prototype.hasOwnProperty.call(breakdown, status)) {
+                    breakdown[status] = 0;
+                }
+                breakdown[status] += 1;
+            });
 
-            const progressGrid = document.getElementById('progressGrid');
-            if (!progressGrid) return;
+            const met = breakdown.yes + breakdown.na;
+            const total = requirements.length;
+            const percentage = total ? Math.round((met / total) * 100) : 0;
+            const blockers = breakdown.no + breakdown['not-set'];
+            const focusRequirement = this.getDomainFocusRequirement(requirements);
+            const momentum = this.getDomainMomentumSummary(domain.id);
+            const tier = this.getDomainProgressTier({ percentage, blockers, partial: breakdown.partial });
 
-            progressGrid.innerHTML = this.domains.map((domain) => {
-                const health = this.calculateDomainHealth(domain.id);
-                const requirements = domain.requirements;
-                const completedRequirements = requirements.filter(reqId => 
-                    this.compliance[reqId] && this.compliance[reqId].status === 'yes'
-                ).length;
-                const percentage = Math.round((completedRequirements / requirements.length) * 100);
+            return {
+                domain,
+                requirements,
+                breakdown,
+                met,
+                total,
+                percentage,
+                blockers,
+                focusRequirement,
+                momentum,
+                tier
+            };
+        }
 
-                return `
-                    <div class="progress-card ${health.status}">
-                        <div class="progress-header">
-                            <h3>${domain.title}</h3>
-                            <div class="pulse-dot ${health.status}"></div>
+        getDomainProgressTier(metric = {}) {
+            const percentage = typeof metric.percentage === 'number' ? metric.percentage : 0;
+            const blockers = typeof metric.blockers === 'number' ? metric.blockers : 0;
+            const partial = typeof metric.partial === 'number' ? metric.partial : 0;
+
+            if (percentage >= 85 && blockers === 0) {
+                return {
+                    key: 'leading',
+                    label: 'Leading',
+                    description: 'Audit-ready posture with no open actions.',
+                    tone: 'success'
+                };
+            }
+            if (percentage >= 60 || partial > 0) {
+                return {
+                    key: 'steady',
+                    label: 'On Track',
+                    description: 'Keep partial controls moving to stay ahead.',
+                    tone: 'warning'
+                };
+            }
+            return {
+                key: 'lagging',
+                label: 'Needs Attention',
+                description: 'Assign owners to unblock critical gaps.',
+                tone: 'danger'
+            };
+        }
+
+        getDomainFocusRequirement(requirementIds = []) {
+            const reviewOrder = ['no', 'partial', 'not-set'];
+            for (const status of reviewOrder) {
+                const matchId = requirementIds.find(reqId => (this.compliance[reqId]?.status || 'not-set') === status);
+                if (matchId) {
+                    const requirement = this.requirements[matchId];
+                    return {
+                        id: matchId,
+                        title: requirement?.title || 'Untitled requirement',
+                        status: this.compliance[matchId]?.status || 'not-set',
+                        domainId: requirement?.domainId || null
+                    };
+                }
+            }
+            return null;
+        }
+
+        getDomainMomentumSummary(domainId) {
+            const history = Array.isArray(this.progressHistory[domainId]) ? this.progressHistory[domainId] : [];
+            if (history.length < 2) {
+                return {
+                    delta: 0,
+                    direction: 'flat',
+                    startLabel: 'No trend yet'
+                };
+            }
+
+            const window = history.slice(-4);
+            const start = window[0];
+            const end = window[window.length - 1];
+            const startPercentage = typeof start?.percentage === 'number' ? start.percentage : 0;
+            const endPercentage = typeof end?.percentage === 'number' ? end.percentage : 0;
+            const delta = Math.round(endPercentage - startPercentage);
+            let direction = 'flat';
+            if (delta > 0) direction = 'up';
+            if (delta < 0) direction = 'down';
+            const startLabel = start?.timestamp
+                ? new Date(start.timestamp).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })
+                : 'recent updates';
+            return { delta, direction, startLabel };
+        }
+
+        renderProgressCard(metric) {
+            if (!metric || !metric.domain) {
+                return '';
+            }
+
+            const { domain, percentage, breakdown, met, total, focusRequirement, tier, momentum } = metric;
+            const focusText = focusRequirement
+                ? `${this.escapeHtml(focusRequirement.id)} · ${this.escapeHtml(focusRequirement.title)}`
+                : 'Everything is on track';
+            const focusStatus = focusRequirement ? this.getStatusText(focusRequirement.status) : '';
+            const momentumText = momentum.delta === 0
+                ? 'No movement captured yet'
+                : `${momentum.delta > 0 ? '+' : ''}${momentum.delta}% since ${momentum.startLabel}`;
+
+            return `
+                <div class="progress-card ${tier.key}">
+                    <div class="progress-card-tier">
+                        <div>
+                            <p class="progress-card-label">${this.escapeHtml(domain.title)}</p>
+                            <span class="progress-tier-pill ${tier.key}">${tier.label}</span>
                         </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${percentage}%"></div>
+                        <div class="progress-meta">
+                            <span class="progress-percentage">${percentage}%</span>
+                            <span class="progress-completed">${met}/${total} met</span>
                         </div>
-                        <div class="progress-stats">
-                            <span>${completedRequirements}/${requirements.length} completed</span>
-                            <span>${percentage}%</span>
+                    </div>
+                    <div class="progress-bar" aria-label="${this.escapeHtml(domain.title)} compliance ${percentage}%">
+                        <div class="progress-fill" style="width: ${percentage}%"></div>
+                    </div>
+                    <div class="progress-breakdown">
+                        <span class="status-chip yes">${breakdown.yes + breakdown.na} met</span>
+                        <span class="status-chip partial">${breakdown.partial} in progress</span>
+                        <span class="status-chip no">${breakdown.no + breakdown['not-set']} open</span>
+                    </div>
+                    <div class="progress-focus">
+                        <div>
+                            <p class="progress-focus-label">Next focus</p>
+                            <p class="progress-focus-value">${focusText}</p>
                         </div>
-                        <p class="progress-status">${health.text}</p>
+                        ${focusRequirement ? `<span class="progress-focus-status ${focusRequirement.status}">${focusStatus}</span>` : ''}
+                    </div>
+                    <div class="progress-momentum ${momentum.direction}">
+                        <span class="momentum-label">Momentum</span>
+                        <span class="momentum-value">${momentumText}</span>
+                    </div>
+                    <div class="progress-actions">
                         <button class="btn btn-outline btn-small" data-action="view-domain" data-domain-id="${domain.id}">
                             Manage Compliance
                         </button>
                     </div>
+                </div>
+            `;
+        }
+
+        renderProgressInsights(domainMetrics = []) {
+            const container = document.getElementById('progressInsights');
+            if (!container) {
+                return;
+            }
+
+            if (!Array.isArray(domainMetrics) || domainMetrics.length === 0) {
+                container.innerHTML = '<div class="insight-empty">Update a requirement to generate insight narratives.</div>';
+                return;
+            }
+
+            const leader = [...domainMetrics].sort((a, b) => b.percentage - a.percentage)[0];
+            const riskiest = [...domainMetrics].sort((a, b) => (b.breakdown.no + b.breakdown['not-set']) - (a.breakdown.no + a.breakdown['not-set']))[0];
+            const momentum = [...domainMetrics].sort((a, b) => a.momentum.delta - b.momentum.delta)[0];
+
+            const cards = [
+                {
+                    label: 'Top performer',
+                    title: leader?.domain?.title || 'N/A',
+                    stat: `${leader?.percentage ?? 0}%`,
+                    meta: `${leader?.met ?? 0}/${leader?.total ?? 0} requirements implemented`,
+                    footnote: leader?.tier?.description || '',
+                    tone: 'success'
+                },
+                {
+                    label: 'Greatest risk',
+                    title: riskiest?.domain?.title || 'N/A',
+                    stat: `${(riskiest?.breakdown?.no || 0) + (riskiest?.breakdown?.['not-set'] || 0)} blockers`,
+                    meta: `${riskiest?.breakdown?.no || 0} not met • ${riskiest?.breakdown?.['not-set'] || 0} no data`,
+                    footnote: 'Prioritise remediation or assign a project owner.',
+                    tone: 'warning'
+                },
+                {
+                    label: 'Momentum watch',
+                    title: momentum?.domain?.title || 'N/A',
+                    stat: `${momentum?.momentum?.delta > 0 ? '+' : ''}${momentum?.momentum?.delta || 0}%`,
+                    meta: momentum?.momentum?.delta === 0
+                        ? 'No progress recorded in recent snapshots'
+                        : `Change since ${momentum?.momentum?.startLabel || 'last update'}`,
+                    footnote: momentum?.momentum?.direction === 'down'
+                        ? 'Re-engage stakeholders before gaps widen.'
+                        : 'Maintain cadence to lock in gains.',
+                    tone: momentum?.momentum?.direction === 'down' ? 'danger'
+                        : momentum?.momentum?.direction === 'up' ? 'success' : 'neutral'
+                }
+            ];
+
+            container.innerHTML = cards.map(card => `
+                <article class="progress-insight-card ${card.tone}">
+                    <p class="insight-label">${card.label}</p>
+                    <h4>${this.escapeHtml(card.title)}</h4>
+                    <div class="insight-stat">${card.stat}</div>
+                    <p class="insight-meta">${card.meta}</p>
+                    <p class="insight-footnote">${card.footnote}</p>
+                </article>
+            `).join('');
+        }
+
+        renderProgressSignals(domainMetrics = []) {
+            const grid = document.getElementById('progressFocusGrid');
+            if (!grid) {
+                return;
+            }
+
+            if (!Array.isArray(domainMetrics) || !domainMetrics.length) {
+                grid.innerHTML = '';
+                return;
+            }
+
+            const scoreboard = { leading: [], steady: [], lagging: [] };
+            domainMetrics.forEach(metric => {
+                const key = metric?.tier?.key || 'steady';
+                scoreboard[key].push(metric.domain?.title || 'Unnamed domain');
+            });
+
+            const scoreboardGroups = [
+                { key: 'leading', label: 'Leading', description: 'Audit ready' },
+                { key: 'steady', label: 'On track', description: 'Monitor cadence' },
+                { key: 'lagging', label: 'Needs help', description: 'Assign owners now' }
+            ];
+
+            const scoreboardHtml = scoreboardGroups.map(group => {
+                const domains = scoreboard[group.key] || [];
+                const names = domains.length ? domains.map(name => this.escapeHtml(name)).join(', ') : 'None yet';
+                return `
+                    <div class="scoreboard-group ${group.key}">
+                        <span class="scoreboard-count">${domains.length}</span>
+                        <div>
+                            <p class="scoreboard-label">${group.label}</p>
+                            <p class="scoreboard-description">${group.description}</p>
+                            <p class="scoreboard-names">${names}</p>
+                        </div>
+                    </div>
                 `;
             }).join('');
 
-                this.renderGapReport();
-                this.renderUnassignedWidget();
-                this.renderProgressHistorySection();
+            const blockers = this.buildHighRiskRequirementList();
+            const blockersHtml = blockers.length ? blockers.map(blocker => `
+                <li class="blocker-item" data-action="view-requirement" data-requirement-id="${this.escapeHtml(blocker.reqId)}" tabindex="0" role="button">
+                    <div>
+                        <p class="blocker-title">${this.escapeHtml(blocker.reqId)} · ${this.escapeHtml(blocker.title)}</p>
+                        <p class="blocker-meta">${this.escapeHtml(blocker.domainTitle)} · ${this.getStatusText(blocker.status)}</p>
+                        ${blocker.comment ? `<p class="blocker-comment">${this.escapeHtml(blocker.comment)}</p>` : ''}
+                    </div>
+                </li>
+            `).join('') : '<li class="blocker-empty">Great job! No critical blockers detected.</li>';
+
+            grid.innerHTML = `
+                <article class="focus-card">
+                    <div class="focus-card-header">
+                        <div>
+                            <p class="focus-card-label">Domain scoreboard</p>
+                            <h4>Where attention sits</h4>
+                        </div>
+                    </div>
+                    <div class="scoreboard-grid">
+                        ${scoreboardHtml}
+                    </div>
+                </article>
+                <article class="focus-card">
+                    <div class="focus-card-header">
+                        <div>
+                            <p class="focus-card-label">Top blockers</p>
+                            <h4>Requirements slowing progress</h4>
+                        </div>
+                    </div>
+                    <ul class="blocker-list">
+                        ${blockersHtml}
+                    </ul>
+                </article>
+            `;
+        }
+
+        buildHighRiskRequirementList(limit = 4) {
+            const items = [];
+            this.domains.forEach(domain => {
+                const requirementIds = Array.isArray(domain.requirements) ? domain.requirements : [];
+                requirementIds.forEach(reqId => {
+                    const status = this.compliance[reqId]?.status || 'not-set';
+                    if (status === 'no' || status === 'partial') {
+                        const requirement = this.requirements[reqId];
+                        items.push({
+                            reqId,
+                            title: requirement?.title || 'Untitled requirement',
+                            status,
+                            domainTitle: domain.title,
+                            comment: this.compliance[reqId]?.comment || ''
+                        });
+                    }
+                });
+            });
+
+            const priority = { no: 0, partial: 1 };
+            items.sort((a, b) => {
+                const aScore = priority[a.status] ?? 2;
+                const bScore = priority[b.status] ?? 2;
+                if (aScore !== bScore) {
+                    return aScore - bScore;
+                }
+                return (b.comment?.length || 0) - (a.comment?.length || 0);
+            });
+
+            return items.slice(0, limit);
+        }
+
+        renderProgress() {
+            this.renderEssentialEightWidget();
+
+            const domainMetrics = this.domains
+                .map(domain => this.buildDomainProgressMetric(domain))
+                .filter(Boolean);
+
+            const progressGrid = document.getElementById('progressGrid');
+            if (progressGrid) {
+                if (!domainMetrics.length) {
+                    progressGrid.innerHTML = '<p class="history-empty-msg">No domain data available yet.</p>';
+                } else {
+                    progressGrid.innerHTML = domainMetrics.map(metric => this.renderProgressCard(metric)).join('');
+                }
+            }
+
+            this.renderProgressInsights(domainMetrics);
+            this.renderProgressSignals(domainMetrics);
+
+            this.renderGapReport();
+            this.renderUnassignedWidget();
+            this.renderProgressHistorySection();
         }
 
             renderProgressHistorySection() {
