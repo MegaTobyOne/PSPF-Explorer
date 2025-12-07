@@ -102,6 +102,8 @@ export class PSPFExplorer {
             this.editingProject = null;
             this.editingRisk = null;
             this.editingIncident = null;
+            this.isDomainGridCollapsed = false;
+            this.isTagFiltersCollapsed = false;
             
             if (this.options.autoInit) {
                 this.init();
@@ -245,6 +247,16 @@ export class PSPFExplorer {
                 this.showView('help');
                 this.updateNavButtons('helpBtn');
             });
+
+            const toggleDomainsGridBtn = document.getElementById('toggleDomainsGridBtn');
+            if (toggleDomainsGridBtn) {
+                toggleDomainsGridBtn.addEventListener('click', () => this.toggleDomainGrid());
+            }
+
+            const toggleTagFiltersBtn = document.getElementById('toggleTagFiltersBtn');
+            if (toggleTagFiltersBtn) {
+                toggleTagFiltersBtn.addEventListener('click', () => this.toggleTagFilters());
+            }
 
             // Welcome modal
             const closeWelcomeBtn = document.getElementById('closeWelcome');
@@ -683,6 +695,7 @@ export class PSPFExplorer {
                 }
                 
                 this.renderHome();
+                this.setDomainGridCollapsed(false);
             }
 
             // Special handling for project view
@@ -718,6 +731,80 @@ export class PSPFExplorer {
             this.renderDomainSummary();
             this.updateDashboardStats();
             this.updateStats();
+            this.updateDomainGridVisibility();
+            this.updateTagFiltersVisibility();
+        }
+
+        toggleDomainGrid() {
+            this.setDomainGridCollapsed(!this.isDomainGridCollapsed);
+        }
+
+        setDomainGridCollapsed(collapsed) {
+            this.isDomainGridCollapsed = !!collapsed;
+            this.updateDomainGridVisibility();
+        }
+
+        updateDomainGridVisibility() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const section = document.getElementById('domainsGridSection');
+            const toggleBtn = document.getElementById('toggleDomainsGridBtn');
+            const domainsGrid = document.getElementById('domainsGrid');
+
+            const isCollapsed = !!this.isDomainGridCollapsed;
+
+            if (section) {
+                section.classList.toggle('collapsed', isCollapsed);
+            }
+
+            if (domainsGrid) {
+                domainsGrid.setAttribute('aria-hidden', isCollapsed ? 'true' : 'false');
+            }
+
+            if (toggleBtn) {
+                toggleBtn.textContent = isCollapsed ? 'Show domain cards' : 'Hide domain cards';
+                toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+            }
+        }
+
+        toggleTagFilters() {
+            this.setTagFiltersCollapsed(!this.isTagFiltersCollapsed);
+        }
+
+        setTagFiltersCollapsed(collapsed) {
+            this.isTagFiltersCollapsed = !!collapsed;
+            this.updateTagFiltersVisibility();
+        }
+
+        updateTagFiltersVisibility() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const container = document.getElementById('tagFiltersContainer');
+            const body = document.getElementById('tagFiltersBody');
+            const toggleBtn = document.getElementById('toggleTagFiltersBtn');
+            const collapsedMsg = document.getElementById('tagFiltersCollapsedMessage');
+            const isCollapsed = !!this.isTagFiltersCollapsed;
+
+            if (container) {
+                container.classList.toggle('collapsed', isCollapsed);
+            }
+
+            if (body) {
+                body.setAttribute('aria-hidden', isCollapsed ? 'true' : 'false');
+            }
+
+            if (collapsedMsg) {
+                collapsedMsg.setAttribute('aria-hidden', isCollapsed ? 'false' : 'true');
+            }
+
+            if (toggleBtn) {
+                toggleBtn.textContent = isCollapsed ? 'Show filters' : 'Hide filters';
+                toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+            }
         }
 
         renderDomainsGrid() {
@@ -799,6 +886,295 @@ export class PSPFExplorer {
             }).join('');
         }
 
+        renderGapReport() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const select = document.getElementById('gapReportDomainSelect');
+            const summary = document.getElementById('gapReportSummary');
+            const list = document.getElementById('gapReportList');
+            const exportBtn = document.getElementById('gapReportExportBtn');
+
+            if (!select || !summary || !list) {
+                return;
+            }
+
+            if (!Array.isArray(this.domains) || this.domains.length === 0) {
+                summary.innerHTML = '<p class="history-empty-msg">No domains available.</p>';
+                list.innerHTML = '';
+                return;
+            }
+
+            const previousValue = select.value;
+            select.innerHTML = this.domains.map(domain => `
+                <option value="${this.escapeHtml(domain.id)}">${this.escapeHtml(domain.title)}</option>
+            `).join('');
+
+            let selectedDomainId = previousValue && this.domains.some(domain => domain.id === previousValue)
+                ? previousValue
+                : (this.selectedDomain || this.domains[0]?.id || '');
+
+            if (selectedDomainId) {
+                select.value = selectedDomainId;
+            }
+
+            if (!select.dataset.listenerAdded) {
+                select.addEventListener('change', (event) => {
+                    this.updateGapReportList(event.target.value);
+                });
+                select.dataset.listenerAdded = 'true';
+            }
+
+            if (exportBtn && !exportBtn.dataset.listenerAdded) {
+                exportBtn.addEventListener('click', () => {
+                    this.exportGapReport(select.value);
+                });
+                exportBtn.dataset.listenerAdded = 'true';
+            }
+
+            const domainToRender = selectedDomainId || select.value;
+            if (domainToRender) {
+                this.updateGapReportList(domainToRender);
+            }
+        }
+
+        updateGapReportList(domainId) {
+            const summaryEl = document.getElementById('gapReportSummary');
+            const listEl = document.getElementById('gapReportList');
+            if (!summaryEl || !listEl) {
+                return;
+            }
+
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) {
+                summaryEl.innerHTML = '';
+                listEl.innerHTML = '<p class="history-empty-msg">Select a domain to view outstanding requirements.</p>';
+                return;
+            }
+
+            const outstanding = this.getOutstandingRequirements(domainId);
+
+            if (!outstanding.length) {
+                summaryEl.innerHTML = `<span class="gap-summary-total">${this.escapeHtml(domain.title)} is fully compliant</span>`;
+                listEl.innerHTML = `<p class="history-empty-msg">No outstanding requirements for ${this.escapeHtml(domain.title)}.</p>`;
+                return;
+            }
+
+            const statusOrder = ['no', 'partial', 'not-set'];
+            const counts = { no: 0, partial: 0, 'not-set': 0 };
+            outstanding.forEach(item => {
+                const key = statusOrder.includes(item.status) ? item.status : 'not-set';
+                counts[key] = (counts[key] || 0) + 1;
+            });
+
+            const chips = statusOrder
+                .filter(key => counts[key] > 0)
+                .map(key => `<span class="gap-summary-chip ${key}"><span>${counts[key]}</span>${this.getStatusText(key)}</span>`)
+                .join('');
+
+            summaryEl.innerHTML = `
+                <span class="gap-summary-total">${outstanding.length} requirement${outstanding.length === 1 ? '' : 's'} need action</span>
+                ${chips}
+            `;
+
+            const truncate = (text, limit = 260) => {
+                if (!text) return '';
+                return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+            };
+
+            listEl.innerHTML = outstanding.map(item => {
+                const description = item.description
+                    ? this.escapeHtml(truncate(item.description))
+                    : 'No description available.';
+                const commentSnippet = item.comment
+                    ? `<span>📝 ${this.escapeHtml(truncate(item.comment, 140))}</span>`
+                    : '';
+                const evidenceSnippet = item.url
+                    ? '<span>🔗 Evidence link attached</span>'
+                    : '';
+                const meta = [commentSnippet, evidenceSnippet].filter(Boolean).join('');
+
+                return `
+                    <article class="gap-report-item">
+                        <div class="gap-report-item-header">
+                            <div>
+                                <span class="requirement-code">${this.escapeHtml(item.id)}</span>
+                                <h4>${this.escapeHtml(item.title)}</h4>
+                            </div>
+                            <span class="requirement-status ${item.status}">${this.getStatusText(item.status)}</span>
+                        </div>
+                        <p>${description}</p>
+                        ${meta ? `<div class="gap-report-item-meta">${meta}</div>` : ''}
+                        <button class="btn btn-link btn-small" data-action="view-requirement" data-requirement-id="${this.escapeHtml(item.id)}">Open requirement</button>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        getOutstandingRequirements(domainId) {
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) {
+                return [];
+            }
+
+            const requirementIds = Array.isArray(domain.requirements) ? domain.requirements : [];
+            const severityOrder = { no: 0, partial: 1, 'not-set': 2 };
+
+            return requirementIds.map(reqId => {
+                const requirement = this.requirements[reqId] || { id: reqId };
+                const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
+                const normalizedStatus = ['yes', 'no', 'partial', 'na', 'not-set'].includes(compliance.status)
+                    ? compliance.status
+                    : 'not-set';
+
+                return {
+                    id: reqId,
+                    title: requirement.title || reqId,
+                    description: requirement.description || '',
+                    domainId: requirement.domainId,
+                    status: normalizedStatus,
+                    comment: compliance.comment || '',
+                    url: compliance.url || ''
+                };
+            }).filter(item => item && !['yes', 'na'].includes(item.status))
+                .sort((a, b) => {
+                    const orderDiff = (severityOrder[a.status] ?? 99) - (severityOrder[b.status] ?? 99);
+                    if (orderDiff !== 0) {
+                        return orderDiff;
+                    }
+                    return a.id.localeCompare(b.id);
+                });
+        }
+
+        exportGapReport(domainId) {
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) {
+                this.showNotification('Select a domain before exporting the report.', 'warning');
+                return;
+            }
+
+            const outstanding = this.getOutstandingRequirements(domainId);
+            if (!outstanding.length) {
+                this.showNotification(`${domain.title} is fully compliant. Nothing to export.`, 'info');
+                return;
+            }
+
+            const byStatus = outstanding.reduce((acc, item) => {
+                const key = item.status || 'not-set';
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            }, {});
+
+            const requirementDetails = this.buildRequirementExportDetails(outstanding.map(item => item.id));
+
+            const payload = {
+                version: '1.0',
+                exportedAt: new Date().toISOString(),
+                scope: {
+                    type: 'domain-gap-report',
+                    domain: {
+                        id: domain.id,
+                        title: domain.title
+                    }
+                },
+                summary: {
+                    outstanding: outstanding.length,
+                    byStatus
+                },
+                data: {
+                    requirements: requirementDetails
+                }
+            };
+
+            this.downloadJsonFile(payload, `pspf-gap-${domain.id}`);
+            this.showNotification(`${domain.title} remediation report exported`, 'success');
+        }
+
+        renderUnassignedWidget() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const widget = document.getElementById('unassignedWidget');
+            const listEl = document.getElementById('unassignedList');
+            const countEl = document.getElementById('unassignedCount');
+            if (!widget || !listEl || !countEl) {
+                return;
+            }
+
+            const unassigned = this.getUnassignedRequirements();
+            countEl.textContent = `${unassigned.length} gap${unassigned.length === 1 ? '' : 's'}`;
+
+            if (!unassigned.length) {
+                listEl.innerHTML = '<p class="history-empty-msg">All unmet requirements are already mapped to projects. Great work!</p>';
+                return;
+            }
+
+            const truncate = (text, limit = 220) => {
+                if (!text) return '';
+                return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+            };
+
+            listEl.innerHTML = unassigned.map(item => {
+                const description = item.description ? this.escapeHtml(truncate(item.description)) : 'No description available yet.';
+                const commentSnippet = item.comment ? `<span>📝 ${this.escapeHtml(truncate(item.comment, 140))}</span>` : '';
+                const domainLabel = item.domainTitle ? `<span>📁 ${this.escapeHtml(item.domainTitle)}</span>` : '';
+                const meta = [domainLabel, commentSnippet].filter(Boolean).join('');
+
+                return `
+                    <article class="unassigned-card">
+                        <div>
+                            <span class="requirement-code">${this.escapeHtml(item.id)}</span>
+                            <h4>${this.escapeHtml(item.title)}</h4>
+                        </div>
+                        <p>${description}</p>
+                        ${meta ? `<div class="unassigned-card-meta">${meta}</div>` : ''}
+                        <div class="requirement-actions">
+                            <button class="btn btn-link btn-small" data-action="view-requirement" data-requirement-id="${this.escapeHtml(item.id)}">Review requirement</button>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        getUnassignedRequirements() {
+            const assignedRequirementIds = new Set();
+            this.projects.forEach(project => {
+                const reqs = Array.isArray(project.requirements) ? project.requirements : [];
+                reqs.forEach(reqId => assignedRequirementIds.add(reqId));
+            });
+
+            const domainOrder = this.domains.reduce((acc, domain, index) => {
+                acc[domain.id] = index;
+                return acc;
+            }, {});
+
+            return Object.keys(this.requirements).map(reqId => {
+                const requirement = this.requirements[reqId] || { id: reqId };
+                const compliance = this.compliance[reqId] || { status: 'not-set', comment: '' };
+                const status = ['yes', 'no', 'partial', 'na', 'not-set'].includes(compliance.status) ? compliance.status : 'not-set';
+                const domain = this.domains.find(d => d.id === requirement.domainId);
+
+                return {
+                    id: reqId,
+                    title: requirement.title || reqId,
+                    description: requirement.description || '',
+                    domainId: requirement.domainId,
+                    domainTitle: domain?.title || '',
+                    domainIndex: domainOrder[requirement.domainId] ?? 999,
+                    status,
+                    comment: compliance.comment || ''
+                };
+            }).filter(item => item.status === 'no' && !assignedRequirementIds.has(item.id))
+                .sort((a, b) => {
+                    if (a.domainIndex !== b.domainIndex) {
+                        return a.domainIndex - b.domainIndex;
+                    }
+                    return a.id.localeCompare(b.id);
+                });
+        }
+
         updateDashboardStats() {
             const totalRequirements = this.domains.reduce((sum, domain) => sum + domain.requirements.length, 0);
             const totalProjects = this.projects.length;
@@ -852,6 +1228,7 @@ export class PSPFExplorer {
             if (selectedDomainDescription) selectedDomainDescription.textContent = domain.description;
 
             this.renderRequirementsList();
+            this.updateTagFiltersVisibility();
 
             if (requirementsSection) {
                 requirementsSection.classList.remove('hidden');
@@ -1415,6 +1792,8 @@ export class PSPFExplorer {
 
             // Refresh Essential Eight summary
             this.renderEssentialEightWidget();
+            this.renderGapReport();
+            this.renderUnassignedWidget();
         }
         
         animateNumber(elementId, targetValue) {
@@ -1640,6 +2019,8 @@ export class PSPFExplorer {
                 `;
             }).join('');
 
+                this.renderGapReport();
+                this.renderUnassignedWidget();
                 this.renderProgressHistorySection();
         }
 
@@ -4082,6 +4463,7 @@ export class PSPFExplorer {
             if (!requirementsList) return;
 
             this.populateTagFilters();
+            this.updateTagFiltersVisibility();
 
             const domain = this.domains.find(d => d.id === this.selectedDomain);
             if (!domain) {

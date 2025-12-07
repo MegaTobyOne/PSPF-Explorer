@@ -103,9 +103,23 @@
                     <p class="subtitle">Interactive exploration of the Australian Government Protective Security Policy Framework 2025</p>
                 </div>
 
-                <div class="domains-grid" id="domainsGrid">
-                    <!-- Domain cards will be dynamically generated -->
-                </div>
+                <section class="domains-grid-section" id="domainsGridSection">
+                    <div class="domains-grid-toolbar">
+                        <div>
+                            <h3>PSPF Security Domains</h3>
+                            <p class="subtitle-sm">Select a domain to explore requirements.</p>
+                        </div>
+                        <button id="toggleDomainsGridBtn" class="btn btn-link" type="button" aria-expanded="true" aria-controls="domainsGrid">
+                            Hide domain cards
+                        </button>
+                    </div>
+                    <div class="domains-grid" id="domainsGrid" aria-live="polite">
+                        <!-- Domain cards will be dynamically generated -->
+                    </div>
+                    <div class="domains-grid-collapsed-msg" id="domainsGridCollapsedMessage" role="status" aria-live="polite">
+                        Domain cards are hidden to give you more room. Show them again any time using the toggle.
+                    </div>
+                </section>
 
                 <!-- Welcome Dashboard (visible by default) -->
                 <div class="welcome-dashboard" id="welcomeDashboard">
@@ -206,10 +220,23 @@
                     <div class="requirements-layout">
                         <div class="requirements-list">
                             <h4>Requirements List</h4>
-                            <div class="tag-filters">
-                                <h5>Filter by Tags <span class="clear-tags" data-action="clear-tags" tabindex="0" role="button">Clear</span></h5>
-                                <div class="tag-selector" id="tagFilters">
-                                    <!-- Tag filters will be populated here -->
+                            <div class="tag-filters" id="tagFiltersContainer">
+                                <div class="tag-filters-header">
+                                    <div class="tag-filters-title">
+                                        <h5>Filter by Tags <span class="clear-tags" data-action="clear-tags" tabindex="0" role="button">Clear</span></h5>
+                                        <p class="tag-filters-hint">Toggle the panel when you need more room for the requirements list.</p>
+                                    </div>
+                                    <button id="toggleTagFiltersBtn" class="btn btn-link" type="button" aria-controls="tagFiltersBody" aria-expanded="true">
+                                        Hide filters
+                                    </button>
+                                </div>
+                                <div class="tag-filters-body" id="tagFiltersBody">
+                                    <div class="tag-selector" id="tagFilters">
+                                        <!-- Tag filters will be populated here -->
+                                    </div>
+                                </div>
+                                <div class="tag-filters-collapsed-msg" id="tagFiltersCollapsedMessage" role="status" aria-live="polite">
+                                    Tag filters are hidden to maximize space. Show them again anytime using the toggle above.
                                 </div>
                             </div>
                             <div class="requirements-sidebar" id="requirementsList">
@@ -342,6 +369,37 @@
                     </div>
                     <div class="domain-requirements-grid" id="domainRequirementsGrid">
                         <!-- Requirement tiles are rendered here -->
+                    </div>
+                </div>
+
+                <div class="gap-report-card" id="gapReport">
+                    <div class="gap-report-header">
+                        <div>
+                            <h3>Domain Remediation Report</h3>
+                            <p class="subtitle-sm">Choose a domain to see every requirement that still needs work.</p>
+                        </div>
+                        <div class="gap-report-controls">
+                            <label for="gapReportDomainSelect">Select domain</label>
+                            <select id="gapReportDomainSelect" aria-label="Domain selection for remediation report"></select>
+                            <button id="gapReportExportBtn" class="btn btn-outline" type="button">Export report</button>
+                        </div>
+                    </div>
+                    <div class="gap-report-summary" id="gapReportSummary" aria-live="polite"></div>
+                    <div class="gap-report-list" id="gapReportList" aria-live="polite">
+                        <p class="history-empty-msg">Pick a domain to load outstanding requirements.</p>
+                    </div>
+                </div>
+
+                <div class="unassigned-widget" id="unassignedWidget" aria-live="polite">
+                    <div class="unassigned-header">
+                        <div>
+                            <h3>Unassigned Critical Requirements</h3>
+                            <p class="subtitle-sm">Requirements marked Not Met with no supporting project yet.</p>
+                        </div>
+                        <span class="unassigned-count" id="unassignedCount">0 gaps</span>
+                    </div>
+                    <div class="unassigned-list" id="unassignedList">
+                        <p class="history-empty-msg">All unmet requirements are already mapped to projects. Great work!</p>
                     </div>
                 </div>
 
