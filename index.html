@@ -13,7 +13,9 @@
     <meta name="description" content="PSPF Explorer 2025 - Interactive Australian Government Protective Security Policy Framework compliance tracking and management tool">
     <meta name="author" content="PSPF Explorer">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#667eea">
     <title>PSPF Explorer 2025</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles/main.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,10 +23,13 @@
 </head>
 <body>
     <!-- Welcome Modal for First-Time Users -->
-    <div id="welcomeModal" class="modal">
-        <div class="modal-content">
-            <h2>Welcome to PSPF Explorer 2025</h2>
-            <p>Navigate the Australian Government Protective Security Policy Framework 2025 with this interactive compliance dashboard!</p>
+    <div id="welcomeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle" aria-describedby="welcomeModalDesc" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h2 id="welcomeModalTitle">Welcome to PSPF Explorer 2025</h2>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="welcomeModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="welcomeModalDesc">Navigate the Australian Government Protective Security Policy Framework 2025 with this interactive compliance dashboard!</p>
             
             <div class="welcome-steps">
                 <div class="step">
@@ -594,9 +599,13 @@
 
     <!-- CRUD Modals -->
     <!-- Project Modal -->
-    <div id="projectModal" class="modal">
-        <div class="modal-content">
-            <h3 id="projectModalTitle">Add Project</h3>
+    <div id="projectModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle" aria-describedby="projectModalHint" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="projectModalTitle">Add Project</h3>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="projectModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="projectModalHint" class="visually-hidden">Press Escape to close this dialog.</p>
             <form id="projectForm">
                 <div class="form-group">
                     <label for="projectName">Project Name</label>
@@ -624,9 +633,13 @@
     </div>
 
     <!-- Link Requirements Modal -->
-    <div id="linkRequirementsModal" class="modal">
-        <div class="modal-content">
-            <h3>Link Requirements</h3>
+    <div id="linkRequirementsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="linkRequirementsTitle" aria-describedby="linkRequirementsHint" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="linkRequirementsTitle">Link Requirements</h3>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="linkRequirementsModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="linkRequirementsHint" class="visually-hidden">Press Escape to close this dialog.</p>
             <div class="form-group">
                 <label for="requirementsSearch">Filter</label>
                 <input type="text" id="requirementsSearch" placeholder="Search by title or ID">
@@ -680,9 +693,13 @@
     </div>
 
     <!-- Risk Modal -->
-    <div id="riskModal" class="modal">
-        <div class="modal-content">
-            <h3 id="riskModalTitle">Add Risk</h3>
+    <div id="riskModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="riskModalTitle" aria-describedby="riskModalHint" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="riskModalTitle">Add Risk</h3>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="riskModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="riskModalHint" class="visually-hidden">Press Escape to close this dialog.</p>
             <form id="riskForm">
                 <div class="form-group">
                     <label for="riskName">Risk Title</label>
@@ -725,9 +742,13 @@
     </div>
 
     <!-- Event Modal -->
-    <div id="incidentModal" class="modal">
-        <div class="modal-content">
-            <h3 id="incidentModalTitle">Add Event</h3>
+    <div id="incidentModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="incidentModalTitle" aria-describedby="incidentModalHint" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="incidentModalTitle">Add Event</h3>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="incidentModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="incidentModalHint" class="visually-hidden">Press Escape to close this dialog.</p>
             <form id="incidentForm">
                 <div class="form-group">
                     <label for="incidentName">Event Title</label>

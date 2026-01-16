@@ -32,6 +32,15 @@ const DEFAULT_TAG_DEFINITIONS = Object.freeze({
 const MY_WORK_USER_NAME_KEY = 'pspf_mywork_user_name';
 const MY_WORK_FILTERS_KEY = 'pspf_mywork_tag_filters';
 const REQUIREMENT_DETAIL_MODE_KEY = 'pspf_requirement_detail_mode';
+const REQUIREMENTS_VIEW_PREFERENCES_KEY = 'pspf_requirements_view_preferences';
+
+const DEFAULT_REQUIREMENTS_VIEW_PREFERENCES = Object.freeze({
+    density: 'comfortable',
+    textSize: 'md',
+    showMeta: true,
+    showHints: true,
+    listWidth: 380
+});
 const EVIDENCE_CHECKLIST_ITEMS = Object.freeze([
     {
         key: 'policy',
@@ -89,6 +98,10 @@ export class PSPFExplorer {
 
             // Track active modals for cleanup
             this.activeModals = new Set();
+            this._modalState = new Map();
+            this._openModalCount = 0;
+            this._bodyOverflowBeforeModal = null;
+            this._modalIdSeed = 0;
 
             // Initialize data structures
             this.projects = this.readStorage('pspf_projects', []);
@@ -131,6 +144,13 @@ export class PSPFExplorer {
             if (!['summary', 'control'].includes(this.requirementDetailMode)) {
                 this.requirementDetailMode = 'summary';
             }
+
+            this.requirementsSearchQuery = '';
+            this.requirementsViewPreferences = this.readStorage(
+                REQUIREMENTS_VIEW_PREFERENCES_KEY,
+                { ...DEFAULT_REQUIREMENTS_VIEW_PREFERENCES }
+            );
+            this.sanitizeRequirementsViewPreferences();
             
             if (this.options.autoInit) {
                 this.init();
@@ -151,6 +171,8 @@ export class PSPFExplorer {
 
             this.setupEventListeners();
             this.setupEventDelegation();
+            this.applyRequirementsViewPreferences();
+            this.setupRequirementsUXControls();
             this.renderHome();
             this.renderProjects();
             this.renderTagManagement();
@@ -158,6 +180,249 @@ export class PSPFExplorer {
             this.renderProgress();
             this.renderDomainRequirementHeatmap();
             this.showWelcomeModalIfFirstTime();
+        }
+
+        sanitizeRequirementsViewPreferences() {
+            const pref = this.requirementsViewPreferences && typeof this.requirementsViewPreferences === 'object'
+                ? this.requirementsViewPreferences
+                : { ...DEFAULT_REQUIREMENTS_VIEW_PREFERENCES };
+
+            const density = pref.density === 'compact' ? 'compact' : 'comfortable';
+            const textSize = ['sm', 'md', 'lg'].includes(pref.textSize) ? pref.textSize : 'md';
+            const showMeta = pref.showMeta !== false;
+            const showHints = pref.showHints !== false;
+            const listWidthRaw = Number(pref.listWidth);
+            const listWidth = Number.isFinite(listWidthRaw)
+                ? Math.min(640, Math.max(280, Math.round(listWidthRaw)))
+                : DEFAULT_REQUIREMENTS_VIEW_PREFERENCES.listWidth;
+
+            this.requirementsViewPreferences = { density, textSize, showMeta, showHints, listWidth };
+        }
+
+        saveRequirementsViewPreferences() {
+            this.sanitizeRequirementsViewPreferences();
+            this.writeStorage(REQUIREMENTS_VIEW_PREFERENCES_KEY, this.requirementsViewPreferences);
+        }
+
+        getFontScaleForTextSize(textSize) {
+            switch (textSize) {
+                case 'sm': return 0.95;
+                case 'lg': return 1.08;
+                default: return 1;
+            }
+        }
+
+        applyRequirementsViewPreferences() {
+            if (typeof document === 'undefined') return;
+            this.sanitizeRequirementsViewPreferences();
+            const { density, textSize, listWidth, showMeta, showHints } = this.requirementsViewPreferences;
+
+            document.documentElement.dataset.density = density;
+            document.documentElement.style.setProperty('--ui-font-scale', String(this.getFontScaleForTextSize(textSize)));
+            document.documentElement.style.setProperty('--req-list-width', `${listWidth}px`);
+
+            const splitter = document.getElementById('requirementsSplitter');
+            if (splitter) {
+                splitter.setAttribute('aria-valuenow', String(listWidth));
+            }
+
+            const densitySelect = document.getElementById('requirementsDensity');
+            if (densitySelect) densitySelect.value = density;
+            const sizeSelect = document.getElementById('requirementsTextSize');
+            if (sizeSelect) sizeSelect.value = textSize;
+            const showMetaBox = document.getElementById('requirementsShowMeta');
+            if (showMetaBox) showMetaBox.checked = !!showMeta;
+            const showHintsBox = document.getElementById('requirementsShowHints');
+            if (showHintsBox) showHintsBox.checked = !!showHints;
+            const widthRange = document.getElementById('requirementsListWidth');
+            if (widthRange) widthRange.value = String(listWidth);
+        }
+
+        setupRequirementsUXControls() {
+            if (typeof document === 'undefined') return;
+
+            const viewBtn = document.getElementById('requirementsViewBtn');
+            const viewPanel = document.getElementById('requirementsViewPanel');
+            const searchInput = document.getElementById('requirementsQuickSearch');
+            const densitySelect = document.getElementById('requirementsDensity');
+            const sizeSelect = document.getElementById('requirementsTextSize');
+            const showMetaBox = document.getElementById('requirementsShowMeta');
+            const showHintsBox = document.getElementById('requirementsShowHints');
+            const widthRange = document.getElementById('requirementsListWidth');
+            const resetBtn = document.getElementById('requirementsResetView');
+            const splitter = document.getElementById('requirementsSplitter');
+            const listContainer = document.getElementById('requirementsList');
+
+            if (viewBtn && viewPanel) {
+                viewBtn.addEventListener('click', () => {
+                    const willOpen = viewPanel.classList.contains('hidden');
+                    viewPanel.classList.toggle('hidden', !willOpen);
+                    viewBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                    if (willOpen) {
+                        const focusTarget = viewPanel.querySelector('select, input, button');
+                        focusTarget?.focus();
+                    }
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (viewPanel.classList.contains('hidden')) return;
+                    const clickedInside = viewPanel.contains(event.target) || viewBtn.contains(event.target);
+                    if (!clickedInside) {
+                        viewPanel.classList.add('hidden');
+                        viewBtn.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
+
+            if (searchInput) {
+                const applySearch = this.debounce(() => {
+                    this.requirementsSearchQuery = searchInput.value || '';
+                    this.renderRequirementsList();
+                }, 120);
+                searchInput.addEventListener('input', applySearch);
+            }
+
+            if (densitySelect) {
+                densitySelect.addEventListener('change', () => {
+                    this.requirementsViewPreferences.density = densitySelect.value;
+                    this.saveRequirementsViewPreferences();
+                    this.applyRequirementsViewPreferences();
+                });
+            }
+
+            if (sizeSelect) {
+                sizeSelect.addEventListener('change', () => {
+                    this.requirementsViewPreferences.textSize = sizeSelect.value;
+                    this.saveRequirementsViewPreferences();
+                    this.applyRequirementsViewPreferences();
+                });
+            }
+
+            const rerenderList = () => {
+                this.saveRequirementsViewPreferences();
+                this.applyRequirementsViewPreferences();
+                this.renderRequirementsList();
+            };
+
+            if (showMetaBox) {
+                showMetaBox.addEventListener('change', () => {
+                    this.requirementsViewPreferences.showMeta = showMetaBox.checked;
+                    rerenderList();
+                });
+            }
+
+            if (showHintsBox) {
+                showHintsBox.addEventListener('change', () => {
+                    this.requirementsViewPreferences.showHints = showHintsBox.checked;
+                    rerenderList();
+                });
+            }
+
+            if (widthRange) {
+                const saveWidthDebounced = this.debounce(() => this.saveRequirementsViewPreferences(), 200);
+                widthRange.addEventListener('input', () => {
+                    const width = Number(widthRange.value);
+                    this.requirementsViewPreferences.listWidth = width;
+                    this.applyRequirementsViewPreferences();
+                    saveWidthDebounced();
+                });
+            }
+
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    this.requirementsViewPreferences = { ...DEFAULT_REQUIREMENTS_VIEW_PREFERENCES };
+                    this.saveRequirementsViewPreferences();
+                    this.applyRequirementsViewPreferences();
+                    this.renderRequirementsList();
+                    if (searchInput) {
+                        searchInput.value = '';
+                        this.requirementsSearchQuery = '';
+                    }
+                });
+            }
+
+            if (listContainer) {
+                listContainer.addEventListener('keydown', (event) => {
+                    const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'];
+                    if (!keys.includes(event.key)) return;
+
+                    const items = Array.from(listContainer.querySelectorAll('.requirement-item'));
+                    if (!items.length) return;
+
+                    const active = document.activeElement;
+                    let index = items.indexOf(active);
+                    if (index < 0) {
+                        const selected = listContainer.querySelector('.requirement-item.active');
+                        index = selected ? items.indexOf(selected) : 0;
+                    }
+
+                    const pageStep = 10;
+                    if (event.key === 'ArrowDown') index = Math.min(items.length - 1, index + 1);
+                    if (event.key === 'ArrowUp') index = Math.max(0, index - 1);
+                    if (event.key === 'Home') index = 0;
+                    if (event.key === 'End') index = items.length - 1;
+                    if (event.key === 'PageDown') index = Math.min(items.length - 1, index + pageStep);
+                    if (event.key === 'PageUp') index = Math.max(0, index - pageStep);
+
+                    event.preventDefault();
+                    items[index].focus();
+                    try {
+                        items[index].scrollIntoView({ block: 'nearest' });
+                    } catch {
+                        // ignore
+                    }
+                });
+            }
+
+            if (splitter) {
+                const clampWidth = (value) => Math.min(640, Math.max(280, value));
+
+                splitter.addEventListener('keydown', (event) => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
+                    event.preventDefault();
+                    const step = event.shiftKey ? 60 : 20;
+                    if (event.key === 'Home') {
+                        this.requirementsViewPreferences.listWidth = DEFAULT_REQUIREMENTS_VIEW_PREFERENCES.listWidth;
+                    } else if (event.key === 'ArrowLeft') {
+                        this.requirementsViewPreferences.listWidth = clampWidth(this.requirementsViewPreferences.listWidth - step);
+                    } else if (event.key === 'ArrowRight') {
+                        this.requirementsViewPreferences.listWidth = clampWidth(this.requirementsViewPreferences.listWidth + step);
+                    }
+                    this.applyRequirementsViewPreferences();
+                    this.saveRequirementsViewPreferences();
+                });
+
+                splitter.addEventListener('pointerdown', (event) => {
+                    splitter.setPointerCapture(event.pointerId);
+                    const startX = event.clientX;
+                    const startWidth = this.requirementsViewPreferences.listWidth;
+
+                    const onMove = (moveEvent) => {
+                        const delta = moveEvent.clientX - startX;
+                        this.requirementsViewPreferences.listWidth = clampWidth(startWidth + delta);
+                        this.applyRequirementsViewPreferences();
+                    };
+                    const onUp = (upEvent) => {
+                        splitter.releasePointerCapture(upEvent.pointerId);
+                        splitter.removeEventListener('pointermove', onMove);
+                        splitter.removeEventListener('pointerup', onUp);
+                        splitter.removeEventListener('pointercancel', onUp);
+                        this.saveRequirementsViewPreferences();
+                    };
+
+                    splitter.addEventListener('pointermove', onMove);
+                    splitter.addEventListener('pointerup', onUp);
+                    splitter.addEventListener('pointercancel', onUp);
+                });
+
+                splitter.addEventListener('dblclick', () => {
+                    this.requirementsViewPreferences.listWidth = DEFAULT_REQUIREMENTS_VIEW_PREFERENCES.listWidth;
+                    this.applyRequirementsViewPreferences();
+                    this.saveRequirementsViewPreferences();
+                });
+            }
+
+            this.applyRequirementsViewPreferences();
         }
 
         /**
@@ -490,6 +755,29 @@ export class PSPFExplorer {
 
         handleDelegatedAction(action, target, event) {
             switch (action) {
+                case 'close-modal': {
+                    const closeModalId = target.dataset.modalId;
+                    const closeModalEl = (closeModalId && document.getElementById(closeModalId)) || target.closest('.modal');
+                    if (!closeModalEl) break;
+
+                    // Welcome modal sets the "seen" flag when closed.
+                    if (closeModalEl.id === 'welcomeModal') {
+                        this.hideWelcomeModal();
+                        break;
+                    }
+
+                    // Dynamically-created modals should be removed to ensure listener cleanup.
+                    if (this.activeModals && this.activeModals.has(closeModalEl)) {
+                        closeModalEl.remove();
+                        break;
+                    }
+
+                    this.closeModal(closeModalEl);
+                    this.editingProject = null;
+                    this.editingRisk = null;
+                    this.editingIncident = null;
+                    break;
+                }
                 // Domain actions
                 case 'view-domain':
                     const domainId = target.dataset.domainId;
@@ -706,7 +994,7 @@ export class PSPFExplorer {
             }
             const modal = document.getElementById('welcomeModal');
             if (modal) {
-                modal.style.display = 'block';
+                this.openModal(modal, { initialFocusSelector: '#closeWelcome', closeOnBackdrop: false });
             }
         }
 
@@ -716,7 +1004,7 @@ export class PSPFExplorer {
             }
             const modal = document.getElementById('welcomeModal');
             if (modal) {
-                modal.style.display = 'none';
+                this.closeModal(modal);
                 if (this.storageAvailable) {
                     localStorage.setItem('pspf_welcome_seen', 'true');
                 }
@@ -1609,11 +1897,12 @@ export class PSPFExplorer {
             }
 
             const nextAction = this.getRequirementNextActions(reqId)[0];
-            const hint = nextAction ? `
+            const hint = (this.requirementsViewPreferences?.showHints !== false && nextAction) ? `
                 <p class="requirement-hint"><span class="hint-icon">${nextAction.icon}</span>${this.escapeHtml(nextAction.text)}</p>
             ` : '';
 
-            const metaMarkup = (tagPills || extraTags || indicators.length)
+            const allowMeta = this.requirementsViewPreferences?.showMeta !== false;
+            const metaMarkup = allowMeta && (tagPills || extraTags || indicators.length)
                 ? `<div class="requirement-meta">${tagPills}${extraTags}${indicators.join('')}</div>`
                 : '';
 
@@ -1649,6 +1938,11 @@ export class PSPFExplorer {
             const activeSidebarItem = document.querySelector(`[data-req="${reqId}"]`);
             if (activeSidebarItem) {
                 activeSidebarItem.classList.add('active');
+                try {
+                    activeSidebarItem.scrollIntoView({ block: 'nearest' });
+                } catch {
+                    // ignore
+                }
             }
 
             // Get linked projects
@@ -3292,7 +3586,9 @@ export class PSPFExplorer {
                 form.reset();
             }
 
-            modal.style.display = 'block';
+            if (modal) {
+                this.openModal(modal, { initialFocusSelector: '#projectName' });
+            }
         }
 
         handleProjectForm(e) {
@@ -3349,12 +3645,258 @@ export class PSPFExplorer {
         // Modal Management
         hideModal(modalId) {
             const modal = document.getElementById(modalId);
-            if (modal) {
-                modal.style.display = 'none';
-            }
+            if (modal) this.closeModal(modal);
             this.editingProject = null;
             this.editingRisk = null;
             this.editingIncident = null;
+        }
+
+        getFocusableElements(container) {
+            if (!container) return [];
+            const selectors = [
+                'a[href]',
+                'area[href]',
+                'button:not([disabled])',
+                'input:not([disabled]):not([type="hidden"])',
+                'select:not([disabled])',
+                'textarea:not([disabled])',
+                '[tabindex]:not([tabindex="-1"])',
+                '[contenteditable="true"]'
+            ];
+            const nodes = Array.from(container.querySelectorAll(selectors.join(',')));
+            return nodes.filter(node => {
+                const style = window.getComputedStyle(node);
+                if (style.visibility === 'hidden' || style.display === 'none') return false;
+                return node.getClientRects().length > 0;
+            });
+        }
+
+        ensureModalAria(modal) {
+            if (!modal || typeof document === 'undefined') return;
+            if (!modal.id) {
+                this._modalIdSeed += 1;
+                modal.id = `modal-${this._modalIdSeed}`;
+            }
+            if (!modal.hasAttribute('role')) modal.setAttribute('role', 'dialog');
+            if (!modal.hasAttribute('aria-modal')) modal.setAttribute('aria-modal', 'true');
+            if (!modal.hasAttribute('aria-hidden')) modal.setAttribute('aria-hidden', 'true');
+
+            const content = modal.querySelector('.modal-content');
+            if (content && !content.hasAttribute('tabindex')) {
+                content.setAttribute('tabindex', '-1');
+            }
+
+            if (!modal.hasAttribute('aria-labelledby')) {
+                const heading = content?.querySelector('h1, h2, h3, h4, h5, h6');
+                if (heading) {
+                    if (!heading.id) {
+                        heading.id = `${modal.id}-title`;
+                    }
+                    modal.setAttribute('aria-labelledby', heading.id);
+                }
+            }
+        }
+
+        appendAriaDescribedBy(modal, id) {
+            if (!modal || !id) return;
+            const current = (modal.getAttribute('aria-describedby') || '').trim();
+            const tokens = current ? current.split(/\s+/).filter(Boolean) : [];
+            if (!tokens.includes(id)) tokens.push(id);
+            if (tokens.length) {
+                modal.setAttribute('aria-describedby', tokens.join(' '));
+            }
+        }
+
+        setBackgroundAriaHidden(hidden) {
+            const targets = [document.querySelector('header'), document.querySelector('main'), document.querySelector('footer')];
+            targets.forEach(el => {
+                if (!el) return;
+                if (hidden) el.setAttribute('aria-hidden', 'true');
+                else el.removeAttribute('aria-hidden');
+            });
+        }
+
+        openModal(modal, options = {}) {
+            if (!modal || typeof document === 'undefined') return;
+
+            const {
+                initialFocusSelector,
+                closeOnBackdrop = true,
+                closeOnEscape = true
+            } = options;
+
+            // If already open via our state tracking, do nothing.
+            if (this._modalState.has(modal)) return;
+
+            this.ensureModalAria(modal);
+
+            const previouslyFocused = document.activeElement;
+            const content = modal.querySelector('.modal-content');
+
+            const trapTabKey = (event) => {
+                if (event.key !== 'Tab') return;
+                const focusables = this.getFocusableElements(modal);
+                if (focusables.length === 0) {
+                    event.preventDefault();
+                    content?.focus({ preventScroll: true });
+                    return;
+                }
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                const active = document.activeElement;
+
+                if (event.shiftKey) {
+                    if (active === first || active === modal) {
+                        event.preventDefault();
+                        last.focus({ preventScroll: true });
+                    }
+                } else {
+                    if (active === last) {
+                        event.preventDefault();
+                        first.focus({ preventScroll: true });
+                    }
+                }
+            };
+
+            const onKeyDown = (event) => {
+                if (event.key === 'Escape' && closeOnEscape) {
+                    event.preventDefault();
+                    this.closeModal(modal);
+                    return;
+                }
+                trapTabKey(event);
+            };
+
+            const onMouseDown = (event) => {
+                if (!closeOnBackdrop) return;
+                if (event.target === modal) {
+                    this.closeModal(modal);
+                }
+            };
+
+            this._modalState.set(modal, {
+                previouslyFocused,
+                onKeyDown,
+                onMouseDown
+            });
+
+            // Page-level state (scroll lock + hide background from SR)
+            this._openModalCount += 1;
+            if (this._openModalCount === 1) {
+                this._bodyOverflowBeforeModal = document.body.style.overflow;
+                document.body.style.overflow = 'hidden';
+                this.setBackgroundAriaHidden(true);
+            }
+
+            modal.style.display = 'block';
+            modal.setAttribute('aria-hidden', 'false');
+            modal.addEventListener('keydown', onKeyDown);
+            modal.addEventListener('mousedown', onMouseDown);
+
+            // Focus the most appropriate element once visible
+            requestAnimationFrame(() => {
+                const initial = initialFocusSelector ? modal.querySelector(initialFocusSelector) : null;
+                const focusables = this.getFocusableElements(modal);
+                (initial || focusables[0] || content || modal).focus({ preventScroll: true });
+            });
+        }
+
+        closeModal(modal) {
+            if (!modal || typeof document === 'undefined') return;
+
+            const state = this._modalState.get(modal);
+
+            // Always hide, even if we didn't open it (keeps backwards compatibility).
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+
+            if (state) {
+                modal.removeEventListener('keydown', state.onKeyDown);
+                modal.removeEventListener('mousedown', state.onMouseDown);
+                this._modalState.delete(modal);
+
+                this._openModalCount = Math.max(0, this._openModalCount - 1);
+                if (this._openModalCount === 0) {
+                    document.body.style.overflow = this._bodyOverflowBeforeModal || '';
+                    this._bodyOverflowBeforeModal = null;
+                    this.setBackgroundAriaHidden(false);
+                }
+
+                if (state.previouslyFocused && typeof state.previouslyFocused.focus === 'function') {
+                    // Only restore if still in DOM
+                    if (document.contains(state.previouslyFocused)) {
+                        requestAnimationFrame(() => state.previouslyFocused.focus({ preventScroll: true }));
+                    }
+                }
+            }
+        }
+
+        createModal(content, options = {}) {
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            if (options.id) modal.id = options.id;
+            modal.innerHTML = content;
+
+            this.ensureModalAria(modal);
+
+            // Ensure dynamically-created modals have an explicit close button.
+            const modalContent = modal.querySelector('.modal-content') || modal;
+            if (modalContent && !modalContent.querySelector('.modal-close')) {
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'modal-close';
+                closeBtn.setAttribute('aria-label', 'Close dialog');
+                closeBtn.setAttribute('data-action', 'close-modal');
+                closeBtn.setAttribute('data-modal-id', modal.id);
+                closeBtn.textContent = '×';
+
+                const heading = modalContent.querySelector('h1, h2, h3, h4, h5, h6');
+                if (heading && heading.parentElement === modalContent) {
+                    const header = document.createElement('div');
+                    header.className = 'modal-header';
+                    modalContent.insertBefore(header, heading);
+                    header.appendChild(heading);
+                    header.appendChild(closeBtn);
+                } else {
+                    modalContent.insertBefore(closeBtn, modalContent.firstChild);
+                }
+            }
+
+            // Provide a consistent SR hint for keyboard users.
+            const hintId = `${modal.id}-hint`;
+            if (!modal.querySelector(`#${CSS.escape(hintId)}`)) {
+                const hint = document.createElement('p');
+                hint.id = hintId;
+                hint.className = 'visually-hidden';
+                hint.textContent = 'Press Escape to close this dialog.';
+                modalContent.insertBefore(hint, modalContent.firstChild);
+                this.appendAriaDescribedBy(modal, hintId);
+            }
+
+            // Track event listeners for cleanup
+            modal._eventListeners = [];
+            modal.addTrackedListener = (element, event, handler) => {
+                if (!element) return;
+                element.addEventListener(event, handler);
+                modal._eventListeners.push({ element, event, handler });
+            };
+
+            const originalRemove = modal.remove.bind(modal);
+            modal.remove = () => {
+                modal._eventListeners.forEach(({ element, event, handler }) => {
+                    element.removeEventListener(event, handler);
+                });
+                modal._eventListeners = [];
+                this.closeModal(modal);
+                this.activeModals.delete(modal);
+                originalRemove();
+            };
+
+            document.body.appendChild(modal);
+            this.activeModals.add(modal);
+            this.openModal(modal, options);
+
+            return modal;
         }
 
         // Risk Management CRUD Operations
@@ -3385,7 +3927,9 @@ export class PSPFExplorer {
                 form.reset();
             }
 
-            modal.style.display = 'block';
+            if (modal) {
+                this.openModal(modal, { initialFocusSelector: '#riskName' });
+            }
         }
 
         handleRiskForm(e) {
@@ -3574,7 +4118,7 @@ export class PSPFExplorer {
                 }
             }
 
-            modal.style.display = 'block';
+            this.openModal(modal, { initialFocusSelector: '#incidentName' });
         }
 
         saveIncident() {
@@ -4073,7 +4617,7 @@ export class PSPFExplorer {
                 this.hideModal('linkRequirementsModal');
             };
 
-            modal.style.display = 'block';
+            this.openModal(modal, { initialFocusSelector: '#requirementsSearch' });
         }
 
         unlinkRequirementFromProject(reqId) {
@@ -5086,11 +5630,20 @@ export class PSPFExplorer {
                 });
             }
 
+            const query = (this.requirementsSearchQuery || '').trim().toLowerCase();
+            if (query) {
+                requirementIds = requirementIds.filter(reqId => {
+                    const req = this.requirements[reqId];
+                    const title = (req?.title || '').toLowerCase();
+                    return reqId.toLowerCase().includes(query) || title.includes(query);
+                });
+            }
+
             if (!requirementIds.length) {
                 requirementsList.innerHTML = `
                     <div class="empty-state">
-                        <h4>No requirements match these tags</h4>
-                        <p>Clear the tag filter to view all requirements in this domain.</p>
+                        <h4>No requirements match</h4>
+                        <p>Try clearing tags or adjusting the search box.</p>
                     </div>
                 `;
                 return;
@@ -5351,6 +5904,18 @@ export class PSPFExplorer {
         saveProgressHistory() {
             if (!this.storageAvailable) return;
             localStorage.setItem('pspf_progress_history', JSON.stringify(this.progressHistory));
+        }
+
+        writeStorage(key, value) {
+            if (!this.storageAvailable) {
+                return;
+            }
+
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (error) {
+                console.warn(`Failed to write storage key "${key}":`, error);
+            }
         }
 
         readStorage(key, fallback) {
