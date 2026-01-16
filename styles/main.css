@@ -863,6 +863,39 @@ h1, h2, h3, h4, h5, h6,
     display: block;
 }
 
+/* Compact tag filters in requirements list so the requirement list stays the focus */
+.requirements-list .tag-filters {
+    margin: 0.75rem 0;
+    padding: 0.75rem;
+}
+
+.requirements-list .tag-filters h5 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.requirements-list .tag-filters-hint {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+.requirements-list .tag-filters-body {
+    max-height: 7.5rem;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.requirements-list .tag-selector {
+    gap: 6px;
+    margin-bottom: 0;
+}
+
+.requirements-list .tag-option {
+    padding: 4px 10px;
+    font-size: 0.9rem;
+}
+
 .tag-management-area {
     margin: 16px 0;
     padding: 12px;

@@ -125,7 +125,7 @@ export class PSPFExplorer {
             this.editingRisk = null;
             this.editingIncident = null;
             this.isDomainGridCollapsed = false;
-            this.isTagFiltersCollapsed = false;
+            this.isTagFiltersCollapsed = true;
             this.currentRequirementId = null;
             this.requirementDetailMode = this.readStorage(REQUIREMENT_DETAIL_MODE_KEY, 'summary');
             if (!['summary', 'control'].includes(this.requirementDetailMode)) {
