@@ -33,6 +33,8 @@ const MY_WORK_USER_NAME_KEY = 'pspf_mywork_user_name';
 const MY_WORK_FILTERS_KEY = 'pspf_mywork_tag_filters';
 const REQUIREMENT_DETAIL_MODE_KEY = 'pspf_requirement_detail_mode';
 const REQUIREMENTS_VIEW_PREFERENCES_KEY = 'pspf_requirements_view_preferences';
+const TREND_WATCH_DOMAIN_KEY = 'pspf_trend_watch_domain';
+const TREND_WATCH_DAYS_KEY = 'pspf_trend_watch_days';
 
 const DEFAULT_REQUIREMENTS_VIEW_PREFERENCES = Object.freeze({
     density: 'compact',
@@ -193,9 +195,27 @@ export class PSPFExplorer {
             const showMeta = pref.showMeta !== false;
             const showHints = pref.showHints !== false;
             const listWidthRaw = Number(pref.listWidth);
-            const listWidth = Number.isFinite(listWidthRaw)
+            let listWidth = Number.isFinite(listWidthRaw)
                 ? Math.min(640, Math.max(280, Math.round(listWidthRaw)))
                 : DEFAULT_REQUIREMENTS_VIEW_PREFERENCES.listWidth;
+
+            // Keep the details pane usable: on wide layouts, cap the list width based on viewport.
+            // (On <= 1000px layouts the CSS stacks panes, so we skip clamping.)
+            const viewportWidth = (typeof window !== 'undefined' && Number.isFinite(window.innerWidth))
+                ? window.innerWidth
+                : null;
+            if (viewportWidth && viewportWidth > 1000) {
+                const estimatedRem = 16;
+                const gap = 1 * estimatedRem; // grid gap is 1rem
+                const splitter = 10;
+                const detailsMin = 420;
+                const sectionPadding = 2 * 20; // .requirements-section pads 1.25rem each side (~20px)
+                const reserve = detailsMin + splitter + (2 * gap) + sectionPadding;
+                const maxListWidth = Math.max(280, Math.min(640, Math.floor(viewportWidth - reserve)));
+                if (listWidth > maxListWidth) {
+                    listWidth = maxListWidth;
+                }
+            }
 
             this.requirementsViewPreferences = { density, textSize, showMeta, showHints, listWidth };
         }
@@ -237,6 +257,13 @@ export class PSPFExplorer {
             if (showHintsBox) showHintsBox.checked = !!showHints;
             const widthRange = document.getElementById('requirementsListWidth');
             if (widthRange) widthRange.value = String(listWidth);
+
+            // If sanitization adjusted the width (e.g., viewport clamp), persist it.
+            const stored = this.readStorage(REQUIREMENTS_VIEW_PREFERENCES_KEY, null);
+            const storedWidth = stored && typeof stored === 'object' ? Number(stored.listWidth) : Number.NaN;
+            if (!Number.isFinite(storedWidth) || Math.round(storedWidth) !== Math.round(listWidth)) {
+                this.writeStorage(REQUIREMENTS_VIEW_PREFERENCES_KEY, this.requirementsViewPreferences);
+            }
         }
 
         setupRequirementsUXControls() {
@@ -2275,15 +2302,22 @@ export class PSPFExplorer {
             const domain = this.domains.find(d => d.id === domainId);
             if (!domain) return;
             const requirements = Array.isArray(domain.requirements) ? domain.requirements : [];
-            const met = requirements.filter(reqId => {
-                const status = this.compliance[reqId]?.status;
-                return status === 'yes' || status === 'na';
-            }).length;
+            const breakdown = { yes: 0, partial: 0, no: 0, na: 0, 'not-set': 0 };
+            requirements.forEach(reqId => {
+                const status = this.compliance[reqId]?.status || 'not-set';
+                const key = Object.prototype.hasOwnProperty.call(breakdown, status) ? status : 'not-set';
+                breakdown[key] += 1;
+            });
+
+            const met = breakdown.yes + breakdown.na;
             const snapshot = {
                 timestamp: new Date().toISOString(),
                 met,
                 total: requirements.length,
-                percentage: requirements.length ? Math.round((met / requirements.length) * 100) : 0
+                percentage: requirements.length ? Math.round((met / requirements.length) * 100) : 0,
+                breakdown,
+                blockers: breakdown.no + breakdown['not-set'],
+                partial: breakdown.partial
             };
             const history = Array.isArray(this.progressHistory[domainId]) ? this.progressHistory[domainId] : [];
             const last = history[history.length - 1];
@@ -2891,6 +2925,7 @@ export class PSPFExplorer {
                     grid.innerHTML = cards || '<p class="history-empty-msg">No progress history yet. Update a requirement status to start tracking the trend.</p>';
                 }
                 this.renderRecentUpdatesList();
+                this.renderTrendWatchSection();
             }
 
             renderDomainHistoryCard(domain) {
@@ -2912,6 +2947,11 @@ export class PSPFExplorer {
                 const trendClass = delta > 0 ? 'trend-up' : delta < 0 ? 'trend-down' : 'trend-neutral';
                 const deltaText = previous ? `${delta > 0 ? '+' : ''}${delta}% since last update` : 'Baseline snapshot';
                 const markers = history.slice(-4).map(entry => `<span class="history-dot" title="${this.formatTimestamp(entry.timestamp)}">${entry.percentage}%</span>`).join('');
+                const breakdown = latest?.breakdown && typeof latest.breakdown === 'object' ? latest.breakdown : null;
+                const hasBreakdown = !!breakdown;
+                const notMet = hasBreakdown ? (breakdown.no || 0) : null;
+                const riskManaged = hasBreakdown ? (breakdown.partial || 0) : null;
+                const notSet = hasBreakdown ? (breakdown['not-set'] || 0) : null;
                 return `
                     <div class="history-card">
                         <div class="history-card-header">
@@ -2924,11 +2964,229 @@ export class PSPFExplorer {
                         <div class="history-dots">${markers}</div>
                         <div class="history-summary">
                             <span><strong>${latest.met}</strong> met</span>
+                            ${hasBreakdown ? `<span><strong>${riskManaged}</strong> risk managed</span>` : ''}
+                            ${hasBreakdown ? `<span><strong>${notMet}</strong> not met</span>` : ''}
+                            ${hasBreakdown ? `<span><strong>${notSet}</strong> not set</span>` : ''}
                             <span><strong>${latest.total}</strong> total</span>
                             <span>${latest.percentage}% compliance</span>
                         </div>
                     </div>
                 `;
+            }
+
+            getStatusScore(status) {
+                switch (status) {
+                    case 'yes':
+                    case 'na':
+                        return 3;
+                    case 'partial':
+                        return 2;
+                    case 'no':
+                        return 1;
+                    default:
+                        return 0;
+                }
+            }
+
+            normalizeStatus(status) {
+                return ['not-set', 'yes', 'no', 'partial', 'na'].includes(status) ? status : 'not-set';
+            }
+
+            listRequirementIdsForDomain(domainId) {
+                if (!domainId) {
+                    return Object.keys(this.requirements || {});
+                }
+                const domain = this.domains.find(d => d.id === domainId);
+                if (!domain) return [];
+                return Array.isArray(domain.requirements) ? domain.requirements.slice() : [];
+            }
+
+            computeTrendWatchData({ domainId = '', days = 30, now = new Date() } = {}) {
+                const nowDate = now instanceof Date ? now : new Date(now);
+                const nowMs = nowDate.getTime();
+                const daysMs = Math.max(1, Number(days) || 30) * 24 * 60 * 60 * 1000;
+                const cutoffMs = nowMs - daysMs;
+
+                const requirementIds = this.listRequirementIdsForDomain(domainId);
+                const totals = { yes: 0, partial: 0, no: 0, na: 0, 'not-set': 0 };
+                const items = [];
+
+                requirementIds.forEach(reqId => {
+                    const requirement = this.requirements[reqId];
+                    if (!requirement) return;
+                    const domainTitle = this.domains.find(d => d.id === requirement.domainId)?.title || 'Unknown domain';
+                    const compliance = this.compliance[reqId] || {};
+                    const currentStatus = this.normalizeStatus(compliance.status || 'not-set');
+                    if (Object.prototype.hasOwnProperty.call(totals, currentStatus)) {
+                        totals[currentStatus] += 1;
+                    }
+
+                    if (!(currentStatus === 'no' || currentStatus === 'partial')) {
+                        return;
+                    }
+
+                    const history = Array.isArray(compliance.history) ? compliance.history : [];
+                    const lastEntry = history.length ? history[history.length - 1] : null;
+                    const prevEntry = history.length > 1 ? history[history.length - 2] : null;
+                    const lastChangedAt = lastEntry?.timestamp || null;
+                    const lastChangedMs = lastChangedAt ? new Date(lastChangedAt).getTime() : Number.NaN;
+                    const hasValidLastChanged = Number.isFinite(lastChangedMs);
+                    const daysSinceChange = hasValidLastChanged ? Math.floor((nowMs - lastChangedMs) / (24 * 60 * 60 * 1000)) : null;
+                    const changedWithinWindow = hasValidLastChanged ? lastChangedMs >= cutoffMs : false;
+
+                    const previousStatus = prevEntry?.status ? this.normalizeStatus(prevEntry.status) : null;
+                    const prevScore = previousStatus ? this.getStatusScore(previousStatus) : null;
+                    const curScore = this.getStatusScore(currentStatus);
+
+                    let direction = 'flat';
+                    if (prevScore !== null) {
+                        if (curScore > prevScore) direction = 'up';
+                        if (curScore < prevScore) direction = 'down';
+                    }
+
+                    const stuck = !hasValidLastChanged || nowMs - lastChangedMs >= daysMs;
+
+                    items.push({
+                        reqId,
+                        title: requirement.title || reqId,
+                        domainId: requirement.domainId,
+                        domainTitle,
+                        currentStatus,
+                        previousStatus,
+                        direction,
+                        lastChangedAt,
+                        daysSinceChange,
+                        changedWithinWindow,
+                        stuck
+                    });
+                });
+
+                const improving = items.filter(item => item.direction === 'up' && item.changedWithinWindow);
+                const regressing = items.filter(item => item.direction === 'down' && item.changedWithinWindow);
+                const stuckItems = items.filter(item => item.stuck);
+
+                const sortByAgeDesc = (a, b) => {
+                    const aAge = typeof a.daysSinceChange === 'number' ? a.daysSinceChange : 99999;
+                    const bAge = typeof b.daysSinceChange === 'number' ? b.daysSinceChange : 99999;
+                    return bAge - aAge;
+                };
+                stuckItems.sort(sortByAgeDesc);
+
+                const sortByRecent = (a, b) => {
+                    const aMs = a.lastChangedAt ? new Date(a.lastChangedAt).getTime() : 0;
+                    const bMs = b.lastChangedAt ? new Date(b.lastChangedAt).getTime() : 0;
+                    return bMs - aMs;
+                };
+
+                return {
+                    totals,
+                    items,
+                    stuck: stuckItems,
+                    improving: improving.sort(sortByRecent),
+                    regressing: regressing.sort(sortByRecent)
+                };
+            }
+
+            renderTrendWatchSection() {
+                const card = document.getElementById('trendWatchCard');
+                if (!card) return;
+
+                const domainSelect = document.getElementById('trendWatchDomainSelect');
+                const thresholdSelect = document.getElementById('trendWatchThreshold');
+                const metricsEl = document.getElementById('trendWatchMetrics');
+                const listEl = document.getElementById('trendWatchList');
+                if (!domainSelect || !thresholdSelect || !metricsEl || !listEl) return;
+
+                // Populate domain options once.
+                if (!domainSelect.dataset.ready) {
+                    const domainOptions = ['<option value="">All domains</option>']
+                        .concat(this.domains.map(domain => `<option value="${this.escapeHtml(domain.id)}">${this.escapeHtml(domain.title)}</option>`));
+                    domainSelect.innerHTML = domainOptions.join('');
+                    domainSelect.dataset.ready = 'true';
+                }
+
+                const storedDomain = this.readStorage(TREND_WATCH_DOMAIN_KEY, '');
+                const storedDaysRaw = this.readStorage(TREND_WATCH_DAYS_KEY, 30);
+                const storedDays = Number(storedDaysRaw);
+
+                if (!domainSelect.dataset.bound) {
+                    domainSelect.value = typeof storedDomain === 'string' ? storedDomain : '';
+                    if (![...domainSelect.options].some(opt => opt.value === domainSelect.value)) {
+                        domainSelect.value = '';
+                    }
+                    domainSelect.addEventListener('change', () => {
+                        this.writeStorage(TREND_WATCH_DOMAIN_KEY, domainSelect.value || '');
+                        this.renderTrendWatchSection();
+                    });
+                    domainSelect.dataset.bound = 'true';
+                }
+
+                if (!thresholdSelect.dataset.bound) {
+                    if (Number.isFinite(storedDays)) {
+                        const candidate = String(Math.max(1, Math.round(storedDays)));
+                        if ([...thresholdSelect.options].some(opt => opt.value === candidate)) {
+                            thresholdSelect.value = candidate;
+                        }
+                    }
+                    thresholdSelect.addEventListener('change', () => {
+                        const parsed = Number(thresholdSelect.value);
+                        this.writeStorage(TREND_WATCH_DAYS_KEY, Number.isFinite(parsed) ? parsed : 30);
+                        this.renderTrendWatchSection();
+                    });
+                    thresholdSelect.dataset.bound = 'true';
+                }
+
+                const domainId = domainSelect.value || '';
+                const days = Number(thresholdSelect.value) || 30;
+                const data = this.computeTrendWatchData({ domainId, days, now: new Date() });
+
+                const notMetTotal = data.totals.no || 0;
+                const riskManagedTotal = data.totals.partial || 0;
+                const stuckCount = data.stuck.length;
+                const improvingCount = data.improving.length;
+                const regressingCount = data.regressing.length;
+
+                metricsEl.innerHTML = [
+                    `<span class="trend-chip"><strong>${notMetTotal}</strong> not met</span>`,
+                    `<span class="trend-chip"><strong>${riskManagedTotal}</strong> risk managed</span>`,
+                    `<span class="trend-chip trend-neutral"><strong>${stuckCount}</strong> stuck ≥ ${days}d</span>`,
+                    `<span class="trend-chip trend-up"><strong>${improvingCount}</strong> improved (last ${days}d)</span>`,
+                    `<span class="trend-chip trend-down"><strong>${regressingCount}</strong> regressed (last ${days}d)</span>`
+                ].join('');
+
+                const rows = [];
+
+                const pushItem = (item, { flag } = {}) => {
+                    const statusLabel = this.getStatusText(item.currentStatus);
+                    const previousLabel = item.previousStatus ? this.getStatusText(item.previousStatus) : '—';
+                    const ageLabel = typeof item.daysSinceChange === 'number' ? `${item.daysSinceChange}d ago` : 'No change recorded';
+                    const flagMarkup = flag
+                        ? `<span class="trend-flag ${flag}">${flag.replace('flag-', '')}</span>`
+                        : '';
+                    const directionLabel = item.previousStatus ? `${previousLabel} → ${statusLabel}` : statusLabel;
+
+                    rows.push(`
+                        <article class="trend-watch-item" data-action="view-requirement" data-requirement-id="${this.escapeHtml(item.reqId)}" tabindex="0" role="button">
+                            <div>
+                                <p class="trend-watch-title">${this.escapeHtml(item.reqId)} · ${this.escapeHtml(item.title)}</p>
+                                <p class="trend-watch-meta">${this.escapeHtml(item.domainTitle)} · ${this.escapeHtml(directionLabel)} · ${ageLabel}</p>
+                            </div>
+                            <div class="trend-watch-badges">
+                                ${flagMarkup}
+                                <span class="recent-update-status ${item.currentStatus}">${statusLabel}</span>
+                            </div>
+                        </article>
+                    `);
+                };
+
+                // Priority: regressions, then stuck, then recent improvements.
+                data.regressing.slice(0, 6).forEach(item => pushItem(item, { flag: 'flag-regressing' }));
+                data.stuck.slice(0, 8).forEach(item => pushItem(item, { flag: 'flag-stuck' }));
+                data.improving.slice(0, 4).forEach(item => pushItem(item, { flag: 'flag-improving' }));
+
+                listEl.innerHTML = rows.length
+                    ? rows.join('')
+                    : '<p class="empty-history">Nothing to watch right now. Mark some requirements Not Met or Risk Managed to start tracking movement.</p>';
             }
 
             getRecentRequirementUpdates(limit = 6) {

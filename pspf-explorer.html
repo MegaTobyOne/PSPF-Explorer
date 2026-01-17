@@ -466,6 +466,31 @@
                             <p class="empty-history">No updates yet. Change a requirement to begin tracking progress.</p>
                         </div>
                     </div>
+
+                    <div class="trend-watch-card" id="trendWatchCard" aria-live="polite">
+                        <div class="trend-watch-header">
+                            <div>
+                                <h4>Not Met / Risk Managed Trend Watch</h4>
+                                <p>Spot requirements that are improving, regressing, or stuck.</p>
+                            </div>
+                            <div class="trend-watch-controls">
+                                <label for="trendWatchDomainSelect">Domain</label>
+                                <select id="trendWatchDomainSelect" aria-label="Domain selection for trend watch"></select>
+                                <label for="trendWatchThreshold">Stuck threshold</label>
+                                <select id="trendWatchThreshold" aria-label="Age threshold for stuck items">
+                                    <option value="7">7 days</option>
+                                    <option value="14">14 days</option>
+                                    <option value="30" selected>30 days</option>
+                                    <option value="60">60 days</option>
+                                    <option value="90">90 days</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="trend-watch-metrics" id="trendWatchMetrics"></div>
+                        <div class="trend-watch-list" id="trendWatchList">
+                            <p class="empty-history">No trend data yet. Update a requirement status to begin tracking movement.</p>
+                        </div>
+                    </div>
                 </div>
             </section>
 

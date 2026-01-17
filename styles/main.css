@@ -278,9 +278,19 @@ h6 { font-size: var(--font-size-sm); }
 }
 
 /* Requirements Section */
+.requirements-section {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+    box-sizing: border-box;
+}
+
 .requirements-layout {
     display: grid;
-    grid-template-columns: minmax(280px, var(--req-list-width)) 10px minmax(360px, 1fr);
+    grid-template-columns: minmax(280px, min(var(--req-list-width), 48vw)) 10px minmax(420px, 1fr);
     gap: 1rem;
     margin-top: 1.5rem;
     align-items: start;
@@ -3118,6 +3128,163 @@ select:focus-visible {
     background: var(--bg-secondary);
     color: var(--text-muted);
     border-color: var(--border-light);
+}
+
+.trend-watch-card {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.trend-watch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.trend-watch-header h4 {
+    margin: 0;
+    font-size: var(--font-size-large);
+}
+
+.trend-watch-header p {
+    margin: 0.25rem 0 0;
+    font-size: var(--font-size-base);
+    color: var(--text-secondary);
+}
+
+.trend-watch-controls {
+    display: grid;
+    grid-template-columns: auto 1fr auto 1fr;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+    min-width: 320px;
+}
+
+.trend-watch-controls label {
+    font-size: var(--font-size-base);
+    color: var(--text-secondary);
+}
+
+.trend-watch-controls select {
+    padding: 0.4rem 0.5rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.trend-watch-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.trend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    font-size: var(--font-size-base);
+    color: var(--text-secondary);
+}
+
+.trend-chip strong {
+    color: var(--text-primary);
+}
+
+.trend-chip.trend-up {
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.trend-chip.trend-down {
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.trend-chip.trend-neutral {
+    border-color: var(--border-light);
+}
+
+.trend-watch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.trend-watch-item {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    padding: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+}
+
+.trend-watch-item:hover {
+    border-color: var(--border-light);
+}
+
+.trend-watch-title {
+    margin: 0;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+}
+
+.trend-watch-meta {
+    margin: 0.2rem 0 0;
+    font-size: var(--font-size-base);
+    color: var(--text-secondary);
+}
+
+.trend-watch-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.trend-flag {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.trend-flag.flag-stuck {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--danger-color);
+    background: var(--chip-bg-danger);
+}
+
+.trend-flag.flag-improving {
+    border-color: rgba(16, 185, 129, 0.3);
+    color: var(--success-color);
+    background: var(--chip-bg-success);
+}
+
+.trend-flag.flag-regressing {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--danger-color);
+    background: var(--chip-bg-danger);
 }
 
 .requirement-history {
