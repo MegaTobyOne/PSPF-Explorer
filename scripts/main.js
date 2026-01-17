@@ -35,7 +35,7 @@ const REQUIREMENT_DETAIL_MODE_KEY = 'pspf_requirement_detail_mode';
 const REQUIREMENTS_VIEW_PREFERENCES_KEY = 'pspf_requirements_view_preferences';
 
 const DEFAULT_REQUIREMENTS_VIEW_PREFERENCES = Object.freeze({
-    density: 'comfortable',
+    density: 'compact',
     textSize: 'md',
     showMeta: true,
     showHints: true,
@@ -187,7 +187,8 @@ export class PSPFExplorer {
                 ? this.requirementsViewPreferences
                 : { ...DEFAULT_REQUIREMENTS_VIEW_PREFERENCES };
 
-            const density = pref.density === 'compact' ? 'compact' : 'comfortable';
+            const allowedDensities = new Set(['comfortable', 'compact', 'dense']);
+            const density = allowedDensities.has(pref.density) ? pref.density : DEFAULT_REQUIREMENTS_VIEW_PREFERENCES.density;
             const textSize = ['sm', 'md', 'lg'].includes(pref.textSize) ? pref.textSize : 'md';
             const showMeta = pref.showMeta !== false;
             const showHints = pref.showHints !== false;
@@ -1873,51 +1874,15 @@ export class PSPFExplorer {
                 console.warn(`Requirement ${reqId} not found in definitions`);
                 return '';
             }
-            const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
-            const statusText = this.getStatusText(compliance.status);
-            const hasUrl = Boolean(compliance.url);
             const title = this.escapeHtml(requirement.title || '');
             const safeReqId = this.escapeHtml(reqId);
-            const userTags = this.getUserRequirementTags(reqId);
-            const tagPills = userTags.slice(0, 2).map(tagId => {
-                const tag = this.tagDefinitions[tagId];
-                if (!tag) return '';
-                return `<span class="tag-pill" style="border-color:${tag.color};color:${tag.color}">${this.escapeHtml(tag.name)}</span>`;
-            }).join('');
-            const extraTags = userTags.length > 2
-                ? `<span class="tag-pill muted">+${userTags.length - 2}</span>`
-                : '';
-
-            const indicators = [];
-            if (!hasUrl) {
-                indicators.push('<span class="meta-chip warning">Add evidence link</span>');
-            }
-            if (!compliance.comment) {
-                indicators.push('<span class="meta-chip info">Add notes</span>');
-            }
-
-            const nextAction = this.getRequirementNextActions(reqId)[0];
-            const hint = (this.requirementsViewPreferences?.showHints !== false && nextAction) ? `
-                <p class="requirement-hint"><span class="hint-icon">${nextAction.icon}</span>${this.escapeHtml(nextAction.text)}</p>
-            ` : '';
-
-            const allowMeta = this.requirementsViewPreferences?.showMeta !== false;
-            const metaMarkup = allowMeta && (tagPills || extraTags || indicators.length)
-                ? `<div class="requirement-meta">${tagPills}${extraTags}${indicators.join('')}</div>`
-                : '';
 
             return `
                 <div class="requirement-item" data-req="${safeReqId}" data-action="view-requirement" data-requirement-id="${safeReqId}" tabindex="0" role="button" aria-label="${safeReqId} ${title}" title="${title}">
-                    <div class="requirement-info">
-                        <div class="requirement-code-row">
-                            <span class="requirement-code">${safeReqId}</span>
-                            ${hasUrl ? '<span class="url-indicator" title="Has reference link">🔗</span>' : ''}
-                        </div>
-                        <p class="requirement-title">${title}</p>
-                        ${metaMarkup}
-                        ${hint}
+                    <div class="requirement-simple">
+                        <span class="requirement-code">${safeReqId}</span>
+                        <span class="requirement-title">${title}</span>
                     </div>
-                    <span class="requirement-status ${compliance.status}">${statusText}</span>
                 </div>
             `;
         }
@@ -2003,7 +1968,6 @@ export class PSPFExplorer {
                             ${domain ? this.escapeHtml(domain.title) : 'PSPF Requirement'} • ${reqId}
                         </p>
                     </div>
-                    <span class="requirement-status ${compliance.status}">${this.getStatusText(compliance.status)}</span>
                 </div>
                 ${tagsMarkup}
                 <div class="requirement-narrative">
@@ -2013,6 +1977,31 @@ export class PSPFExplorer {
                     </div>
                     <p>${this.escapeHtml(narrativeText || 'No description available yet.')}</p>
                 </div>
+
+                <div class="compliance-status-picker" role="group" aria-label="Compliance status">
+                    <h5>Compliance Status</h5>
+                    <div class="compliance-status-buttons">
+                        ${[
+                            { id: 'not-set', label: 'Not Set' },
+                            { id: 'yes', label: 'Met' },
+                            { id: 'no', label: 'Not Met' },
+                            { id: 'partial', label: 'Risk Managed' },
+                            { id: 'na', label: 'N/A' }
+                        ].map(statusOption => {
+                            const isActive = compliance.status === statusOption.id;
+                            return `
+                                <button type="button"
+                                        class="compliance-status-button ${isActive ? 'active' : ''} status-${statusOption.id}"
+                                        data-status="${statusOption.id}"
+                                        aria-pressed="${isActive}"
+                                        onclick="window.pspfExplorer.updateCompliance('${reqId}', '${statusOption.id}')">
+                                    ${statusOption.label}
+                                </button>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+
                 <div class="requirement-insights">
                     <div class="insight-card">
                         <div class="insight-card-header">
@@ -2037,30 +2026,6 @@ export class PSPFExplorer {
                 ` : ''}
 
                 <div class="compliance-controls">
-                    <div class="compliance-status-picker" role="group" aria-label="Compliance status">
-                        <h5>Compliance Status</h5>
-                        <div class="compliance-status-buttons">
-                            ${[
-                                { id: 'not-set', label: 'Not Set' },
-                                { id: 'yes', label: 'Met' },
-                                { id: 'no', label: 'Not Met' },
-                                { id: 'partial', label: 'Risk Managed' },
-                                { id: 'na', label: 'N/A' }
-                            ].map(statusOption => {
-                                const isActive = compliance.status === statusOption.id;
-                                return `
-                                    <button type="button"
-                                            class="compliance-status-button ${isActive ? 'active' : ''} status-${statusOption.id}"
-                                            data-status="${statusOption.id}"
-                                            aria-pressed="${isActive}"
-                                            onclick="window.pspfExplorer.updateCompliance('${reqId}', '${statusOption.id}')">
-                                        ${statusOption.label}
-                                    </button>
-                                `;
-                            }).join('')}
-                        </div>
-                    </div>
-                    
                     <h5>Reference URL</h5>
                     <input type="url" class="compliance-url" data-req="${reqId}" 
                            placeholder="https://example.com/policy-document" 

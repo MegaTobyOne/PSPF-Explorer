@@ -239,6 +239,7 @@
                                         <select id="requirementsDensity" class="form-control form-control-sm">
                                             <option value="comfortable">Comfortable</option>
                                             <option value="compact">Compact</option>
+                                            <option value="dense">Dense</option>
                                         </select>
                                     </div>
                                     <div class="view-setting">
@@ -266,25 +267,6 @@
                                         <input id="requirementsListWidth" type="range" min="280" max="640" step="10" value="380">
                                     </div>
                                     <button id="requirementsResetView" class="btn btn-link btn-small" type="button">Reset</button>
-                                </div>
-                            </div>
-                            <div class="tag-filters" id="tagFiltersContainer">
-                                <div class="tag-filters-header">
-                                    <div class="tag-filters-title">
-                                        <h5>Filter by Tags <span class="clear-tags" data-action="clear-tags" tabindex="0" role="button">Clear</span></h5>
-                                        <p class="tag-filters-hint">Toggle the panel when you need more room for the requirements list.</p>
-                                    </div>
-                                    <button id="toggleTagFiltersBtn" class="btn btn-link" type="button" aria-controls="tagFiltersBody" aria-expanded="true">
-                                        Hide filters
-                                    </button>
-                                </div>
-                                <div class="tag-filters-body" id="tagFiltersBody">
-                                    <div class="tag-selector" id="tagFilters">
-                                        <!-- Tag filters will be populated here -->
-                                    </div>
-                                </div>
-                                <div class="tag-filters-collapsed-msg" id="tagFiltersCollapsedMessage" role="status" aria-live="polite">
-                                    Tag filters are hidden to maximize space. Show them again anytime using the toggle above.
                                 </div>
                             </div>
                             <div class="requirements-sidebar" id="requirementsList">
