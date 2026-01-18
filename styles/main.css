@@ -277,20 +277,27 @@ h6 { font-size: var(--font-size-sm); }
     margin-right: auto;
 }
 
-/* Requirements Section */
+/* Requirements Section 
+ * Layout approach: Stay within .container bounds (max-width: 1440px) for predictable,
+ * maintainable layout. The requirements section uses a 3-column grid:
+ * - Column 1: Requirements list (user-adjustable via --req-list-width, default 380px)
+ * - Column 2: Draggable splitter (10px)
+ * - Column 3: Details pane (flexes to fill remaining space with 1fr)
+ * 
+ * This ensures the details pane always gets approximately 2/3 of the available width
+ * while keeping the layout contained and responsive.
+ */
 .requirements-section {
-    width: 100vw;
-    max-width: 100vw;
-    margin-left: calc(50% - 50vw);
-    margin-right: calc(50% - 50vw);
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
+    /* Stay within container bounds for predictable layout */
+    width: 100%;
     box-sizing: border-box;
 }
 
 .requirements-layout {
     display: grid;
-    grid-template-columns: minmax(280px, min(var(--req-list-width), 48vw)) 10px minmax(420px, 1fr);
+    /* Grid: Requirements list (~1/3), splitter (10px), Detail pane (~2/3) */
+    /* Use var(--req-list-width) for user-adjustable width, but ensure detail pane gets remaining space */
+    grid-template-columns: minmax(280px, var(--req-list-width)) 10px minmax(420px, 1fr);
     gap: 1rem;
     margin-top: 1.5rem;
     align-items: start;
