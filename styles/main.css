@@ -121,6 +121,16 @@ body {
     font-size: calc(var(--font-size-base) * var(--ui-font-scale));
 }
 
+.site-notice {
+    width: 100%;
+    padding: 0.45rem 1rem;
+    text-align: center;
+    font-size: var(--font-size-xs);
+    color: var(--warning-color);
+    background: rgba(245, 158, 11, 0.12);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+}
+
 /* Typography hierarchy (keep "large" for emphasis only) */
 h1 { font-size: var(--font-size-xl); }
 h2 { font-size: var(--font-size-xl); }
@@ -5446,6 +5456,25 @@ select:focus-visible {
     margin: 0;
     font-size: var(--font-size-base);
     color: var(--text-secondary);
+}
+
+.welcome-preference {
+    margin: 0 1.5rem 1.25rem;
+}
+
+.welcome-preference label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--text-secondary);
+    font-size: var(--font-size-base);
+    cursor: pointer;
+}
+
+.welcome-preference input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--primary-color);
 }
 
 /* Toast Notification System */

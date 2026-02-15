@@ -13,7 +13,7 @@
     <meta name="description" content="PSPF Explorer 2025 - Interactive Australian Government Protective Security Policy Framework compliance tracking and management tool">
     <meta name="author" content="PSPF Explorer">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#667eea">
+    <meta name="theme-color" content="#6f88de">
     <title>PSPF Explorer 2025</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles/main.css">
@@ -22,6 +22,10 @@
     
 </head>
 <body>
+    <div class="site-notice" role="note" aria-label="Maintenance notice">
+        This page is not being validated or updated in 2026. Development effort has moved to an alternative platform, and this page remains available for educational purposes.
+    </div>
+
     <!-- Welcome Modal for First-Time Users -->
     <div id="welcomeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle" aria-describedby="welcomeModalDesc" aria-hidden="true">
         <div class="modal-content" tabindex="-1">
@@ -29,28 +33,28 @@
                 <h2 id="welcomeModalTitle">Welcome to PSPF Explorer 2025</h2>
                 <button type="button" class="modal-close" data-action="close-modal" data-modal-id="welcomeModal" aria-label="Close dialog">×</button>
             </div>
-            <p id="welcomeModalDesc">Navigate the Australian Government Protective Security Policy Framework 2025 with this interactive compliance dashboard!</p>
+            <p id="welcomeModalDesc">Explore PSPF 2025 requirements, track compliance progress, and capture evidence in one place.</p>
             
             <div class="welcome-steps">
                 <div class="step">
                     <div class="step-number">1</div>
                     <div class="step-content">
-                        <h3>Six Security Domains</h3>
-                        <p>Explore Governance, Risk, Information, Technology, Personnel, and Physical security domains with 2025 updates.</p>
+                        <h3>Explore the Six Domains</h3>
+                        <p>Browse Governance, Risk, Information, Technology, Personnel, and Physical requirements.</p>
                     </div>
                 </div>
                 <div class="step">
                     <div class="step-number">2</div>
                     <div class="step-content">
-                        <h3>Track 2025 Requirements</h3>
-                        <p>Monitor compliance with latest requirements including Zero Trust, post-quantum cryptography, and AI governance.</p>
+                        <h3>Track Requirement Status</h3>
+                        <p>Set status, attach references, and add practical notes for each requirement.</p>
                     </div>
                 </div>
                 <div class="step">
                     <div class="step-number">3</div>
                     <div class="step-content">
-                        <h3>Real-time Compliance</h3>
-                        <p>Track your organization's security posture with interactive dashboards and progress indicators.</p>
+                        <h3>Review Progress</h3>
+                        <p>Use dashboards to see overall posture and focus on areas needing attention.</p>
                     </div>
                 </div>
             </div>
@@ -58,16 +62,22 @@
             <div class="pulse-demo">
                 <h4>Key 2025 Updates:</h4>
                 <ul class="welcome-list">
-                    <li>🔒 Mandatory CISO appointment with Audit Committee reporting</li>
-                    <li>🛡️ Zero Trust cybersecurity culture requirements</li>
-                    <li>🔐 Post-quantum cryptography for new systems</li>
-                    <li>🤖 Enhanced AI and quantum technology governance</li>
-                    <li>👤 Stricter eligibility waiver and clearance protocols</li>
+                    <li>Mandatory CISO appointment and Audit Committee reporting</li>
+                    <li>Zero Trust security culture expectations</li>
+                    <li>Post-quantum cryptography requirements for new systems</li>
+                    <li>Updated governance for AI and emerging technologies</li>
                 </ul>
             </div>
             
             <div class="welcome-privacy-note">
-                <p>💾 <strong>Your data stays private</strong> - All information is stored locally in your browser. Nothing is sent to any server.</p>
+                <p><strong>Your data stays private.</strong> Information is stored locally in your browser and is not sent to a server.</p>
+            </div>
+
+            <div class="welcome-preference">
+                <label for="welcomeSkip">
+                    <input type="checkbox" id="welcomeSkip" name="welcomeSkip" checked>
+                    Don't show this welcome again
+                </label>
             </div>
             
             <button id="closeWelcome" class="btn btn-primary">Start Exploring</button>
@@ -217,6 +227,7 @@
                             aria-orientation="vertical"
                             aria-label="Resize requirements list"
                             aria-valuemin="280"
+                            aria-valuenow="380"
                             aria-valuemax="640"
                             tabindex="0"
                         ></div>

@@ -35,6 +35,8 @@ const REQUIREMENT_DETAIL_MODE_KEY = 'pspf_requirement_detail_mode';
 const REQUIREMENTS_VIEW_PREFERENCES_KEY = 'pspf_requirements_view_preferences';
 const TREND_WATCH_DOMAIN_KEY = 'pspf_trend_watch_domain';
 const TREND_WATCH_DAYS_KEY = 'pspf_trend_watch_days';
+const WELCOME_SEEN_KEY = 'pspf_welcome_seen';
+const WELCOME_SKIP_KEY = 'pspf_welcome_skip';
 
 const DEFAULT_REQUIREMENTS_VIEW_PREFERENCES = Object.freeze({
     density: 'compact',
@@ -1010,7 +1012,12 @@ export class PSPFExplorer {
             if (!this.storageAvailable || typeof document === 'undefined') {
                 return;
             }
-            const hasSeenWelcome = localStorage.getItem('pspf_welcome_seen');
+            const skipWelcome = localStorage.getItem(WELCOME_SKIP_KEY) === 'true';
+            if (skipWelcome) {
+                return;
+            }
+
+            const hasSeenWelcome = localStorage.getItem(WELCOME_SEEN_KEY);
             if (!hasSeenWelcome) {
                 this.showWelcomeModal();
             }
@@ -1022,6 +1029,11 @@ export class PSPFExplorer {
             }
             const modal = document.getElementById('welcomeModal');
             if (modal) {
+                const skipCheckbox = document.getElementById('welcomeSkip');
+                if (skipCheckbox && this.storageAvailable) {
+                    const savedSkipValue = localStorage.getItem(WELCOME_SKIP_KEY);
+                    skipCheckbox.checked = savedSkipValue !== 'false';
+                }
                 this.openModal(modal, { initialFocusSelector: '#closeWelcome', closeOnBackdrop: false });
             }
         }
@@ -1034,7 +1046,16 @@ export class PSPFExplorer {
             if (modal) {
                 this.closeModal(modal);
                 if (this.storageAvailable) {
-                    localStorage.setItem('pspf_welcome_seen', 'true');
+                    const skipCheckbox = document.getElementById('welcomeSkip');
+                    const shouldSkip = !!skipCheckbox?.checked;
+
+                    if (shouldSkip) {
+                        localStorage.setItem(WELCOME_SKIP_KEY, 'true');
+                        localStorage.setItem(WELCOME_SEEN_KEY, 'true');
+                    } else {
+                        localStorage.removeItem(WELCOME_SKIP_KEY);
+                        localStorage.removeItem(WELCOME_SEEN_KEY);
+                    }
                 }
             }
         }
