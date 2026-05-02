@@ -6,15 +6,15 @@ archive/
 *.pdf
 *.zip
 *.json
+!package.json
+!package-lock.json
 copilot-instructions.md
 pspf-explorer-design.md
 update_requirements.js
 
 # Test artifacts
-tests/
 test-results/
 playwright-report/
-*.mjs
 
 # Editor and OS files
 .vscode/
