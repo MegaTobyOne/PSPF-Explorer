@@ -1,0 +1,14 @@
+{
+  "name": "pspf-explorer",
+  "version": "2026.1.0",
+  "description": "Interactive Australian Government Protective Security Policy Framework compliance tracking",
+  "private": true,
+  "scripts": {
+    "serve": "serve -l 4173 .",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "serve": "^14.2.4"
+  }
+}
