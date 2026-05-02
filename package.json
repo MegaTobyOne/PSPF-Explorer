@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "serve": "serve -l 4173 .",
+    "test": "NODE_ENV=test node --test \"scripts/tests/**/*.test.js\"",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

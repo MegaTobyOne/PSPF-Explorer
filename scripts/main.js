@@ -37,6 +37,35 @@ const TREND_WATCH_DOMAIN_KEY = 'pspf_trend_watch_domain';
 const TREND_WATCH_DAYS_KEY = 'pspf_trend_watch_days';
 const WELCOME_SEEN_KEY = 'pspf_welcome_seen';
 const WELCOME_SKIP_KEY = 'pspf_welcome_skip';
+const DATA_MODEL_VERSION_KEY = 'pspf_data_model_version';
+const CURRENT_DATA_MODEL_VERSION = '2.0';
+const EXPORT_FORMAT_VERSION = '2.0';
+const EXPORT_SCHEMA_ID = 'pspf-explorer.v2';
+const SUPPORTED_IMPORT_VERSIONS = new Set(['1.0', '1.1', '2.0']);
+const MOBILE_BREAKPOINT_PX = 768;
+
+const MOBILE_COMPLEX_CAPABILITIES = Object.freeze({
+    relationshipMap: {
+        label: 'Relationship map',
+        message: 'Relationship map is available on larger screens. Use desktop or tablet for full map interactions.'
+    },
+    advancedMerge: {
+        label: 'Advanced merge review',
+        message: 'Advanced merge review is available on larger screens. You can still view summaries on mobile.'
+    },
+    dataImport: {
+        label: 'Data import',
+        message: 'Data import is available on larger screens. Continue using reporting and simple updates on mobile.'
+    },
+    clearAllData: {
+        label: 'Clear all data',
+        message: 'Clearing all data is available on larger screens to reduce accidental data loss on mobile.'
+    },
+    requirementManager: {
+        label: 'Requirement manager',
+        message: 'Requirement manager is available on larger screens for safer bulk edits.'
+    }
+});
 
 const DEFAULT_REQUIREMENTS_VIEW_PREFERENCES = Object.freeze({
     density: 'compact',
@@ -108,10 +137,19 @@ export class PSPFExplorer {
             this._modalIdSeed = 0;
 
             // Initialize data structures
-            this.projects = this.readStorage('pspf_projects', []);
-            this.risks = this.readStorage('pspf_risks', []);
-            this.incidents = this.readStorage('pspf_incidents', []);
-            this.compliance = this.readStorage('pspf_compliance', {});
+            const persistedStateEnvelope = this.readStorage('pspf_state_v2', null);
+            const persistedStateData = this.resolvePersistedStateData(persistedStateEnvelope);
+
+            this.projects = this.cloneFallback(persistedStateData?.projects ?? this.readStorage('pspf_projects', []));
+            this.risks = this.cloneFallback(persistedStateData?.risks ?? this.readStorage('pspf_risks', []));
+            this.incidents = this.cloneFallback(persistedStateData?.incidents ?? this.readStorage('pspf_incidents', []));
+            this.compliance = this.cloneFallback(persistedStateData?.compliance ?? this.readStorage('pspf_compliance', {}));
+            this.actions = this.cloneFallback(persistedStateData?.actions ?? this.readStorage('pspf_actions', []));
+            this.directions = this.cloneFallback(persistedStateData?.directions ?? this.readStorage('pspf_directions', []));
+            this.relationships = this.cloneFallback(persistedStateData?.relationships ?? this.readStorage('pspf_relationships', []));
+            this.evidenceRecords = this.cloneFallback(persistedStateData?.evidenceRecords ?? this.readStorage('pspf_evidence_records', []));
+            this.importBatches = this.cloneFallback(persistedStateData?.importBatches ?? this.readStorage('pspf_import_batches', []));
+            this.mergeReviews = this.cloneFallback(persistedStateData?.mergeReviews ?? this.readStorage('pspf_merge_reviews', []));
             this.progressHistory = this.readStorage('pspf_progress_history', {});
             this.normalizeProgressHistory();
 
@@ -144,6 +182,10 @@ export class PSPFExplorer {
             this.isDomainGridCollapsed = false;
             this.isTagFiltersCollapsed = true;
             this.currentRequirementId = null;
+            this.mobileCapabilityPolicy = {
+                breakpointPx: MOBILE_BREAKPOINT_PX,
+                desktopOnlyCapabilities: new Set(['relationshipMap', 'advancedMerge', 'dataImport', 'clearAllData', 'requirementManager'])
+            };
             this.requirementDetailMode = this.readStorage(REQUIREMENT_DETAIL_MODE_KEY, 'summary');
             if (!['summary', 'control'].includes(this.requirementDetailMode)) {
                 this.requirementDetailMode = 'summary';
@@ -155,6 +197,7 @@ export class PSPFExplorer {
                 { ...DEFAULT_REQUIREMENTS_VIEW_PREFERENCES }
             );
             this.sanitizeRequirementsViewPreferences();
+            this.runDataModelMigrations();
             
             if (this.options.autoInit) {
                 this.init();
@@ -183,7 +226,192 @@ export class PSPFExplorer {
             this.renderMyWorkView();
             this.renderProgress();
             this.renderDomainRequirementHeatmap();
+            this.updateMobileCapabilityNotice();
             this.showWelcomeModalIfFirstTime();
+        }
+
+        isMobileViewport() {
+            if (typeof window === 'undefined') {
+                return false;
+            }
+
+            const breakpoint = this.mobileCapabilityPolicy?.breakpointPx || MOBILE_BREAKPOINT_PX;
+            return Number.isFinite(window.innerWidth) && window.innerWidth <= breakpoint;
+        }
+
+        ensureCapabilityAvailable(capabilityKey, notify = true) {
+            const policy = this.mobileCapabilityPolicy;
+            const restricted = policy?.desktopOnlyCapabilities?.has(capabilityKey);
+            if (!restricted || !this.isMobileViewport()) {
+                return true;
+            }
+
+            if (notify) {
+                const capability = MOBILE_COMPLEX_CAPABILITIES[capabilityKey];
+                const fallback = 'This feature is available on larger screens. Continue using core reporting and simple updates on mobile.';
+                const message = capability?.message || fallback;
+                this.showNotification(message, 'info', 5000);
+            }
+            return false;
+        }
+
+        updateMobileCapabilityNotice() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const dataView = document.getElementById('dataView');
+            if (!dataView) {
+                return;
+            }
+
+            let notice = document.getElementById('mobileCapabilityNotice');
+            if (!notice) {
+                notice = document.createElement('div');
+                notice.id = 'mobileCapabilityNotice';
+                notice.className = 'mobile-capability-notice hidden';
+                notice.setAttribute('role', 'status');
+                notice.innerHTML = `
+                    <h3>Mobile mode</h3>
+                    <p>Core reporting and simple updates stay available. Complex workflows like full import and destructive resets require a larger screen.</p>
+                `;
+
+                const viewHeader = dataView.querySelector('.view-header');
+                if (viewHeader) {
+                    viewHeader.insertAdjacentElement('afterend', notice);
+                } else {
+                    dataView.prepend(notice);
+                }
+            }
+
+            const isMobile = this.isMobileViewport();
+            notice.classList.toggle('hidden', !isMobile);
+
+            const importDataBtn = document.getElementById('importDataBtn');
+            if (importDataBtn) {
+                importDataBtn.disabled = isMobile;
+                importDataBtn.setAttribute('aria-disabled', isMobile ? 'true' : 'false');
+                importDataBtn.title = isMobile ? MOBILE_COMPLEX_CAPABILITIES.dataImport.message : '';
+            }
+
+            const clearDataBtn = document.getElementById('clearDataBtn');
+            if (clearDataBtn) {
+                clearDataBtn.disabled = isMobile;
+                clearDataBtn.setAttribute('aria-disabled', isMobile ? 'true' : 'false');
+                clearDataBtn.title = isMobile ? MOBILE_COMPLEX_CAPABILITIES.clearAllData.message : '';
+            }
+        }
+
+        runDataModelMigrations() {
+            if (!this.storageAvailable) {
+                return;
+            }
+
+            const toArray = (value) => Array.isArray(value) ? value : [];
+            const normalizeId = (value) => {
+                if (typeof value !== 'string') return '';
+                return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+            };
+            const relationshipId = (sourceType, sourceId, targetType, targetId, relation) => {
+                const raw = `${sourceType}_${sourceId}__${targetType}_${targetId}__${relation}`;
+                return `rel_${raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 200)}`;
+            };
+
+            let mutated = false;
+
+            this.actions = toArray(this.actions);
+            this.directions = toArray(this.directions);
+            this.relationships = toArray(this.relationships);
+            this.evidenceRecords = toArray(this.evidenceRecords);
+            this.importBatches = toArray(this.importBatches);
+            this.mergeReviews = toArray(this.mergeReviews);
+
+            const knownSignatures = new Set();
+            const migratedRelationships = [];
+            this.relationships.forEach((link) => {
+                if (!link || typeof link !== 'object') return;
+                const sourceType = typeof link.sourceType === 'string' ? link.sourceType.trim().toLowerCase() : '';
+                const sourceId = normalizeId(link.sourceId);
+                const targetType = typeof link.targetType === 'string' ? link.targetType.trim().toLowerCase() : '';
+                const targetId = normalizeId(link.targetId);
+                const relation = typeof link.relation === 'string' && link.relation.trim() ? link.relation.trim().toLowerCase() : 'supports';
+                if (!sourceType || !sourceId || !targetType || !targetId) return;
+                if (sourceType === targetType && sourceId === targetId) return;
+
+                const signature = `${sourceType}:${sourceId}->${targetType}:${targetId}:${relation}`;
+                if (knownSignatures.has(signature)) return;
+                knownSignatures.add(signature);
+
+                migratedRelationships.push({
+                    id: normalizeId(link.id) || relationshipId(sourceType, sourceId, targetType, targetId, relation),
+                    sourceType,
+                    sourceId,
+                    targetType,
+                    targetId,
+                    relation,
+                    createdAt: link.createdAt || new Date().toISOString()
+                });
+            });
+
+            const addDerivedRelationship = (sourceType, sourceId, targetType, targetId, relation) => {
+                const safeSource = normalizeId(sourceId);
+                const safeTarget = normalizeId(targetId);
+                if (!safeSource || !safeTarget) return;
+                if (sourceType === targetType && safeSource === safeTarget) return;
+                const signature = `${sourceType}:${safeSource}->${targetType}:${safeTarget}:${relation}`;
+                if (knownSignatures.has(signature)) return;
+                knownSignatures.add(signature);
+                migratedRelationships.push({
+                    id: relationshipId(sourceType, safeSource, targetType, safeTarget, relation),
+                    sourceType,
+                    sourceId: safeSource,
+                    targetType,
+                    targetId: safeTarget,
+                    relation,
+                    createdAt: new Date().toISOString()
+                });
+                mutated = true;
+            };
+
+            this.projects.forEach((project) => {
+                const projectId = normalizeId(project?.id);
+                if (!projectId) return;
+                const reqs = Array.isArray(project?.requirements) ? project.requirements : [];
+                reqs.forEach((reqId) => {
+                    addDerivedRelationship('requirement', reqId, 'project', projectId, 'delivered-by');
+                });
+            });
+
+            this.risks.forEach((risk) => {
+                const riskId = normalizeId(risk?.id);
+                const projectId = normalizeId(risk?.projectId);
+                if (riskId && projectId) {
+                    addDerivedRelationship('project', projectId, 'risk', riskId, 'addresses');
+                }
+            });
+
+            this.incidents.forEach((incident) => {
+                const incidentId = normalizeId(incident?.id);
+                const projectId = normalizeId(incident?.projectId);
+                if (incidentId && projectId) {
+                    addDerivedRelationship('project', projectId, 'incident', incidentId, 'records');
+                }
+            });
+
+            if (migratedRelationships.length !== this.relationships.length) {
+                mutated = true;
+            }
+            this.relationships = migratedRelationships;
+
+            const storedVersion = localStorage.getItem(DATA_MODEL_VERSION_KEY);
+            if (storedVersion !== CURRENT_DATA_MODEL_VERSION) {
+                mutated = true;
+                localStorage.setItem(DATA_MODEL_VERSION_KEY, CURRENT_DATA_MODEL_VERSION);
+            }
+
+            if (mutated) {
+                this.saveData();
+            }
         }
 
         sanitizeRequirementsViewPreferences() {
@@ -619,20 +847,39 @@ export class PSPFExplorer {
             const importDataBtn = document.getElementById('importDataBtn');
             const importFileInput = document.getElementById('importFileInput');
             if (importDataBtn && importFileInput) {
-                importDataBtn.addEventListener('click', () => importFileInput.click());
+                importDataBtn.addEventListener('click', () => {
+                    if (!this.ensureCapabilityAvailable('dataImport')) {
+                        return;
+                    }
+                    importFileInput.click();
+                });
                 importFileInput.addEventListener('change', (e) => this.importData(e));
             }
 
             const clearDataBtn = document.getElementById('clearDataBtn');
             if (clearDataBtn) {
-                clearDataBtn.addEventListener('click', () => this.clearAllData());
+                clearDataBtn.addEventListener('click', () => {
+                    if (!this.ensureCapabilityAvailable('clearAllData')) {
+                        return;
+                    }
+                    this.clearAllData();
+                });
             }
 
             const manageRequirementsBtn = document.getElementById('manageRequirementsBtn');
             if (manageRequirementsBtn) {
                 manageRequirementsBtn.addEventListener('click', () => {
+                    if (!this.ensureCapabilityAvailable('requirementManager')) {
+                        return;
+                    }
                     this.showRequirementManagerModal();
                 });
+            }
+
+            if (typeof window !== 'undefined') {
+                window.addEventListener('resize', this.debounce(() => {
+                    this.updateMobileCapabilityNotice();
+                }, 150));
             }
 
             // Tag management
@@ -918,6 +1165,16 @@ export class PSPFExplorer {
                     }
                     break;
 
+                case 'review-integrity-issues':
+                    this.showView('project');
+                    this.updateNavButtons('projectBtn');
+                    this.showNotification('Review project links and related records to resolve integrity anomalies.', 'info', 5000);
+                    break;
+
+                case 'export-integrity-report':
+                    this.exportIntegrityReport();
+                    break;
+
                 case 'view-risk':
                     const riskId = target.dataset.riskId;
                     if (riskId) this.showRiskModal(riskId);
@@ -1097,6 +1354,7 @@ export class PSPFExplorer {
             // Special handling for data view
             if (viewName === 'data') {
                 this.renderTagManagement();
+                this.updateMobileCapabilityNotice();
             }
 
             if (viewName === 'myWork') {
@@ -4573,7 +4831,154 @@ export class PSPFExplorer {
 
             this.renderIncidentTrend();
             this.renderEvidenceCoverageSummary();
+            this.renderDataIntegrityDiagnostics();
             this.populateScopedExportSelectors();
+        }
+
+        computeDataIntegrityDiagnostics() {
+            return this.computeIntegrityDiagnosticsForData({
+                projects: this.projects,
+                risks: this.risks,
+                incidents: this.incidents,
+                compliance: this.compliance,
+                actions: this.actions,
+                directions: this.directions,
+                relationships: this.relationships
+            });
+        }
+
+        computeIntegrityDiagnosticsForData(data) {
+            const diagnostics = {
+                orphanRiskLinks: 0,
+                orphanIncidentLinks: 0,
+                relationshipErrors: 0,
+                totalIssues: 0,
+                messages: []
+            };
+
+            const source = data && typeof data === 'object' ? data : {};
+
+            const projects = Array.isArray(source.projects) ? source.projects : [];
+            const risks = Array.isArray(source.risks) ? source.risks : [];
+            const incidents = Array.isArray(source.incidents) ? source.incidents : [];
+            const relationships = Array.isArray(source.relationships) ? source.relationships : [];
+            const actions = Array.isArray(source.actions) ? source.actions : [];
+            const directions = Array.isArray(source.directions) ? source.directions : [];
+            const compliance = source.compliance && typeof source.compliance === 'object' ? source.compliance : {};
+
+            const projectIds = new Set(projects.map(project => project?.id).filter(Boolean));
+
+            diagnostics.orphanRiskLinks = risks.filter(risk => {
+                if (!risk || typeof risk !== 'object') return false;
+                if (!risk.projectId) return false;
+                return !projectIds.has(risk.projectId);
+            }).length;
+
+            diagnostics.orphanIncidentLinks = incidents.filter(incident => {
+                if (!incident || typeof incident !== 'object') return false;
+                if (!incident.projectId) return false;
+                return !projectIds.has(incident.projectId);
+            }).length;
+
+            const relationshipValidation = this.validateRelationshipIntegrity({
+                projects,
+                risks,
+                incidents,
+                compliance,
+                actions,
+                directions,
+                relationships
+            });
+
+            diagnostics.relationshipErrors = relationshipValidation.errors.length;
+            diagnostics.messages = relationshipValidation.errors.slice(0, 6);
+            diagnostics.totalIssues = diagnostics.orphanRiskLinks + diagnostics.orphanIncidentLinks + diagnostics.relationshipErrors;
+            return diagnostics;
+        }
+
+        buildIntegrityReportPayload() {
+            const diagnostics = this.computeDataIntegrityDiagnostics();
+            return {
+                version: EXPORT_FORMAT_VERSION,
+                schema: {
+                    id: EXPORT_SCHEMA_ID,
+                    version: EXPORT_FORMAT_VERSION
+                },
+                generatedAt: new Date().toISOString(),
+                scope: { type: 'integrity-report' },
+                summary: {
+                    totalIssues: diagnostics.totalIssues,
+                    orphanRiskLinks: diagnostics.orphanRiskLinks,
+                    orphanIncidentLinks: diagnostics.orphanIncidentLinks,
+                    relationshipErrors: diagnostics.relationshipErrors
+                },
+                details: diagnostics.messages,
+                dataSnapshot: {
+                    projects: this.projects.length,
+                    risks: this.risks.length,
+                    incidents: this.incidents.length,
+                    relationships: this.relationships.length,
+                    actions: this.actions.length,
+                    directions: this.directions.length
+                }
+            };
+        }
+
+        exportIntegrityReport() {
+            try {
+                const payload = this.buildIntegrityReportPayload();
+                this.downloadJsonFile(payload, 'pspf-integrity-report');
+                this.showNotification('Integrity report exported.', 'success');
+            } catch (error) {
+                console.error('Integrity report export failed:', error);
+                this.showNotification('Failed to export integrity report.', 'error');
+            }
+        }
+
+        renderDataIntegrityDiagnostics() {
+            if (typeof document === 'undefined') {
+                return;
+            }
+
+            const container = document.getElementById('dataIntegrityPanel');
+            if (!container) {
+                return;
+            }
+
+            const diagnostics = this.computeDataIntegrityDiagnostics();
+            if (diagnostics.totalIssues === 0) {
+                container.classList.remove('warning');
+                container.classList.add('healthy');
+                container.innerHTML = `
+                    <h4>Integrity Check</h4>
+                    <p class="integrity-summary">No integrity anomalies detected in current local data.</p>
+                `;
+                return;
+            }
+
+            container.classList.remove('healthy');
+            container.classList.add('warning');
+            container.innerHTML = `
+                <h4>Integrity Check</h4>
+                <p class="integrity-summary">${diagnostics.totalIssues} anomaly${diagnostics.totalIssues === 1 ? '' : 'ies'} found. Review before sharing or relying on reports.</p>
+                <ul class="integrity-metrics">
+                    <li>Orphan risk links: <strong>${diagnostics.orphanRiskLinks}</strong></li>
+                    <li>Orphan event links: <strong>${diagnostics.orphanIncidentLinks}</strong></li>
+                    <li>Relationship issues: <strong>${diagnostics.relationshipErrors}</strong></li>
+                </ul>
+                ${diagnostics.messages.length ? `
+                    <details class="integrity-details">
+                        <summary>View anomaly details</summary>
+                        <ul>
+                            ${diagnostics.messages.map(message => `<li>${this.escapeHtml(message)}</li>`).join('')}
+                        </ul>
+                    </details>
+                ` : ''}
+                <div class="integrity-actions">
+                    <button class="btn btn-outline btn-small" data-action="review-integrity-issues">Review Linked Records</button>
+                    <button class="btn btn-secondary btn-small" data-action="export-integrity-report">Export Anomaly Report</button>
+                </div>
+            `;
         }
 
         renderIncidentTrend() {
@@ -4895,18 +5300,103 @@ export class PSPFExplorer {
             URL.revokeObjectURL(url);
         }
 
+        getPortableDataSnapshot() {
+            return {
+                projects: this.projects,
+                risks: this.risks,
+                incidents: this.incidents,
+                compliance: this.compliance,
+                actions: this.actions,
+                directions: this.directions,
+                relationships: this.relationships,
+                evidenceRecords: this.evidenceRecords,
+                importBatches: this.importBatches,
+                mergeReviews: this.mergeReviews
+            };
+        }
+
+        buildDataEnvelope({ scope, summary, data }) {
+            return {
+                version: EXPORT_FORMAT_VERSION,
+                schema: {
+                    id: EXPORT_SCHEMA_ID,
+                    version: EXPORT_FORMAT_VERSION
+                },
+                exportedAt: new Date().toISOString(),
+                scope,
+                summary,
+                data
+            };
+        }
+
+        resolveImportPayload(importData) {
+            if (!importData || typeof importData !== 'object') {
+                return null;
+            }
+
+            if (importData.data && typeof importData.data === 'object') {
+                return importData.data;
+            }
+
+            if (importData.payload?.data && typeof importData.payload.data === 'object') {
+                return importData.payload.data;
+            }
+
+            return null;
+        }
+
+        resolvePersistedStateData(envelope) {
+            if (!envelope || typeof envelope !== 'object') {
+                return null;
+            }
+            if (envelope.schema?.id !== EXPORT_SCHEMA_ID) {
+                return null;
+            }
+            if (!envelope.data || typeof envelope.data !== 'object') {
+                return null;
+            }
+            return envelope.data;
+        }
+
+        buildLocalStateEnvelope() {
+            const data = this.getPortableDataSnapshot();
+            return {
+                version: CURRENT_DATA_MODEL_VERSION,
+                schema: {
+                    id: EXPORT_SCHEMA_ID,
+                    version: CURRENT_DATA_MODEL_VERSION
+                },
+                savedAt: new Date().toISOString(),
+                scope: { type: 'local-state' },
+                summary: {
+                    projects: data.projects.length,
+                    risks: data.risks.length,
+                    incidents: data.incidents.length,
+                    complianceRecords: Object.keys(data.compliance || {}).length,
+                    actions: data.actions.length,
+                    directions: data.directions.length,
+                    relationships: data.relationships.length
+                },
+                data
+            };
+        }
+
         exportData() {
             try {
-                const exportData = {
-                    version: '1.0',
-                    timestamp: new Date().toISOString(),
-                    data: {
-                        projects: this.projects,
-                        risks: this.risks,
-                        incidents: this.incidents,
-                        compliance: this.compliance
-                    }
-                };
+                const data = this.getPortableDataSnapshot();
+                const exportData = this.buildDataEnvelope({
+                    scope: { type: 'full' },
+                    summary: {
+                        projects: data.projects.length,
+                        risks: data.risks.length,
+                        incidents: data.incidents.length,
+                        complianceRecords: Object.keys(data.compliance || {}).length,
+                        actions: data.actions.length,
+                        directions: data.directions.length,
+                        relationships: data.relationships.length
+                    },
+                    data
+                });
 
                 this.downloadJsonFile(exportData, 'pspf-explorer-backup');
                 this.showNotification('Data exported successfully!', 'success');
@@ -4961,9 +5451,7 @@ export class PSPFExplorer {
                 const projectIds = new Set(relatedProjects.map(project => project.id));
                 const relatedIncidents = this.incidents.filter(incident => incident.projectId && projectIds.has(incident.projectId));
 
-                const payload = {
-                    version: '1.0',
-                    exportedAt: new Date().toISOString(),
+                const payload = this.buildDataEnvelope({
                     scope: {
                         type: 'domain',
                         id: domain.id,
@@ -4984,7 +5472,7 @@ export class PSPFExplorer {
                         projects: relatedProjects,
                         incidents: relatedIncidents
                     }
-                };
+                });
 
                 this.downloadJsonFile(payload, `pspf-domain-${domain.id}`);
                 this.showNotification(`Exported ${domain.title} report`, 'success');
@@ -5011,9 +5499,7 @@ export class PSPFExplorer {
                 const projectRisks = this.risks.filter(risk => risk.projectId === projectId);
                 const projectIncidents = this.incidents.filter(incident => incident.projectId === projectId);
 
-                const payload = {
-                    version: '1.0',
-                    exportedAt: new Date().toISOString(),
+                const payload = this.buildDataEnvelope({
                     scope: {
                         type: 'project',
                         id: project.id,
@@ -5030,7 +5516,7 @@ export class PSPFExplorer {
                         risks: projectRisks,
                         incidents: projectIncidents
                     }
-                };
+                });
 
                 this.downloadJsonFile(payload, `pspf-project-${project.id}`);
                 this.showNotification(`Exported ${project.name || 'project'} report`, 'success');
@@ -5069,12 +5555,35 @@ export class PSPFExplorer {
                     }
 
                     // Sanitize and import the data
-                    const sanitizedData = this.sanitizeImportData(importData.data);
+                    const payloadData = this.resolveImportPayload(importData);
+                    const sanitizedData = this.sanitizeImportData(payloadData || {});
+                    const incomingDiagnostics = this.computeIntegrityDiagnosticsForData(sanitizedData);
+
+                    if (incomingDiagnostics.totalIssues > 0) {
+                        const anomalyPrompt = [
+                            `Imported file has ${incomingDiagnostics.totalIssues} integrity anomaly${incomingDiagnostics.totalIssues === 1 ? '' : 'ies'}:`,
+                            `- Orphan risk links: ${incomingDiagnostics.orphanRiskLinks}`,
+                            `- Orphan event links: ${incomingDiagnostics.orphanIncidentLinks}`,
+                            `- Relationship issues: ${incomingDiagnostics.relationshipErrors}`,
+                            '',
+                            'Do you still want to import this data?'
+                        ].join('\n');
+
+                        if (!confirm(anomalyPrompt)) {
+                            return;
+                        }
+                    }
                     
                     this.projects = sanitizedData.projects;
                     this.risks = sanitizedData.risks;
                     this.incidents = sanitizedData.incidents;
                     this.compliance = sanitizedData.compliance;
+                    this.actions = sanitizedData.actions;
+                    this.directions = sanitizedData.directions;
+                    this.relationships = sanitizedData.relationships;
+                    this.evidenceRecords = sanitizedData.evidenceRecords;
+                    this.importBatches = sanitizedData.importBatches;
+                    this.mergeReviews = sanitizedData.mergeReviews;
 
                     this.saveData();
                     this.updateDataStats();
@@ -5112,17 +5621,22 @@ export class PSPFExplorer {
             // Check version
             if (!importData.version) {
                 errors.push('Missing version field - this may not be a valid PSPF Explorer backup');
-            } else if (!['1.0', '1.1', '2.0'].includes(importData.version)) {
+            } else if (!SUPPORTED_IMPORT_VERSIONS.has(importData.version)) {
                 warnings.push(`Unknown version "${importData.version}" - some data may not import correctly`);
             }
 
+            if (importData.schema && typeof importData.schema === 'object') {
+                if (importData.schema.id && importData.schema.id !== EXPORT_SCHEMA_ID) {
+                    warnings.push(`Unexpected schema id "${importData.schema.id}"`);
+                }
+            }
+
             // Check data object exists
-            if (!importData.data || typeof importData.data !== 'object') {
+            const data = this.resolveImportPayload(importData);
+            if (!data) {
                 errors.push('Missing or invalid data field');
                 return { valid: false, errors, warnings };
             }
-
-            const data = importData.data;
 
             // Validate projects array
             if (data.projects !== undefined) {
@@ -5166,6 +5680,19 @@ export class PSPFExplorer {
                     errors.push(...complianceValidation.errors);
                     warnings.push(...complianceValidation.warnings);
                 }
+            }
+
+            // Validate v2 optional arrays
+            ['actions', 'directions', 'relationships', 'evidenceRecords', 'importBatches', 'mergeReviews'].forEach((key) => {
+                if (data[key] !== undefined && !Array.isArray(data[key])) {
+                    errors.push(`${key} must be an array`);
+                }
+            });
+
+            if (Array.isArray(data.relationships)) {
+                const relationshipValidation = this.validateRelationshipIntegrity(data);
+                errors.push(...relationshipValidation.errors);
+                warnings.push(...relationshipValidation.warnings);
             }
 
             // Check for reasonable data sizes (prevent DoS via huge files)
@@ -5337,6 +5864,89 @@ export class PSPFExplorer {
             return { errors, warnings };
         }
 
+        validateRelationshipIntegrity(data) {
+            const errors = [];
+            const warnings = [];
+            const relationships = Array.isArray(data.relationships) ? data.relationships : [];
+            if (!relationships.length) {
+                return { errors, warnings };
+            }
+
+            const allowedTypes = new Set(['requirement', 'project', 'risk', 'incident', 'action', 'direction']);
+            const entityIdsByType = {
+                requirement: new Set(Object.keys(this.requirements || {})),
+                project: new Set((data.projects || []).map(item => item?.id).filter(Boolean)),
+                risk: new Set((data.risks || []).map(item => item?.id).filter(Boolean)),
+                incident: new Set((data.incidents || []).map(item => item?.id).filter(Boolean)),
+                action: new Set((data.actions || []).map(item => item?.id).filter(Boolean)),
+                direction: new Set((data.directions || []).map(item => item?.id).filter(Boolean))
+            };
+
+            (data.projects || []).forEach((project) => {
+                (project?.requirements || []).forEach((reqId) => {
+                    if (typeof reqId === 'string' && reqId) {
+                        entityIdsByType.requirement.add(reqId);
+                    }
+                });
+            });
+            Object.keys(data.compliance || {}).forEach((reqId) => {
+                if (typeof reqId === 'string' && reqId) {
+                    entityIdsByType.requirement.add(reqId);
+                }
+            });
+
+            const seenSignatures = new Set();
+            relationships.forEach((relationship, index) => {
+                const prefix = `Relationship ${index + 1}`;
+                if (!relationship || typeof relationship !== 'object') {
+                    errors.push(`${prefix}: Invalid relationship object`);
+                    return;
+                }
+
+                const sourceType = typeof relationship.sourceType === 'string' ? relationship.sourceType.trim().toLowerCase() : '';
+                const sourceId = typeof relationship.sourceId === 'string' ? relationship.sourceId.trim() : '';
+                const targetType = typeof relationship.targetType === 'string' ? relationship.targetType.trim().toLowerCase() : '';
+                const targetId = typeof relationship.targetId === 'string' ? relationship.targetId.trim() : '';
+                const relation = typeof relationship.relation === 'string' && relationship.relation.trim()
+                    ? relationship.relation.trim().toLowerCase()
+                    : 'supports';
+
+                if (!allowedTypes.has(sourceType)) {
+                    errors.push(`${prefix}: Unsupported sourceType "${relationship.sourceType || ''}"`);
+                }
+                if (!allowedTypes.has(targetType)) {
+                    errors.push(`${prefix}: Unsupported targetType "${relationship.targetType || ''}"`);
+                }
+                if (!sourceId) {
+                    errors.push(`${prefix}: Missing sourceId`);
+                }
+                if (!targetId) {
+                    errors.push(`${prefix}: Missing targetId`);
+                }
+
+                if (sourceType && sourceId && entityIdsByType[sourceType] && !entityIdsByType[sourceType].has(sourceId)) {
+                    errors.push(`${prefix}: Source ${sourceType}:${sourceId} is orphaned`);
+                }
+                if (targetType && targetId && entityIdsByType[targetType] && !entityIdsByType[targetType].has(targetId)) {
+                    errors.push(`${prefix}: Target ${targetType}:${targetId} is orphaned`);
+                }
+
+                if (sourceType === targetType && sourceId && sourceId === targetId) {
+                    errors.push(`${prefix}: Self-referential circular relationship is not allowed`);
+                }
+
+                const signature = `${sourceType}:${sourceId}->${targetType}:${targetId}:${relation}`;
+                if (sourceType && sourceId && targetType && targetId) {
+                    if (seenSignatures.has(signature)) {
+                        errors.push(`${prefix}: Duplicate relationship detected`);
+                    }
+                    seenSignatures.add(signature);
+                }
+            });
+
+            return { errors, warnings };
+        }
+
         /**
          * Sanitizes imported data to ensure safe values
          * @param {Object} data - The data object to sanitize
@@ -5357,6 +5967,11 @@ export class PSPFExplorer {
                 if (typeof id !== 'string') return String(Date.now());
                 // Only allow alphanumeric, dashes, and underscores
                 return id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100) || String(Date.now());
+            };
+
+            const sanitizeOptionalId = (id) => {
+                if (typeof id !== 'string') return '';
+                return id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
             };
 
             // Sanitize projects
@@ -5384,7 +5999,7 @@ export class PSPFExplorer {
                 severity: ['low', 'medium', 'high', 'critical'].includes(risk.severity) 
                     ? risk.severity : 'medium',
                 mitigation: sanitizeString(risk.mitigation, 5000),
-                projectId: risk.projectId ? sanitizeId(risk.projectId) : null,
+                projectId: risk.projectId ? sanitizeOptionalId(risk.projectId) : null,
                 createdAt: risk.createdAt || new Date().toISOString()
             }));
 
@@ -5397,7 +6012,7 @@ export class PSPFExplorer {
                     ? incident.severity : 'low',
                 resolution: sanitizeString(incident.resolution, 5000),
                 date: incident.date || new Date().toISOString(),
-                projectId: incident.projectId ? sanitizeId(incident.projectId) : null,
+                projectId: incident.projectId ? sanitizeOptionalId(incident.projectId) : null,
                 createdAt: incident.createdAt || new Date().toISOString()
             }));
 
@@ -5417,7 +6032,67 @@ export class PSPFExplorer {
                 });
             }
 
-            return { projects, risks, incidents, compliance };
+            const directions = (data.directions || []).map(direction => ({
+                id: sanitizeId(direction.id),
+                title: sanitizeString(direction.title, 500),
+                description: sanitizeString(direction.description, 5000),
+                sourceUrl: sanitizeString(direction.sourceUrl, 2000),
+                createdAt: direction.createdAt || new Date().toISOString()
+            }));
+
+            const actions = (data.actions || []).map(action => ({
+                id: sanitizeId(action.id),
+                title: sanitizeString(action.title, 500),
+                description: sanitizeString(action.description, 5000),
+                status: sanitizeString(action.status, 100) || 'open',
+                createdAt: action.createdAt || new Date().toISOString()
+            }));
+
+            const relationships = (data.relationships || []).map(link => ({
+                id: sanitizeId(link.id),
+                sourceType: sanitizeString(link.sourceType, 100),
+                sourceId: sanitizeOptionalId(link.sourceId),
+                targetType: sanitizeString(link.targetType, 100),
+                targetId: sanitizeOptionalId(link.targetId),
+                relation: sanitizeString(link.relation, 100) || 'supports',
+                createdAt: link.createdAt || new Date().toISOString()
+            }));
+
+            const evidenceRecords = (data.evidenceRecords || []).map(record => ({
+                id: sanitizeId(record.id),
+                requirementId: sanitizeOptionalId(record.requirementId),
+                type: sanitizeString(record.type, 100),
+                note: sanitizeString(record.note, 5000),
+                url: sanitizeString(record.url, 2000),
+                createdAt: record.createdAt || new Date().toISOString()
+            }));
+
+            const importBatches = (data.importBatches || []).map(batch => ({
+                id: sanitizeId(batch.id),
+                source: sanitizeString(batch.source, 500),
+                importedAt: batch.importedAt || new Date().toISOString(),
+                note: sanitizeString(batch.note, 2000)
+            }));
+
+            const mergeReviews = (data.mergeReviews || []).map(review => ({
+                id: sanitizeId(review.id),
+                status: sanitizeString(review.status, 100) || 'pending',
+                summary: sanitizeString(review.summary, 2000),
+                reviewedAt: review.reviewedAt || null
+            }));
+
+            return {
+                projects,
+                risks,
+                incidents,
+                compliance,
+                actions,
+                directions,
+                relationships,
+                evidenceRecords,
+                importBatches,
+                mergeReviews
+            };
         }
 
         clearAllData() {
@@ -5430,13 +6105,27 @@ export class PSPFExplorer {
                 this.risks = [];
                 this.incidents = [];
                 this.compliance = {};
+                this.actions = [];
+                this.directions = [];
+                this.relationships = [];
+                this.evidenceRecords = [];
+                this.importBatches = [];
+                this.mergeReviews = [];
 
                 if (this.storageAvailable) {
                     localStorage.removeItem('pspf_projects');
                     localStorage.removeItem('pspf_risks');
                     localStorage.removeItem('pspf_incidents');
                     localStorage.removeItem('pspf_compliance');
+                    localStorage.removeItem('pspf_actions');
+                    localStorage.removeItem('pspf_directions');
+                    localStorage.removeItem('pspf_relationships');
+                    localStorage.removeItem('pspf_evidence_records');
+                    localStorage.removeItem('pspf_import_batches');
+                    localStorage.removeItem('pspf_merge_reviews');
+                    localStorage.removeItem('pspf_state_v2');
                     localStorage.removeItem('pspf_last_modified');
+                    localStorage.removeItem(DATA_MODEL_VERSION_KEY);
                     localStorage.removeItem(MY_WORK_USER_NAME_KEY);
                     localStorage.removeItem(MY_WORK_FILTERS_KEY);
                 }
@@ -6141,7 +6830,15 @@ export class PSPFExplorer {
             localStorage.setItem('pspf_risks', JSON.stringify(this.risks));
             localStorage.setItem('pspf_incidents', JSON.stringify(this.incidents));
             localStorage.setItem('pspf_compliance', JSON.stringify(this.compliance));
+            localStorage.setItem('pspf_actions', JSON.stringify(this.actions));
+            localStorage.setItem('pspf_directions', JSON.stringify(this.directions));
+            localStorage.setItem('pspf_relationships', JSON.stringify(this.relationships));
+            localStorage.setItem('pspf_evidence_records', JSON.stringify(this.evidenceRecords));
+            localStorage.setItem('pspf_import_batches', JSON.stringify(this.importBatches));
+            localStorage.setItem('pspf_merge_reviews', JSON.stringify(this.mergeReviews));
+            localStorage.setItem('pspf_state_v2', JSON.stringify(this.buildLocalStateEnvelope()));
             this.saveProgressHistory();
+            localStorage.setItem(DATA_MODEL_VERSION_KEY, CURRENT_DATA_MODEL_VERSION);
             localStorage.setItem('pspf_last_modified', new Date().toISOString());
         }
 
