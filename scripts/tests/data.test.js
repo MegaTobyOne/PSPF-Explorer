@@ -743,3 +743,130 @@ test('getLinkedEntities returns all links for an entity in either direction', ()
   const ids = links.map(r => r.id);
   assert.ok(ids.every(id => id));
 });
+
+// ── Stage 4: Relationship Map data layer ─────────────────────────────────
+
+test('_buildMapData returns only linked entities when showUnlinked is false', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <input type="checkbox" id="mapFilterDirections" checked>
+    <input type="checkbox" id="mapFilterRequirements" checked>
+    <input type="checkbox" id="mapFilterRisks" checked>
+    <input type="checkbox" id="mapFilterActions" checked>
+    <input type="checkbox" id="mapFilterUnlinked">
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.directions = [
+    { id: 'dir-001', title: 'Dir A', createdAt: new Date().toISOString() },
+    { id: 'dir-002', title: 'Dir B', createdAt: new Date().toISOString() },
+  ];
+  explorer.risks = [];
+  explorer.actions = [];
+  explorer.relationships = [
+    { id: 'rel-1', sourceType: 'direction', sourceId: 'dir-001', targetType: 'requirement', targetId: 'GOV-001', relation: 'governs', createdAt: new Date().toISOString() },
+  ];
+  explorer.requirements = {
+    'GOV-001': { id: 'GOV-001', title: 'Req 1', domainId: 'governance' },
+    'GOV-002': { id: 'GOV-002', title: 'Req 2', domainId: 'governance' },
+  };
+
+  const { nodes } = explorer._buildMapData();
+
+  // Only dir-001 and GOV-001 are linked; dir-002 and GOV-002 should be excluded
+  const ids = nodes.map(n => n.id);
+  assert.ok(ids.includes('dir-001'));
+  assert.ok(ids.includes('GOV-001'));
+  assert.ok(!ids.includes('dir-002'));
+  assert.ok(!ids.includes('GOV-002'));
+});
+
+test('_buildMapData includes unlinked entities when showUnlinked is checked', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <input type="checkbox" id="mapFilterDirections" checked>
+    <input type="checkbox" id="mapFilterRequirements" checked>
+    <input type="checkbox" id="mapFilterRisks" checked>
+    <input type="checkbox" id="mapFilterActions" checked>
+    <input type="checkbox" id="mapFilterUnlinked" checked>
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.directions = [
+    { id: 'dir-001', title: 'Dir A', createdAt: new Date().toISOString() },
+    { id: 'dir-002', title: 'Dir B', createdAt: new Date().toISOString() },
+  ];
+  explorer.risks = [];
+  explorer.actions = [];
+  explorer.relationships = [];
+  explorer.requirements = {};
+
+  const { nodes } = explorer._buildMapData();
+
+  const ids = nodes.map(n => n.id);
+  assert.ok(ids.includes('dir-001'));
+  assert.ok(ids.includes('dir-002'));
+});
+
+test('_buildMapData builds edges only for visible nodes', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <input type="checkbox" id="mapFilterDirections" checked>
+    <input type="checkbox" id="mapFilterRequirements" checked>
+    <input type="checkbox" id="mapFilterRisks" checked>
+    <input type="checkbox" id="mapFilterActions" checked>
+    <input type="checkbox" id="mapFilterUnlinked">
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.directions = [{ id: 'dir-001', title: 'Dir A', createdAt: new Date().toISOString() }];
+  explorer.risks = [{ id: 'risk-001', name: 'Risk A', severity: 'high', createdAt: new Date().toISOString() }];
+  explorer.actions = [];
+  explorer.requirements = { 'GOV-001': { id: 'GOV-001', title: 'Req 1', domainId: 'governance' } };
+  explorer.relationships = [
+    { id: 'rel-1', sourceType: 'direction', sourceId: 'dir-001', targetType: 'requirement', targetId: 'GOV-001', relation: 'governs', createdAt: new Date().toISOString() },
+    { id: 'rel-2', sourceType: 'requirement', sourceId: 'GOV-001', targetType: 'risk', targetId: 'risk-001', relation: 'addresses', createdAt: new Date().toISOString() },
+  ];
+
+  const { nodes, edges } = explorer._buildMapData();
+
+  assert.strictEqual(nodes.length, 3); // dir-001, GOV-001, risk-001
+  assert.strictEqual(edges.length, 2);
+});
+
+test('_buildMapData respects type filter checkboxes', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <input type="checkbox" id="mapFilterDirections" checked>
+    <input type="checkbox" id="mapFilterRequirements">
+    <input type="checkbox" id="mapFilterRisks" checked>
+    <input type="checkbox" id="mapFilterActions" checked>
+    <input type="checkbox" id="mapFilterUnlinked" checked>
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.directions = [{ id: 'dir-001', title: 'Dir A', createdAt: new Date().toISOString() }];
+  explorer.risks = [{ id: 'risk-001', name: 'Risk A', severity: 'low', createdAt: new Date().toISOString() }];
+  explorer.actions = [];
+  explorer.requirements = { 'GOV-001': { id: 'GOV-001', title: 'Req 1', domainId: 'governance' } };
+  explorer.relationships = [];
+
+  const { nodes } = explorer._buildMapData();
+
+  const types = nodes.map(n => n.type);
+  assert.ok(!types.includes('requirement'), 'requirements should be filtered out');
+  assert.ok(types.includes('direction'));
+  assert.ok(types.includes('risk'));
+});
+
+test('_truncateText returns original text when it fits', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const fakeCtx = { measureText: (t) => ({ width: t.length * 6 }) };
+  assert.strictEqual(explorer._truncateText(fakeCtx, 'Short', 200), 'Short');
+});
+
+test('_truncateText truncates and appends ellipsis when text is too long', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const fakeCtx = { measureText: (t) => ({ width: t.length * 8 }) };
+  const result = explorer._truncateText(fakeCtx, 'A very long label that will not fit', 60);
+  assert.ok(result.endsWith('…'));
+  assert.ok(result.length < 'A very long label that will not fit'.length);
+});

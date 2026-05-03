@@ -87,6 +87,7 @@
                 <button id="progressBtn" class="nav-btn">Progress</button>
                 <button id="projectBtn" class="nav-btn">Projects</button>
                 <button id="myWorkBtn" class="nav-btn">My Work</button>
+                <button id="mapBtn" class="nav-btn">Map</button>
                 <button id="dataBtn" class="nav-btn">Data</button>
                 <button id="helpBtn" class="nav-btn">Help</button>
             </nav>
@@ -782,6 +783,58 @@
                 </div>
             </section>
 
+            <!-- Relationship Map View -->
+            <section id="mapView" class="view" aria-labelledby="map-heading">
+                <div class="view-header">
+                    <h2 id="map-heading">Relationship Map</h2>
+                    <p class="subtitle">Visualise how requirements, Directions, risks, and actions connect</p>
+                </div>
+
+                <!-- Mobile handoff -->
+                <div id="mapMobileHandoff" class="map-mobile-handoff hidden">
+                    <div class="capability-notice">
+                        <span class="capability-notice-icon">🖥️</span>
+                        <div>
+                            <strong>Relationship Map is available on larger screens</strong>
+                            <p>Use a desktop or tablet to explore the full interactive map. Below is a summary of your current linkage.</p>
+                        </div>
+                    </div>
+                    <div id="mapMobileSummary" class="map-mobile-summary"></div>
+                </div>
+
+                <!-- Desktop map -->
+                <div id="mapDesktopContent" class="map-desktop-content">
+                    <div class="map-controls-bar">
+                        <div class="map-filter-group">
+                            <span class="map-filter-label">Show:</span>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterDirections" checked> <span class="map-type-pill type-direction">Directions</span></label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterRequirements" checked> <span class="map-type-pill type-requirement">Requirements</span></label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterRisks" checked> <span class="map-type-pill type-risk">Risks</span></label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterActions" checked> <span class="map-type-pill type-action">Actions</span></label>
+                            <label class="map-filter-check"><input type="checkbox" id="mapFilterUnlinked"> <span>Show unlinked</span></label>
+                        </div>
+                        <div class="map-controls-actions">
+                            <button class="btn btn-outline btn-small" id="mapClearSelection">Clear selection</button>
+                            <button class="btn btn-outline btn-small" id="mapExportPng">Export PNG</button>
+                        </div>
+                    </div>
+                    <div class="map-legend">
+                        <span class="map-legend-item"><span class="map-legend-dot type-direction"></span>Direction</span>
+                        <span class="map-legend-item"><span class="map-legend-dot type-requirement"></span>Requirement</span>
+                        <span class="map-legend-item"><span class="map-legend-dot type-risk"></span>Risk</span>
+                        <span class="map-legend-item"><span class="map-legend-dot type-action"></span>Action</span>
+                        <span class="map-legend-hint">Click to select · Double-click to open · Drag to scroll</span>
+                    </div>
+                    <div class="map-canvas-wrapper" id="mapCanvasWrapper">
+                        <canvas id="relationshipMapCanvas" aria-label="Relationship map showing connections between requirements, directions, risks, and actions"></canvas>
+                        <div id="mapEmptyState" class="map-empty-state hidden">
+                            <p>No linked items to display yet.</p>
+                            <p>Add links from within any requirement, direction, risk, or action record, then return here to explore connections.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Help View -->
             <section id="helpView" class="view">
                 <div class="view-header">
@@ -889,7 +942,7 @@
                 <p><strong>💾 Your Data is Private:</strong> All data is stored locally in your browser. Nothing is sent to any server. Use Export to backup your work.</p>
             </div>
             <div class="footer-meta">
-                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026 • <span class="app-version">v2.01</span></p>
+                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026 • <span class="app-version">v2.02</span></p>
                 <p><a href="https://www.protectivesecurity.gov.au/pspf-annual-release" target="_blank" rel="noopener noreferrer">Authoritative Source for PSPF</a></p>
             </div>
         </div>

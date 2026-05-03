@@ -813,6 +813,15 @@ export class PSPFExplorer {
                 });
             }
 
+            const mapBtn = document.getElementById('mapBtn');
+            if (mapBtn) {
+                mapBtn.addEventListener('click', () => {
+                    if (!this.ensureCapabilityAvailable('relationshipMap')) return;
+                    this.showView('map');
+                    this.updateNavButtons('mapBtn');
+                });
+            }
+
             document.getElementById('dataBtn').addEventListener('click', () => {
                 this.showView('data');
                 this.updateNavButtons('dataBtn');
@@ -1528,6 +1537,10 @@ export class PSPFExplorer {
 
             if (viewName === 'myWork') {
                 this.renderMyWorkView();
+            }
+
+            if (viewName === 'map') {
+                this.renderRelationshipMap();
             }
         }
 
@@ -3202,6 +3215,399 @@ export class PSPFExplorer {
                         </div>` : ''}
                     </div>
                 </div>`;
+        }
+
+        // ── Relationship Map (Stage 4) ────────────────────────────────────────
+
+        // Colour palette for canvas drawing
+        static get MAP_COLORS() {
+            return {
+                direction:   { bg: '#1565c0', text: '#ffffff', dimBg: 'rgba(21,101,192,0.18)',  border: '#1976d2' },
+                requirement: { bg: '#4a148c', text: '#ffffff', dimBg: 'rgba(74,20,140,0.18)',   border: '#6a1b9a' },
+                risk:        { bg: '#bf360c', text: '#ffffff', dimBg: 'rgba(191,54,12,0.18)',   border: '#d84315' },
+                action:      { bg: '#1b5e20', text: '#ffffff', dimBg: 'rgba(27,94,32,0.18)',    border: '#2e7d32' },
+            };
+        }
+
+        static get MAP_LAYOUT() {
+            return { nodeW: 180, nodeH: 56, rowGap: 16, colHeaderH: 44, padX: 20, padY: 20 };
+        }
+
+        renderRelationshipMap() {
+            const isMobile = this.isMobileViewport();
+            const handoff = document.getElementById('mapMobileHandoff');
+            const desktop = document.getElementById('mapDesktopContent');
+
+            if (isMobile) {
+                handoff?.classList.remove('hidden');
+                desktop?.classList.add('hidden');
+                this._renderMapMobileSummary();
+                return;
+            }
+
+            handoff?.classList.add('hidden');
+            desktop?.classList.remove('hidden');
+            this._initMapControls();
+            this._drawMap();
+        }
+
+        _renderMapMobileSummary() {
+            const el = document.getElementById('mapMobileSummary');
+            if (!el) return;
+            const linkedReqs  = new Set(this.relationships.filter(r => r.sourceType === 'requirement' || r.targetType === 'requirement').map(r => r.sourceType === 'requirement' ? r.sourceId : r.targetId)).size;
+            const linkedRisks = new Set(this.relationships.filter(r => r.sourceType === 'risk' || r.targetType === 'risk').map(r => r.sourceType === 'risk' ? r.sourceId : r.targetId)).size;
+            el.innerHTML = `
+                <div class="map-mobile-stats">
+                    <div class="map-mobile-stat"><span class="map-mobile-stat-n">${this.directions.length}</span><span>Directions</span></div>
+                    <div class="map-mobile-stat"><span class="map-mobile-stat-n">${linkedReqs}</span><span>Linked requirements</span></div>
+                    <div class="map-mobile-stat"><span class="map-mobile-stat-n">${linkedRisks}</span><span>Linked risks</span></div>
+                    <div class="map-mobile-stat"><span class="map-mobile-stat-n">${this.actions.length}</span><span>Actions</span></div>
+                    <div class="map-mobile-stat"><span class="map-mobile-stat-n">${this.relationships.length}</span><span>Total links</span></div>
+                </div>`;
+        }
+
+        _initMapControls() {
+            // Wire filter checkboxes and action buttons (idempotent — guard with flag)
+            if (this._mapControlsWired) { this._drawMap(); return; }
+            this._mapControlsWired = true;
+
+            const canvas = document.getElementById('relationshipMapCanvas');
+            if (!canvas) return;
+
+            ['mapFilterDirections', 'mapFilterRequirements', 'mapFilterRisks', 'mapFilterActions', 'mapFilterUnlinked'].forEach(id => {
+                document.getElementById(id)?.addEventListener('change', () => {
+                    this._mapSelectedKey = null;
+                    this._drawMap();
+                });
+            });
+
+            document.getElementById('mapClearSelection')?.addEventListener('click', () => {
+                this._mapSelectedKey = null;
+                this._drawMap();
+            });
+
+            document.getElementById('mapExportPng')?.addEventListener('click', () => {
+                const c = document.getElementById('relationshipMapCanvas');
+                if (!c) return;
+                const a = document.createElement('a');
+                a.download = 'pspf-relationship-map.png';
+                a.href = c.toDataURL('image/png');
+                a.click();
+            });
+
+            canvas.addEventListener('click',    e => this._handleMapClick(e));
+            canvas.addEventListener('dblclick', e => this._handleMapDblClick(e));
+            canvas.addEventListener('mousemove', e => this._handleMapHover(e));
+            canvas.addEventListener('mouseleave', () => { this._mapHoveredKey = null; this._drawMap(); });
+
+            if (typeof ResizeObserver !== 'undefined') {
+                const wrapper = document.getElementById('mapCanvasWrapper');
+                if (wrapper && !this._mapResizeObserver) {
+                    this._mapResizeObserver = new ResizeObserver(() => this._drawMap());
+                    this._mapResizeObserver.observe(wrapper);
+                }
+            }
+        }
+
+        _buildMapData() {
+            const showDir = document.getElementById('mapFilterDirections')?.checked !== false;
+            const showReq = document.getElementById('mapFilterRequirements')?.checked !== false;
+            const showRisk = document.getElementById('mapFilterRisks')?.checked !== false;
+            const showAct = document.getElementById('mapFilterActions')?.checked !== false;
+            const showUnlinked = document.getElementById('mapFilterUnlinked')?.checked === true;
+
+            // Determine which entity keys appear in relationships
+            const linkedKeys = new Set();
+            this.relationships.forEach(r => {
+                linkedKeys.add(`${r.sourceType}:${r.sourceId}`);
+                linkedKeys.add(`${r.targetType}:${r.targetId}`);
+            });
+
+            const isVisible = (type, id) => {
+                if (!showUnlinked && !linkedKeys.has(`${type}:${id}`)) return false;
+                if (type === 'direction'   && !showDir)  return false;
+                if (type === 'requirement' && !showReq)  return false;
+                if (type === 'risk'        && !showRisk) return false;
+                if (type === 'action'      && !showAct)  return false;
+                return true;
+            };
+
+            const COLS = ['direction', 'requirement', 'risk', 'action'];
+            const columns = { direction: [], requirement: [], risk: [], action: [] };
+
+            this.directions.forEach(d => {
+                if (isVisible('direction', d.id)) columns.direction.push({ type: 'direction', id: d.id, label: d.title, sub: d.instrumentNumber || '' });
+            });
+            Object.values(this.requirements || {}).forEach(r => {
+                if (isVisible('requirement', r.id)) columns.requirement.push({ type: 'requirement', id: r.id, label: `${r.id}`, sub: (r.title || '').slice(0, 30) });
+            });
+            this.risks.forEach(r => {
+                if (isVisible('risk', r.id)) columns.risk.push({ type: 'risk', id: r.id, label: r.name, sub: r.severity || '' });
+            });
+            this.actions.forEach(a => {
+                if (isVisible('action', a.id)) columns.action.push({ type: 'action', id: a.id, label: a.title, sub: a.status || '' });
+            });
+
+            // Build flat node list with column assignments
+            const nodeMap = new Map(); // key -> index
+            const nodes = [];
+            COLS.forEach((colType, colIdx) => {
+                columns[colType].forEach((item, rowIdx) => {
+                    const key = `${item.type}:${item.id}`;
+                    nodeMap.set(key, nodes.length);
+                    nodes.push({ ...item, colIdx, rowIdx });
+                });
+            });
+
+            // Build edges — only where both endpoints are visible
+            const edges = this.relationships
+                .filter(r => nodeMap.has(`${r.sourceType}:${r.sourceId}`) && nodeMap.has(`${r.targetType}:${r.targetId}`))
+                .map(r => ({
+                    from: nodeMap.get(`${r.sourceType}:${r.sourceId}`),
+                    to:   nodeMap.get(`${r.targetType}:${r.targetId}`)
+                }));
+
+            return { nodes, edges, columns };
+        }
+
+        _drawMap() {
+            const canvas = document.getElementById('relationshipMapCanvas');
+            const wrapper = document.getElementById('mapCanvasWrapper');
+            const emptyState = document.getElementById('mapEmptyState');
+            if (!canvas || !wrapper) return;
+
+            const { nodes, edges } = this._buildMapData();
+
+            if (nodes.length === 0) {
+                canvas.style.display = 'none';
+                emptyState?.classList.remove('hidden');
+                return;
+            }
+            canvas.style.display = '';
+            emptyState?.classList.add('hidden');
+
+            const L = PSPFExplorer.MAP_LAYOUT;
+            const COLS = 4;
+            const dpr = window.devicePixelRatio || 1;
+            const logicalW = wrapper.clientWidth || 900;
+
+            const colW = (logicalW - L.padX * 2) / COLS;
+
+            // Column centre X positions
+            const colXc = [0, 1, 2, 3].map(i => L.padX + colW * i + colW / 2);
+
+            // Assign positions
+            nodes.forEach(node => {
+                node.cx = colXc[node.colIdx];
+                node.cy = L.colHeaderH + L.padY + node.rowIdx * (L.nodeH + L.rowGap) + L.nodeH / 2;
+                node.x  = node.cx - L.nodeW / 2;
+                node.y  = node.cy - L.nodeH / 2;
+            });
+
+            const maxRowsPerCol = [0, 1, 2, 3].map(ci => nodes.filter(n => n.colIdx === ci).length);
+            const maxRows = Math.max(...maxRowsPerCol, 1);
+            const logicalH = L.colHeaderH + L.padY * 2 + maxRows * (L.nodeH + L.rowGap);
+
+            // Resize canvas
+            canvas.width  = logicalW  * dpr;
+            canvas.height = logicalH  * dpr;
+            canvas.style.width  = logicalW  + 'px';
+            canvas.style.height = logicalH  + 'px';
+
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, logicalW, logicalH);
+
+            // Store node positions for hit testing
+            this._mapNodes = nodes;
+
+            // Determine selection state
+            const selKey = this._mapSelectedKey || null;
+            const relatedKeys = new Set();
+            if (selKey) {
+                const selIdx = nodes.findIndex(n => `${n.type}:${n.id}` === selKey);
+                if (selIdx !== -1) {
+                    edges.forEach(e => {
+                        if (e.from === selIdx) relatedKeys.add(`${nodes[e.to].type}:${nodes[e.to].id}`);
+                        if (e.to === selIdx)   relatedKeys.add(`${nodes[e.from].type}:${nodes[e.from].id}`);
+                    });
+                }
+            }
+
+            const hovKey = this._mapHoveredKey || null;
+
+            // Draw column headers
+            const COL_HEADERS = ['Directions', 'Requirements', 'Risks', 'Actions'];
+            const COL_TYPES   = ['direction', 'requirement', 'risk', 'action'];
+            const COLORS = PSPFExplorer.MAP_COLORS;
+            ctx.font = '600 13px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            COL_HEADERS.forEach((label, i) => {
+                const c = COLORS[COL_TYPES[i]];
+                const x = colXc[i];
+                ctx.fillStyle = c.bg + '22';
+                ctx.beginPath();
+                ctx.roundRect(x - L.nodeW / 2, 8, L.nodeW, 26, 6);
+                ctx.fill();
+                ctx.fillStyle = c.bg;
+                ctx.fillText(label, x, 26);
+            });
+
+            // Draw edges
+            edges.forEach(e => {
+                const src = nodes[e.from];
+                const tgt = nodes[e.to];
+                const srcKey = `${src.type}:${src.id}`;
+                const tgtKey = `${tgt.type}:${tgt.id}`;
+                const isHighlighted = selKey && (srcKey === selKey || tgtKey === selKey);
+                const isDimmed = selKey && !isHighlighted;
+
+                ctx.beginPath();
+                ctx.strokeStyle = isHighlighted ? '#f59e0b' : isDimmed ? 'rgba(160,160,160,0.15)' : 'rgba(120,120,120,0.35)';
+                ctx.lineWidth = isHighlighted ? 2.5 : 1;
+                const x1 = src.cx + L.nodeW / 2;
+                const y1 = src.cy;
+                const x2 = tgt.cx - L.nodeW / 2;
+                const y2 = tgt.cy;
+                const mx = (x1 + x2) / 2;
+                ctx.moveTo(x1, y1);
+                ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
+                ctx.stroke();
+                // Arrowhead
+                if (!isDimmed) {
+                    const angle = Math.atan2(y2 - y1, x2 - x1);
+                    ctx.save();
+                    ctx.translate(x2, y2);
+                    ctx.rotate(angle);
+                    ctx.fillStyle = isHighlighted ? '#f59e0b' : 'rgba(120,120,120,0.5)';
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(-8, -4);
+                    ctx.lineTo(-8, 4);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                }
+            });
+
+            // Draw nodes
+            nodes.forEach(node => {
+                const key = `${node.type}:${node.id}`;
+                const c = COLORS[node.type];
+                const isSelected = key === selKey;
+                const isRelated  = !isSelected && selKey && relatedKeys.has(key);
+                const isDimmed   = selKey && !isSelected && !isRelated;
+                const isHovered  = key === hovKey;
+
+                // Background
+                ctx.save();
+                ctx.globalAlpha = isDimmed ? 0.2 : 1;
+                ctx.fillStyle = isSelected ? c.bg : isRelated ? c.bg + 'cc' : c.dimBg;
+                this._drawRoundRect(ctx, node.x, node.y, L.nodeW, L.nodeH, 8);
+                ctx.fill();
+
+                // Border
+                ctx.strokeStyle = isSelected ? '#f59e0b' : isHovered ? c.border : c.bg + '66';
+                ctx.lineWidth = isSelected ? 2.5 : isHovered ? 1.5 : 1;
+                this._drawRoundRect(ctx, node.x, node.y, L.nodeW, L.nodeH, 8);
+                ctx.stroke();
+
+                // Text
+                ctx.fillStyle = (isSelected || isRelated) ? '#fff' : c.bg;
+                ctx.font = '600 12px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                const maxTextW = L.nodeW - 16;
+                const labelTrunc = this._truncateText(ctx, node.label, maxTextW);
+                ctx.fillText(labelTrunc, node.cx, node.cy - (node.sub ? 7 : 2));
+                if (node.sub) {
+                    ctx.font = '400 10px Inter, sans-serif';
+                    ctx.globalAlpha = isDimmed ? 0.2 : isSelected || isRelated ? 0.8 : 0.65;
+                    const subTrunc = this._truncateText(ctx, node.sub, maxTextW);
+                    ctx.fillText(subTrunc, node.cx, node.cy + 9);
+                }
+                ctx.restore();
+            });
+        }
+
+        _drawRoundRect(ctx, x, y, w, h, r) {
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(x, y, w, h, r);
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + w - r, y);
+                ctx.arcTo(x + w, y, x + w, y + r, r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+                ctx.lineTo(x + r, y + h);
+                ctx.arcTo(x, y + h, x, y + h - r, r);
+                ctx.lineTo(x, y + r);
+                ctx.arcTo(x, y, x + r, y, r);
+                ctx.closePath();
+            }
+        }
+
+        _truncateText(ctx, text, maxW) {
+            if (!text) return '';
+            if (ctx.measureText(text).width <= maxW) return text;
+            let t = text;
+            while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+            return t + '…';
+        }
+
+        _hitTestMap(clientX, clientY) {
+            const canvas = document.getElementById('relationshipMapCanvas');
+            if (!canvas || !this._mapNodes) return null;
+            const rect = canvas.getBoundingClientRect();
+            const L = PSPFExplorer.MAP_LAYOUT;
+            const scaleX = (canvas.width / (window.devicePixelRatio || 1)) / rect.width;
+            const scaleY = (canvas.height / (window.devicePixelRatio || 1)) / rect.height;
+            const lx = (clientX - rect.left) * scaleX;
+            const ly = (clientY - rect.top)  * scaleY;
+            return this._mapNodes.find(n =>
+                lx >= n.x && lx <= n.x + L.nodeW &&
+                ly >= n.y && ly <= n.y + L.nodeH
+            ) || null;
+        }
+
+        _handleMapClick(e) {
+            const node = this._hitTestMap(e.clientX, e.clientY);
+            if (!node) {
+                this._mapSelectedKey = null;
+            } else {
+                const key = `${node.type}:${node.id}`;
+                this._mapSelectedKey = this._mapSelectedKey === key ? null : key;
+            }
+            this._drawMap();
+        }
+
+        _handleMapDblClick(e) {
+            const node = this._hitTestMap(e.clientX, e.clientY);
+            if (!node) return;
+            if (node.type === 'requirement') {
+                this.showView('search');
+                this.updateNavButtons('searchBtn');
+                // Small delay to let the view render
+                requestAnimationFrame(() => this.showRequirementDetails(node.id));
+            } else if (node.type === 'direction') {
+                this.showDirectionModal(node.id);
+            } else if (node.type === 'risk') {
+                this.showRiskModal(node.id);
+            } else if (node.type === 'action') {
+                this.showActionModal(node.id);
+            }
+        }
+
+        _handleMapHover(e) {
+            const node = this._hitTestMap(e.clientX, e.clientY);
+            const newKey = node ? `${node.type}:${node.id}` : null;
+            const canvas = document.getElementById('relationshipMapCanvas');
+            if (canvas) canvas.style.cursor = node ? 'pointer' : 'default';
+            if (newKey !== this._mapHoveredKey) {
+                this._mapHoveredKey = newKey;
+                this._drawMap();
+            }
         }
 
         calculateDomainHealth(domainId) {
