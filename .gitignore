@@ -18,6 +18,7 @@ playwright-report/
 
 # Editor and OS files
 .vscode/
+.vscode/.chrome-debug-profile/
 .vscode/launch.json
 .DS_Store
 *.swp

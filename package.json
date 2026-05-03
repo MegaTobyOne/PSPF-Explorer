@@ -3,9 +3,10 @@
   "version": "2026.2.10",
   "description": "Interactive Australian Government Protective Security Policy Framework compliance tracking",
   "private": true,
+  "type": "module",
   "scripts": {
     "serve": "serve -l 4173 .",
-    "test": "NODE_ENV=test node --test \"scripts/tests/**/*.test.js\"",
+    "test": "NODE_ENV=test node --test scripts/tests/*.test.js",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
