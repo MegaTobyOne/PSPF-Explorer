@@ -136,6 +136,15 @@ function sanitizeExternalId(id) {
     return String(id).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'unknown';
 }
 
+const ANALYTICS_OPT_IN_KEY = 'pspf_analytics_optin';
+const ANALYTICS_DATA_KEY   = 'pspf_analytics_data';
+const ANALYTICS_EVENT_NAMES = Object.freeze([
+    'view:home', 'view:search', 'view:progress', 'view:project',
+    'view:myWork', 'view:map', 'view:data', 'view:help',
+    'compliance:update', 'risk:create', 'action:create',
+    'import:apply', 'share:export', 'external:capture',
+]);
+
 const createDefaultTagDefinitions = () => {
     return Object.keys(DEFAULT_TAG_DEFINITIONS).reduce((acc, key) => {
         acc[key] = { ...DEFAULT_TAG_DEFINITIONS[key] };
@@ -270,6 +279,7 @@ export class PSPFExplorer {
             this.renderProgress();
             this.renderDomainRequirementHeatmap();
             this.updateMobileCapabilityNotice();
+            this.updateNavButtons('homeBtn');
             this.showWelcomeModalIfFirstTime();
         }
 
@@ -848,7 +858,18 @@ export class PSPFExplorer {
             document.getElementById('helpBtn').addEventListener('click', () => {
                 this.showView('help');
                 this.updateNavButtons('helpBtn');
+                this.renderAnalyticsPanel();
             });
+
+            const analyticsOptIn = document.getElementById('analyticsOptIn');
+            if (analyticsOptIn) {
+                analyticsOptIn.addEventListener('change', (e) => {
+                    try {
+                        localStorage.setItem(ANALYTICS_OPT_IN_KEY, e.target.checked ? 'true' : 'false');
+                    } catch { /* non-fatal */ }
+                    this.renderAnalyticsPanel();
+                });
+            }
 
             const toggleDomainsGridBtn = document.getElementById('toggleDomainsGridBtn');
             if (toggleDomainsGridBtn) {
@@ -1092,6 +1113,7 @@ export class PSPFExplorer {
                     this.renderHome();
                     this.renderImportHistory();
                     const total = this._diffCount ? 0 : 0; // placeholder
+                    this.trackEvent('import:apply');
                     this.showNotification('Import applied successfully.', 'success', 5000);
                 });
             }
@@ -1518,6 +1540,13 @@ export class PSPFExplorer {
                     break;
                 }
 
+                case 'reset-analytics': {
+                    this.resetAnalyticsData();
+                    this.renderAnalyticsPanel();
+                    this.showNotification('Usage counters have been reset.', 'success');
+                    break;
+                }
+
                 default:
                     console.warn(`Unknown delegated action: ${action}`);
             }
@@ -1586,6 +1615,7 @@ export class PSPFExplorer {
             if (targetView) {
                 targetView.classList.add('active');
                 this.currentView = viewName;
+                this.trackEvent('view:' + viewName);
             }
 
             // Special handling for home view
@@ -2771,6 +2801,7 @@ export class PSPFExplorer {
             compliance.status = status;
             if (previousStatus !== status) {
                 this.recordComplianceHistory(reqId, status);
+                this.trackEvent('compliance:update');
                 const domainId = this.requirements[reqId]?.domainId;
                 if (domainId) {
                     this.recordDomainSnapshot(domainId);
@@ -3126,6 +3157,7 @@ export class PSPFExplorer {
                 actionData.id = `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
                 actionData.createdAt = new Date().toISOString();
                 this.actions.push(actionData);
+                this.trackEvent('action:create');
             }
 
             this.saveData();
@@ -5649,6 +5681,7 @@ export class PSPFExplorer {
             } else {
                 riskData.id = Date.now().toString();
                 this.risks.push(riskData);
+                this.trackEvent('risk:create');
             }
 
             this.saveData();
@@ -6670,6 +6703,7 @@ export class PSPFExplorer {
             try {
                 const payload = this.buildSharePackage(domain.requirements || []);
                 this.downloadJsonFile(payload, `pspf-share-${domain.id}`);
+                this.trackEvent('share:export');
                 this.showNotification(`Share package exported for ${domain.title}`, 'success');
             } catch (err) {
                 console.error('Share package export failed:', err);
@@ -6987,6 +7021,7 @@ export class PSPFExplorer {
 
             this.saveData();
             this.renderExternalCaptureSummary();
+            this.trackEvent('external:capture');
             this.showNotification(`External capture applied: ${totalAdded} added, ${totalUpdated} updated.`, 'success', 5000);
         }
 
@@ -7090,6 +7125,84 @@ export class PSPFExplorer {
                     }
                 });
             });
+        }
+
+        // ── Stage 7: Privacy-preserving local analytics ────────────────────────
+
+        isAnalyticsEnabled() {
+            try { return localStorage.getItem(ANALYTICS_OPT_IN_KEY) === 'true'; }
+            catch { return false; }
+        }
+
+        trackEvent(eventName) {
+            if (!this.isAnalyticsEnabled()) return;
+            if (!ANALYTICS_EVENT_NAMES.includes(eventName)) return;
+            try {
+                const raw = localStorage.getItem(ANALYTICS_DATA_KEY);
+                const data = raw ? JSON.parse(raw) : {};
+                data[eventName] = (data[eventName] || 0) + 1;
+                localStorage.setItem(ANALYTICS_DATA_KEY, JSON.stringify(data));
+            } catch { /* non-fatal */ }
+        }
+
+        getAnalyticsData() {
+            try {
+                const raw = localStorage.getItem(ANALYTICS_DATA_KEY);
+                return raw ? JSON.parse(raw) : {};
+            } catch { return {}; }
+        }
+
+        resetAnalyticsData() {
+            try { localStorage.removeItem(ANALYTICS_DATA_KEY); } catch { /* non-fatal */ }
+        }
+
+        renderAnalyticsPanel() {
+            const panel = document.getElementById('analyticsPanel');
+            const optIn = document.getElementById('analyticsOptIn');
+            if (!panel || !optIn) return;
+
+            const enabled = this.isAnalyticsEnabled();
+            optIn.checked = enabled;
+
+            if (!enabled) {
+                panel.innerHTML = '<p class="analytics-off-notice">Usage tracking is off. Enable it above to see your activity summary here.</p>';
+                return;
+            }
+
+            const data = this.getAnalyticsData();
+            const views = ['home', 'search', 'progress', 'project', 'myWork', 'map', 'data', 'help'];
+            const viewLabels = {
+                home: 'Home', search: 'Search', progress: 'Progress', project: 'Projects',
+                myWork: 'My Work', map: 'Relationship Map', data: 'Data', help: 'Help',
+            };
+            const viewRows = views.map(v =>
+                `<tr><td>${viewLabels[v]}</td><td class="analytics-count">${data[`view:${v}`] || 0}</td></tr>`
+            ).join('');
+            const actionRows = [
+                ['Compliance updates',  data['compliance:update'] || 0],
+                ['Risks created',       data['risk:create']       || 0],
+                ['Actions created',     data['action:create']     || 0],
+                ['Imports applied',     data['import:apply']      || 0],
+                ['Share exports',       data['share:export']      || 0],
+                ['External captures',   data['external:capture']  || 0],
+            ].map(([label, count]) =>
+                `<tr><td>${label}</td><td class="analytics-count">${count}</td></tr>`
+            ).join('');
+
+            panel.innerHTML = `
+                <div class="analytics-grid">
+                    <div class="analytics-table-section">
+                        <h5>View visits</h5>
+                        <table class="analytics-table" aria-label="View visit counts"><tbody>${viewRows}</tbody></table>
+                    </div>
+                    <div class="analytics-table-section">
+                        <h5>Activity</h5>
+                        <table class="analytics-table" aria-label="Activity counts"><tbody>${actionRows}</tbody></table>
+                    </div>
+                </div>
+                <button class="btn btn-outline btn-small analytics-reset-btn" type="button" data-action="reset-analytics">
+                    Reset counters
+                </button>`;
         }
 
         exportData() {

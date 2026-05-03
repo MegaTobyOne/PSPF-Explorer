@@ -1,6 +1,6 @@
 {
   "name": "pspf-explorer",
-  "version": "2026.1.0",
+  "version": "2026.2.10",
   "description": "Interactive Australian Government Protective Security Policy Framework compliance tracking",
   "private": true,
   "scripts": {
