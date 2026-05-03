@@ -4,11 +4,12 @@ const BASE_URL = '/pspf-explorer.html';
 
 test.describe('Analytics panel and usage tracking', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
       localStorage.clear();
       localStorage.setItem('pspf_welcome_seen', 'true');
     });
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.reload({ waitUntil: 'networkidle' });
     await page.waitForLoadState('networkidle');
     await page.locator('#domainsGrid .domain-card').first().waitFor({ state: 'visible' });
   });
@@ -34,9 +35,6 @@ test.describe('Analytics panel and usage tracking', () => {
 
     // Reload and verify opt-in persists
     await page.reload({ waitUntil: 'networkidle' });
-    await page.addInitScript(() => {
-      localStorage.setItem('pspf_welcome_seen', 'true');
-    });
     await page.click('#helpBtn');
     await expect(page.locator('#analyticsOptIn')).toBeChecked();
   });
@@ -53,7 +51,7 @@ test.describe('Analytics panel and usage tracking', () => {
   });
 
   test('reset counters button is visible when analytics enabled', async ({ page }) => {
-    await page.addInitScript(() => {
+    await page.evaluate(() => {
       localStorage.setItem('pspf_analytics_optin', 'true');
     });
     await page.reload({ waitUntil: 'networkidle' });
@@ -69,11 +67,12 @@ test.describe('Analytics panel and usage tracking', () => {
 
 test.describe('Data export and compliance persistence', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
       localStorage.clear();
       localStorage.setItem('pspf_welcome_seen', 'true');
     });
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.reload({ waitUntil: 'networkidle' });
     await page.waitForLoadState('networkidle');
     await page.locator('#domainsGrid .domain-card').first().waitFor({ state: 'visible' });
   });
