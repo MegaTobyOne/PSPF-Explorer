@@ -5,12 +5,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "serve": "serve -l 4173 .",
+    "serve": "npx --yes serve -l 4173 .",
     "test": "NODE_ENV=test node --test scripts/tests/*.test.js",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "serve": "^14.2.4"
-  }
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Edge versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions"
+  ]
 }

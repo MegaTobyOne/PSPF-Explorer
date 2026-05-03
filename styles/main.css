@@ -6291,6 +6291,7 @@ select:focus-visible {
     cursor: pointer;
     font-weight: 600;
     color: var(--text-secondary);
+    -webkit-user-select: none;
     user-select: none;
     padding: 0.2rem 0;
 }
@@ -6387,7 +6388,7 @@ select:focus-visible {
 .import-integrity-warning {
     padding: 0.65rem 0.9rem;
     background: color-mix(in srgb, var(--color-warning, #b45309) 10%, white);
-    border: 1px solid color-mix(in srgb, var(--color-warning, #b45309) 40%, white);
+    border: 1px solid #e1ba9c; /* ~warning 40% on white */
     border-radius: 8px;
     font-size: 0.87rem;
     color: var(--color-warning, #b45309);
@@ -6462,7 +6463,7 @@ select:focus-visible {
     border-radius: 4px;
     background: color-mix(in srgb, var(--color-primary, #2563eb) 10%, white);
     color: var(--color-primary, #2563eb);
-    border: 1px solid color-mix(in srgb, var(--color-primary, #2563eb) 30%, white);
+    border: 1px solid #bed0f9; /* ~primary 30% on white */
     vertical-align: middle;
     white-space: nowrap;
 }
@@ -6485,7 +6486,7 @@ select:focus-visible {
 .external-record-banner {
     padding: 0.55rem 0.75rem;
     background: color-mix(in srgb, var(--color-primary, #2563eb) 8%, white);
-    border: 1px solid color-mix(in srgb, var(--color-primary, #2563eb) 25%, white);
+    border: 1px solid #c8d8fa; /* ~primary 25% on white */
     border-radius: 8px;
     font-size: 0.86rem;
     color: var(--color-primary, #2563eb);
@@ -6526,6 +6527,7 @@ select:focus-visible {
 
 .field-hint-details summary {
     cursor: pointer;
+    -webkit-user-select: none;
     user-select: none;
 }
 
