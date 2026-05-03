@@ -95,6 +95,15 @@ const EVIDENCE_CHECKLIST_ITEMS = Object.freeze([
     }
 ]);
 
+const EVIDENCE_TYPES = Object.freeze([
+    { key: 'policy',         label: 'Policy or directive',     icon: '📘' },
+    { key: 'process',        label: 'Process documentation',   icon: '🧩' },
+    { key: 'system-control', label: 'System control',          icon: '⚙️' },
+    { key: 'attestation',    label: 'Attestation or sign-off', icon: '✍️' },
+    { key: 'log-or-report',  label: 'Log or report',           icon: '📊' },
+    { key: 'other',          label: 'Other evidence',          icon: '📎' },
+]);
+
 const createDefaultTagDefinitions = () => {
     return Object.keys(DEFAULT_TAG_DEFINITIONS).reduce((acc, key) => {
         acc[key] = { ...DEFAULT_TAG_DEFINITIONS[key] };
@@ -1260,6 +1269,46 @@ export class PSPFExplorer {
                     break;
                 }
 
+                case 'save-evidence-record': {
+                    const saveEvidenceReqId = target.dataset.requirementId;
+                    if (!saveEvidenceReqId) break;
+                    const form = document.getElementById(`evidenceAddForm-${saveEvidenceReqId}`);
+                    const typeEl  = form?.querySelector('.evidence-form-type');
+                    const noteEl  = form?.querySelector('.evidence-form-note');
+                    const urlEl   = form?.querySelector('.evidence-form-url');
+                    const note = noteEl?.value?.trim() || '';
+                    const url  = urlEl?.value?.trim()  || '';
+                    if (!note && !url) {
+                        this.showNotification('Please add a note or URL before saving.', 'warning');
+                        break;
+                    }
+                    this.addEvidenceRecord(saveEvidenceReqId, {
+                        type: typeEl?.value || 'other',
+                        note,
+                        url
+                    });
+                    this.showRequirementDetails(saveEvidenceReqId);
+                    break;
+                }
+
+                case 'remove-evidence-record': {
+                    const removeEvidenceId  = target.dataset.evidenceId;
+                    const removeEvidenceReqId = target.dataset.requirementId;
+                    if (removeEvidenceId) {
+                        this.removeEvidenceRecord(removeEvidenceId);
+                        if (removeEvidenceReqId) this.showRequirementDetails(removeEvidenceReqId);
+                    }
+                    break;
+                }
+
+                case 'mark-compliance-reviewed': {
+                    const reviewedReqId = target.dataset.requirementId;
+                    if (reviewedReqId) {
+                        this.reviewCompliance(reviewedReqId, '');
+                    }
+                    break;
+                }
+
                 default:
                     console.warn(`Unknown delegated action: ${action}`);
             }
@@ -2099,6 +2148,7 @@ export class PSPFExplorer {
             if (!requirement) return [];
             const compliance = this.compliance[reqId] || { status: 'not-set', comment: '', url: '' };
             const tags = this.getUserRequirementTags(reqId);
+            const evidenceRecords = this.getEvidenceForRequirement(reqId);
             const actions = [];
             const status = compliance.status || 'not-set';
 
@@ -2111,14 +2161,22 @@ export class PSPFExplorer {
             if (status === 'partial') {
                 actions.push({ icon: '⚙️', text: 'Capture residual risk details and map supporting projects.' });
             }
-            if (!compliance.url) {
-                actions.push({ icon: '🔗', text: 'Attach evidence or policy URLs so audits have a paper trail.' });
+            if (!evidenceRecords.length && !compliance.url) {
+                actions.push({ icon: '🔗', text: 'Add at least one evidence record to support audit readiness.' });
             }
             if (!compliance.comment) {
                 actions.push({ icon: '📝', text: 'Add implementation notes or context for future reviewers.' });
             }
             if (!tags.length) {
                 actions.push({ icon: '🏷️', text: 'Assign a priority tag or owner so accountability is clear.' });
+            }
+            if (compliance.lastReviewedAt) {
+                const daysSinceReview = (Date.now() - new Date(compliance.lastReviewedAt).getTime()) / 86400000;
+                if (daysSinceReview > 365) {
+                    actions.push({ icon: '📅', text: 'Compliance was last reviewed over a year ago — schedule a re-review.' });
+                }
+            } else if (status !== 'not-set') {
+                actions.push({ icon: '📅', text: 'Mark this requirement as reviewed to record when it was last checked.' });
             }
 
             return actions;
@@ -2343,6 +2401,21 @@ export class PSPFExplorer {
                     <textarea class="compliance-comment" data-req="${reqId}" placeholder="Add implementation notes, evidence, or comments..." onblur="window.pspfExplorer.updateComplianceComment('${reqId}', this.value)">${compliance.comment}</textarea>
                 </div>
 
+                ${this.renderEvidenceRecordsPanel(reqId)}
+
+                <div class="compliance-review-section">
+                    <h5>Compliance review</h5>
+                    ${compliance.lastReviewedAt
+                        ? `<p class="review-date">Last reviewed: <time datetime="${this.escapeHtml(compliance.lastReviewedAt)}">${new Date(compliance.lastReviewedAt).toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' })}</time>${compliance.lastReviewedNotes ? ` — ${this.escapeHtml(compliance.lastReviewedNotes)}` : ''}</p>`
+                        : '<p class="review-date review-date-none">Not yet reviewed.</p>'
+                    }
+                    <button class="btn btn-outline btn-small"
+                            data-action="mark-compliance-reviewed"
+                            data-requirement-id="${this.escapeHtml(reqId)}">
+                        Mark as reviewed now
+                    </button>
+                </div>
+
                     <div class="requirement-history">
                         <h5>Progress Timeline</h5>
                         ${this.renderRequirementProgressHistory(reqId)}
@@ -2541,6 +2614,113 @@ export class PSPFExplorer {
             this.saveData();
             
             // Refresh the requirement details to show/hide URL section
+            this.showRequirementDetails(reqId);
+        }
+
+        // ── Evidence records ─────────────────────────────────────────────────
+
+        getEvidenceForRequirement(reqId) {
+            return this.evidenceRecords.filter(r => r.requirementId === reqId);
+        }
+
+        addEvidenceRecord(requirementId, { type, note, url }) {
+            const typeKey = (EVIDENCE_TYPES.find(t => t.key === type) ? type : 'other');
+            const record = {
+                id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                requirementId,
+                type: typeKey,
+                note: (note || '').trim(),
+                url: (url || '').trim(),
+                createdAt: new Date().toISOString()
+            };
+            this.evidenceRecords.push(record);
+            this.saveData();
+            return record;
+        }
+
+        removeEvidenceRecord(id) {
+            const before = this.evidenceRecords.length;
+            this.evidenceRecords = this.evidenceRecords.filter(r => r.id !== id);
+            if (this.evidenceRecords.length !== before) {
+                this.saveData();
+            }
+        }
+
+        getEvidenceTypeMeta(key) {
+            return EVIDENCE_TYPES.find(t => t.key === key) || EVIDENCE_TYPES[EVIDENCE_TYPES.length - 1];
+        }
+
+        renderEvidenceRecordsPanel(reqId) {
+            const records = this.getEvidenceForRequirement(reqId);
+            const typeOptions = EVIDENCE_TYPES.map(t =>
+                `<option value="${t.key}">${t.icon} ${this.escapeHtml(t.label)}</option>`
+            ).join('');
+
+            const recordsHtml = records.length
+                ? records.map(r => {
+                    const meta = this.getEvidenceTypeMeta(r.type);
+                    const safeId = this.escapeHtml(r.id);
+                    const urlHtml = r.url
+                        ? `<a href="${this.escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="evidence-record-url">
+                               ${this.escapeHtml(r.url)}<span class="external-icon">↗</span>
+                           </a>`
+                        : '';
+                    return `
+                        <li class="evidence-record-item">
+                            <span class="evidence-record-type-badge">${meta.icon} ${this.escapeHtml(meta.label)}</span>
+                            ${r.note ? `<p class="evidence-record-note">${this.escapeHtml(r.note)}</p>` : ''}
+                            ${urlHtml}
+                            <button class="btn-icon evidence-record-remove"
+                                    data-action="remove-evidence-record"
+                                    data-evidence-id="${safeId}"
+                                    data-requirement-id="${this.escapeHtml(reqId)}"
+                                    aria-label="Remove evidence record">✕</button>
+                        </li>`;
+                  }).join('')
+                : '<li class="evidence-empty-state">No evidence records yet.</li>';
+
+            return `
+                <div class="evidence-records-panel">
+                    <h5>Evidence records</h5>
+                    <ul class="evidence-records-list">${recordsHtml}</ul>
+                    <details class="evidence-add-form" id="evidenceAddForm-${this.escapeHtml(reqId)}">
+                        <summary class="btn btn-outline btn-small">+ Add evidence record</summary>
+                        <div class="evidence-form-body">
+                            <div class="form-group">
+                                <label>Type</label>
+                                <select class="evidence-form-type form-control" data-req="${this.escapeHtml(reqId)}">
+                                    ${typeOptions}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Note <span class="field-optional">(optional)</span></label>
+                                <textarea class="evidence-form-note form-control" rows="2"
+                                          placeholder="Brief description of this evidence…"
+                                          data-req="${this.escapeHtml(reqId)}"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>URL <span class="field-optional">(optional)</span></label>
+                                <input type="url" class="evidence-form-url form-control"
+                                       placeholder="https://…"
+                                       data-req="${this.escapeHtml(reqId)}">
+                            </div>
+                            <div class="evidence-form-actions">
+                                <button class="btn btn-primary btn-small"
+                                        data-action="save-evidence-record"
+                                        data-requirement-id="${this.escapeHtml(reqId)}">Save</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>`;
+        }
+
+        // ── Compliance review ─────────────────────────────────────────────────
+
+        reviewCompliance(reqId, notes) {
+            const compliance = this.ensureComplianceEntry(reqId);
+            compliance.lastReviewedAt = new Date().toISOString();
+            compliance.lastReviewedNotes = (notes || '').trim();
+            this.saveData();
             this.showRequirementDetails(reqId);
         }
 

@@ -442,3 +442,99 @@ test('renderDataIntegrityDiagnostics includes action buttons when anomalies exis
   assert.ok(panel.querySelector('[data-action="review-integrity-issues"]'));
   assert.ok(panel.querySelector('[data-action="export-integrity-report"]'));
 });
+
+// ── Phase 2: Evidence records ─────────────────────────────────────────────
+
+test('addEvidenceRecord creates a typed record with correct fields', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  const record = explorer.addEvidenceRecord('GOV-001', { type: 'policy', note: 'Security policy v2', url: 'https://example.gov.au/policy' });
+
+  assert.strictEqual(record.requirementId, 'GOV-001');
+  assert.strictEqual(record.type, 'policy');
+  assert.strictEqual(record.note, 'Security policy v2');
+  assert.strictEqual(record.url, 'https://example.gov.au/policy');
+  assert.ok(typeof record.id === 'string' && record.id.startsWith('ev-'));
+  assert.ok(typeof record.createdAt === 'string');
+  assert.strictEqual(explorer.evidenceRecords.length, 1);
+});
+
+test('addEvidenceRecord falls back to other for unknown type', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  const record = explorer.addEvidenceRecord('GOV-002', { type: 'unknown-type', note: 'test' });
+
+  assert.strictEqual(record.type, 'other');
+});
+
+test('removeEvidenceRecord removes only the targeted record', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  explorer.addEvidenceRecord('GOV-001', { type: 'policy', note: 'First' });
+  const second = explorer.addEvidenceRecord('GOV-001', { type: 'process', note: 'Second' });
+  explorer.addEvidenceRecord('GOV-002', { type: 'attestation', note: 'Other req' });
+
+  assert.strictEqual(explorer.evidenceRecords.length, 3);
+
+  explorer.removeEvidenceRecord(second.id);
+
+  assert.strictEqual(explorer.evidenceRecords.length, 2);
+  assert.ok(!explorer.evidenceRecords.some(r => r.id === second.id));
+  assert.ok(explorer.evidenceRecords.some(r => r.note === 'First'));
+  assert.ok(explorer.evidenceRecords.some(r => r.requirementId === 'GOV-002'));
+});
+
+test('getEvidenceForRequirement returns only records for that requirement', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  explorer.addEvidenceRecord('GOV-001', { type: 'policy', note: 'A' });
+  explorer.addEvidenceRecord('GOV-001', { type: 'process', note: 'B' });
+  explorer.addEvidenceRecord('GOV-002', { type: 'attestation', note: 'C' });
+
+  const forGov001 = explorer.getEvidenceForRequirement('GOV-001');
+  const forGov002 = explorer.getEvidenceForRequirement('GOV-002');
+  const forGov003 = explorer.getEvidenceForRequirement('GOV-003');
+
+  assert.strictEqual(forGov001.length, 2);
+  assert.strictEqual(forGov002.length, 1);
+  assert.strictEqual(forGov003.length, 0);
+});
+
+// ── Phase 2: Compliance review ────────────────────────────────────────────
+
+test('reviewCompliance stamps lastReviewedAt on the compliance entry', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.requirements = { 'GOV-001': { id: 'GOV-001', title: 'Test', domainId: 'governance' } };
+  explorer.showRequirementDetails = () => {};
+
+  const before = Date.now();
+  explorer.reviewCompliance('GOV-001', 'Annual review complete');
+  const after = Date.now();
+
+  const compliance = explorer.compliance['GOV-001'];
+  assert.ok(compliance, 'Compliance entry should exist');
+  assert.ok(typeof compliance.lastReviewedAt === 'string');
+  const ts = new Date(compliance.lastReviewedAt).getTime();
+  assert.ok(ts >= before && ts <= after, 'Timestamp should be within test window');
+  assert.strictEqual(compliance.lastReviewedNotes, 'Annual review complete');
+});
+
+test('reviewCompliance preserves existing compliance status', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.requirements = { 'GOV-001': { id: 'GOV-001', title: 'Test', domainId: 'governance' } };
+  explorer.renderDomainsGrid = () => {};
+  explorer.updateStats = () => {};
+  explorer.showRequirementDetails = () => {};
+
+  explorer.updateCompliance('GOV-001', 'yes');
+  explorer.reviewCompliance('GOV-001', '');
+
+  assert.strictEqual(explorer.compliance['GOV-001'].status, 'yes');
+  assert.ok(explorer.compliance['GOV-001'].lastReviewedAt);
+});
