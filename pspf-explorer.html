@@ -544,13 +544,31 @@
                                     <button id="exportProjectBtn" class="btn btn-secondary" disabled>Export Project</button>
                                 </div>
                             </div>
+                            <div class="scoped-export">
+                                <label for="sharePackageDomainSelect">Share package (by domain)</label>
+                                <div class="scoped-export-controls">
+                                    <select id="sharePackageDomainSelect">
+                                        <option value="">Select a domain…</option>
+                                    </select>
+                                    <button id="exportSharePackageBtn" class="btn btn-secondary" disabled>Export Share Package</button>
+                                </div>
+                                <p class="field-hint">Includes all requirements in the domain plus their linked risks, actions, directions, evidence, and relationships — suitable for sharing with another team.</p>
+                            </div>
                         </div>
                         
                         <div class="data-card">
                             <h3>📥 Import Data</h3>
-                            <p>Restore data from a previously exported backup file.</p>
+                            <p>Restore data from a backup file, or merge a share package from another team. Changes are staged for review before anything is committed.</p>
                             <input type="file" id="importFileInput" accept=".json" class="hidden" title="Select backup file to import">
-                            <button id="importDataBtn" class="btn btn-secondary">Import Data</button>
+                            <button id="importDataBtn" class="btn btn-secondary">Stage Import…</button>
+                        </div>
+
+                        <div class="data-card" id="importHistoryCard">
+                            <h3>📋 Import History</h3>
+                            <p class="field-hint">A record of all staged imports applied to this workspace.</p>
+                            <div id="importHistoryList" class="import-history-list">
+                                <p class="empty-state">No imports recorded yet.</p>
+                            </div>
                         </div>
                         
                         <div class="data-card data-card--hidden">
@@ -942,7 +960,7 @@
                 <p><strong>💾 Your Data is Private:</strong> All data is stored locally in your browser. Nothing is sent to any server. Use Export to backup your work.</p>
             </div>
             <div class="footer-meta">
-                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026 • <span class="app-version">v2.02</span></p>
+                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026 • <span class="app-version">v2.05</span></p>
                 <p><a href="https://www.protectivesecurity.gov.au/pspf-annual-release" target="_blank" rel="noopener noreferrer">Authoritative Source for PSPF</a></p>
             </div>
         </div>
@@ -1093,6 +1111,79 @@
                     <button type="submit" class="btn btn-primary">Save Event</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Import Review Modal (Stage 5) -->
+    <div id="importReviewModal" class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="importReviewModalTitle" aria-describedby="importReviewModalHint" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="importReviewModalTitle">Review Import</h3>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="importReviewModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="importReviewModalHint" class="visually-hidden">Review incoming data before applying. Press Escape to cancel.</p>
+
+            <div class="import-review-body">
+                <!-- Source info -->
+                <div id="importReviewSource" class="import-review-source"></div>
+
+                <!-- Diff summary table -->
+                <div class="import-review-diff">
+                    <table class="import-diff-table" aria-label="Import changes summary">
+                        <thead>
+                            <tr>
+                                <th>Entity</th>
+                                <th class="diff-col-new">New</th>
+                                <th class="diff-col-conflict">Conflicts</th>
+                                <th class="diff-col-match">Unchanged</th>
+                            </tr>
+                        </thead>
+                        <tbody id="importDiffBody"></tbody>
+                    </table>
+                </div>
+
+                <!-- Conflict detail (expandable) -->
+                <details id="importConflictDetails" class="import-conflict-details">
+                    <summary>Show conflict details</summary>
+                    <div id="importConflictList" class="import-conflict-list"></div>
+                </details>
+
+                <!-- Merge strategy -->
+                <div class="import-strategy-section">
+                    <h4>Apply strategy</h4>
+                    <div class="import-strategy-options" role="radiogroup" aria-label="Merge strategy">
+                        <label class="import-strategy-option">
+                            <input type="radio" name="importStrategy" value="merge-incoming" checked>
+                            <div>
+                                <strong>Merge — prefer incoming</strong>
+                                <span>Add new records; overwrite conflicts with imported version.</span>
+                            </div>
+                        </label>
+                        <label class="import-strategy-option">
+                            <input type="radio" name="importStrategy" value="merge-keep-mine">
+                            <div>
+                                <strong>Merge — keep mine</strong>
+                                <span>Add new records; keep my version of any conflicts.</span>
+                            </div>
+                        </label>
+                        <label class="import-strategy-option">
+                            <input type="radio" name="importStrategy" value="replace-all">
+                            <div>
+                                <strong>Replace all</strong>
+                                <span>Discard all current data and replace with the imported file.</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Integrity warning (shown conditionally) -->
+                <div id="importIntegrityWarning" class="import-integrity-warning hidden"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelImportReview">Cancel</button>
+                <button type="button" class="btn btn-primary" id="applyImportBtn">Apply Import</button>
+            </div>
         </div>
     </div>
 

@@ -6203,3 +6203,248 @@ select:focus-visible {
     color: var(--text-primary);
     line-height: 1.2;
 }
+
+/* ── Stage 5: Share Package & Staged Import ──────────────────────── */
+
+/* Wide modal variant */
+.modal-wide .modal-content {
+    max-width: 720px;
+}
+
+/* Import review body layout */
+.import-review-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 0.25rem 0;
+}
+
+/* Source file info banner */
+.import-review-source {
+    background: var(--bg-secondary, #f8f9fa);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+}
+
+.import-review-file {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.import-review-file-icon { font-size: 1.1rem; flex-shrink: 0; }
+
+.import-review-file-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.import-review-warn {
+    font-size: 0.82rem;
+    color: var(--color-warning, #b45309);
+}
+
+/* Diff table */
+.import-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.import-diff-table th,
+.import-diff-table td {
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.import-diff-table th {
+    font-weight: 600;
+    background: var(--bg-secondary, #f8f9fa);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-secondary);
+}
+
+.diff-col-new  { color: var(--color-success, #15803d); }
+.diff-col-conflict { color: var(--color-warning, #b45309); }
+.diff-col-match { color: var(--text-secondary); }
+
+.diff-col-new.has-value    { font-weight: 700; }
+.diff-col-conflict.has-value { font-weight: 700; }
+
+/* Conflict details */
+.import-conflict-details {
+    background: var(--bg-secondary, #f8f9fa);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.88rem;
+}
+
+.import-conflict-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-secondary);
+    user-select: none;
+    padding: 0.2rem 0;
+}
+
+.import-conflict-list {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.import-conflict-item {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    font-size: 0.83rem;
+    padding: 0.15rem 0;
+    border-bottom: 1px solid var(--border-color-light, #e5e7eb);
+}
+
+.import-conflict-type {
+    text-transform: capitalize;
+    color: var(--text-secondary);
+    min-width: 100px;
+}
+
+.import-conflict-id {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
+    color: var(--color-warning, #b45309);
+    word-break: break-all;
+}
+
+/* Merge strategy options */
+.import-strategy-section h4 {
+    margin: 0 0 0.6rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.import-strategy-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.import-strategy-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.import-strategy-option:hover {
+    background: var(--bg-secondary, #f8f9fa);
+}
+
+.import-strategy-option input[type="radio"] {
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+}
+
+.import-strategy-option:has(input:checked) {
+    border-color: var(--color-primary, #2563eb);
+    background: color-mix(in srgb, var(--color-primary, #2563eb) 6%, white);
+}
+
+.import-strategy-option > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.import-strategy-option strong {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.import-strategy-option span {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+/* Integrity warning */
+.import-integrity-warning {
+    padding: 0.65rem 0.9rem;
+    background: color-mix(in srgb, var(--color-warning, #b45309) 10%, white);
+    border: 1px solid color-mix(in srgb, var(--color-warning, #b45309) 40%, white);
+    border-radius: 8px;
+    font-size: 0.87rem;
+    color: var(--color-warning, #b45309);
+}
+
+/* Import history */
+.import-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.import-history-item {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-primary, #fff);
+}
+
+.import-history-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 0.35rem;
+}
+
+.import-history-file {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.import-history-date {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.import-history-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.import-stat {
+    font-size: 0.78rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.import-stat-added   { background: color-mix(in srgb, var(--color-success, #15803d) 12%, white); color: var(--color-success, #15803d); }
+.import-stat-conflict { background: color-mix(in srgb, var(--color-warning, #b45309) 12%, white); color: var(--color-warning, #b45309); }
+.import-stat-match   { background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); }
+.import-stat-strategy { background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); font-weight: 400; }

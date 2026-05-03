@@ -870,3 +870,199 @@ test('_truncateText truncates and appends ellipsis when text is too long', () =>
   assert.ok(result.endsWith('…'));
   assert.ok(result.length < 'A very long label that will not fit'.length);
 });
+
+// ── Stage 5: Share Package & Staged Import ────────────────────────────────
+
+test('computeImportDiff identifies added, conflicts, and matched records', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  const current = {
+    projects: [{ id: 'p1', name: 'Old Name' }],
+    risks: [],
+    incidents: [],
+    actions: [],
+    directions: [],
+    relationships: [],
+    evidenceRecords: [],
+    compliance: { 'GOV-001': { status: 'compliant' } },
+  };
+
+  const incoming = {
+    projects: [
+      { id: 'p1', name: 'Updated Name' },   // conflict
+      { id: 'p2', name: 'New Project' },     // added
+    ],
+    risks: [],
+    incidents: [],
+    actions: [],
+    directions: [],
+    relationships: [],
+    evidenceRecords: [],
+    compliance: {
+      'GOV-001': { status: 'partial' },      // compliance conflict
+      'GOV-002': { status: 'not-compliant' }, // compliance added
+    },
+  };
+
+  const diff = explorer.computeImportDiff(incoming, current);
+
+  assert.strictEqual(diff.projects.added.length, 1);
+  assert.strictEqual(diff.projects.conflicts.length, 1);
+  assert.strictEqual(diff.projects.matched.length, 0);
+  assert.strictEqual(diff.compliance.added.length, 1);
+  assert.strictEqual(diff.compliance.conflicts.length, 1);
+});
+
+test('computeImportDiff treats identical records as matched', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const record = { id: 'r1', name: 'Identical', createdAt: '2025-01-01T00:00:00Z' };
+  const diff = explorer.computeImportDiff(
+    { projects: [], risks: [record], incidents: [], actions: [], directions: [], relationships: [], evidenceRecords: [], compliance: {} },
+    { projects: [], risks: [record], incidents: [], actions: [], directions: [], relationships: [], evidenceRecords: [], compliance: {} }
+  );
+  assert.strictEqual(diff.risks.matched.length, 1);
+  assert.strictEqual(diff.risks.conflicts.length, 0);
+  assert.strictEqual(diff.risks.added.length, 0);
+});
+
+test('applyMerge with merge-incoming adds new records and overwrites conflicts', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.projects = [{ id: 'p1', name: 'Old' }];
+  explorer.risks = [];
+  explorer.incidents = [];
+  explorer.actions = [];
+  explorer.directions = [];
+  explorer.relationships = [];
+  explorer.evidenceRecords = [];
+  explorer.compliance = {};
+  explorer.importBatches = [];
+  explorer.mergeReviews = [];
+
+  const sanitizedData = {
+    projects: [{ id: 'p1', name: 'Updated' }, { id: 'p2', name: 'New' }],
+    risks: [], incidents: [], actions: [], directions: [], relationships: [], evidenceRecords: [],
+    compliance: {},
+    importBatches: [], mergeReviews: [],
+  };
+
+  const diff = explorer.computeImportDiff(sanitizedData, {
+    projects: explorer.projects, risks: [], incidents: [], actions: [], directions: [],
+    relationships: [], evidenceRecords: [], compliance: {},
+  });
+
+  explorer.applyMerge(sanitizedData, diff, 'merge-incoming');
+
+  assert.strictEqual(explorer.projects.length, 2);
+  assert.strictEqual(explorer.projects.find(p => p.id === 'p1').name, 'Updated');
+  assert.ok(explorer.projects.find(p => p.id === 'p2'));
+});
+
+test('applyMerge with merge-keep-mine keeps existing data for conflicts', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.projects = [{ id: 'p1', name: 'Mine' }];
+  explorer.risks = []; explorer.incidents = []; explorer.actions = [];
+  explorer.directions = []; explorer.relationships = []; explorer.evidenceRecords = [];
+  explorer.compliance = {}; explorer.importBatches = []; explorer.mergeReviews = [];
+
+  const sanitizedData = {
+    projects: [{ id: 'p1', name: 'Theirs' }, { id: 'p2', name: 'New' }],
+    risks: [], incidents: [], actions: [], directions: [], relationships: [], evidenceRecords: [],
+    compliance: {}, importBatches: [], mergeReviews: [],
+  };
+  const diff = explorer.computeImportDiff(sanitizedData, {
+    projects: explorer.projects, risks: [], incidents: [], actions: [], directions: [],
+    relationships: [], evidenceRecords: [], compliance: {},
+  });
+
+  explorer.applyMerge(sanitizedData, diff, 'merge-keep-mine');
+
+  assert.strictEqual(explorer.projects.find(p => p.id === 'p1').name, 'Mine');
+  assert.ok(explorer.projects.find(p => p.id === 'p2'));
+});
+
+test('applyMerge with replace-all replaces all data', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.projects = [{ id: 'p1', name: 'Old' }];
+  explorer.risks = []; explorer.incidents = []; explorer.actions = [];
+  explorer.directions = []; explorer.relationships = []; explorer.evidenceRecords = [];
+  explorer.compliance = { 'GOV-001': { status: 'compliant' } };
+  explorer.importBatches = []; explorer.mergeReviews = [];
+
+  const sanitizedData = {
+    projects: [{ id: 'p2', name: 'Only this' }],
+    risks: [], incidents: [], actions: [], directions: [], relationships: [], evidenceRecords: [],
+    compliance: {},
+    importBatches: [], mergeReviews: [],
+  };
+  const diff = explorer.computeImportDiff(sanitizedData, {
+    projects: explorer.projects, risks: [], incidents: [], actions: [], directions: [],
+    relationships: [], evidenceRecords: [], compliance: explorer.compliance,
+  });
+
+  explorer.applyMerge(sanitizedData, diff, 'replace-all');
+
+  assert.strictEqual(explorer.projects.length, 1);
+  assert.strictEqual(explorer.projects[0].id, 'p2');
+  assert.deepStrictEqual(explorer.compliance, {});
+});
+
+test('recordImportBatch records correct totals', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.importBatches = [];
+
+  const diff = {
+    projects:      { added: [{}], conflicts: [{}, {}], matched: [] },
+    risks:         { added: [],   conflicts: [],        matched: [{}] },
+    incidents:     { added: [],   conflicts: [],        matched: [] },
+    actions:       { added: [{}], conflicts: [],        matched: [] },
+    directions:    { added: [],   conflicts: [],        matched: [] },
+    relationships: { added: [],   conflicts: [],        matched: [] },
+    evidenceRecords: { added: [], conflicts: [],        matched: [] },
+    compliance:    { added: [],   conflicts: [{}],      matched: [] },
+  };
+
+  explorer.recordImportBatch({ strategy: 'merge-incoming', filename: 'test.json', diff, appliedAt: new Date().toISOString() });
+
+  assert.strictEqual(explorer.importBatches.length, 1);
+  const batch = explorer.importBatches[0];
+  assert.strictEqual(batch.totalAdded, 2);
+  assert.strictEqual(batch.totalConflicts, 3);
+  assert.strictEqual(batch.totalMatched, 1);
+  assert.strictEqual(batch.strategy, 'merge-incoming');
+});
+
+test('buildSharePackage includes linked entities', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.requirements = {
+    'GOV-001': { id: 'GOV-001', title: 'Req 1', domainId: 'governance' },
+  };
+  explorer.risks = [{ id: 'risk-1', name: 'Risk A', severity: 'high', createdAt: new Date().toISOString() }];
+  explorer.actions = [{ id: 'act-1', title: 'Action A', createdAt: new Date().toISOString() }];
+  explorer.directions = [];
+  explorer.evidenceRecords = [{ id: 'ev-1', requirementId: 'GOV-001', type: 'policy', title: 'E1' }];
+  explorer.compliance = { 'GOV-001': { status: 'compliant' } };
+  explorer.relationships = [
+    { id: 'r1', sourceType: 'requirement', sourceId: 'GOV-001', targetType: 'risk', targetId: 'risk-1', relation: 'addresses', createdAt: new Date().toISOString() },
+    { id: 'r2', sourceType: 'requirement', sourceId: 'GOV-001', targetType: 'action', targetId: 'act-1', relation: 'mitigated-by', createdAt: new Date().toISOString() },
+  ];
+  explorer.projects = [];
+  explorer.incidents = [];
+  explorer.importBatches = [];
+  explorer.mergeReviews = [];
+
+  const pkg = explorer.buildSharePackage(['GOV-001']);
+
+  assert.ok(pkg.data.risks.find(r => r.id === 'risk-1'), 'risk should be included');
+  assert.ok(pkg.data.actions.find(a => a.id === 'act-1'), 'action should be included');
+  assert.ok(pkg.data.evidenceRecords.find(e => e.id === 'ev-1'), 'evidence should be included');
+  assert.strictEqual(pkg.data.compliance['GOV-001'].status, 'compliant');
+  assert.strictEqual(pkg.data.relationships.length, 2);
+  assert.strictEqual(pkg.scope.type, 'share-package');
+});

@@ -1040,6 +1040,59 @@ export class PSPFExplorer {
                 addActionBtn.addEventListener('click', () => this.showActionModal());
             }
 
+            // Import review modal
+            const cancelImportReview = document.getElementById('cancelImportReview');
+            if (cancelImportReview) {
+                cancelImportReview.addEventListener('click', () => {
+                    this.hideModal('importReviewModal');
+                    this._stagedImportData = null;
+                    this._stagedImportDiff = null;
+                });
+            }
+            const applyImportBtn = document.getElementById('applyImportBtn');
+            if (applyImportBtn) {
+                applyImportBtn.addEventListener('click', () => {
+                    if (!this._stagedImportData || !this._stagedImportDiff) return;
+                    const strategyEl = document.querySelector('input[name="importStrategy"]:checked');
+                    const strategy = strategyEl?.value || 'merge-incoming';
+                    this.applyMerge(this._stagedImportData, this._stagedImportDiff, strategy);
+                    this.recordImportBatch({
+                        strategy,
+                        filename: this._stagedImportFile,
+                        diff: this._stagedImportDiff,
+                        appliedAt: new Date().toISOString(),
+                    });
+                    if (strategy === 'replace-all') {
+                        this.importBatches = this._stagedImportData.importBatches?.length
+                            ? this._stagedImportData.importBatches
+                            : this.importBatches;
+                    }
+                    this.saveData();
+                    this.hideModal('importReviewModal');
+                    this._stagedImportData = null;
+                    this._stagedImportDiff = null;
+                    this.updateDataStats();
+                    this.renderHome();
+                    this.renderImportHistory();
+                    const total = this._diffCount ? 0 : 0; // placeholder
+                    this.showNotification('Import applied successfully.', 'success', 5000);
+                });
+            }
+
+            // Share package export button
+            const exportSharePackageBtn = document.getElementById('exportSharePackageBtn');
+            const sharePackageDomainSelect = document.getElementById('sharePackageDomainSelect');
+            if (sharePackageDomainSelect) {
+                sharePackageDomainSelect.addEventListener('change', () => {
+                    if (exportSharePackageBtn) exportSharePackageBtn.disabled = !sharePackageDomainSelect.value;
+                });
+            }
+            if (exportSharePackageBtn) {
+                exportSharePackageBtn.addEventListener('click', () => {
+                    this.exportSharePackage(sharePackageDomainSelect?.value);
+                });
+            }
+
             // Project detail tabs (event delegation on container so re-renders are handled)
             const projectDetails = document.getElementById('projectDetails');
             if (projectDetails) {
@@ -5899,6 +5952,7 @@ export class PSPFExplorer {
             this.renderEvidenceCoverageSummary();
             this.renderDataIntegrityDiagnostics();
             this.populateScopedExportSelectors();
+            this.renderImportHistory();
         }
 
         computeDataIntegrityDiagnostics() {
@@ -6205,6 +6259,25 @@ export class PSPFExplorer {
                 }
             }
 
+            // Share package domain selector
+            const sharePackageSelect = document.getElementById('sharePackageDomainSelect');
+            const sharePackageBtn = document.getElementById('exportSharePackageBtn');
+            if (sharePackageSelect) {
+                const prevShare = sharePackageSelect.value;
+                const shareOptions = this.domains
+                    .slice()
+                    .sort((a, b) => a.title.localeCompare(b.title))
+                    .map(d => `<option value="${this.escapeHtml(d.id)}">${this.escapeHtml(d.title)}</option>`)
+                    .join('');
+                sharePackageSelect.innerHTML = `<option value="">Select a domain…</option>${shareOptions}`;
+                if (prevShare && this.domains.some(d => d.id === prevShare)) {
+                    sharePackageSelect.value = prevShare;
+                } else {
+                    sharePackageSelect.value = '';
+                }
+                if (sharePackageBtn) sharePackageBtn.disabled = !sharePackageSelect.value;
+            }
+
             const projectSelect = document.getElementById('projectExportSelect');
             const projectBtn = document.getElementById('exportProjectBtn');
             if (projectSelect) {
@@ -6447,6 +6520,317 @@ export class PSPFExplorer {
             };
         }
 
+        // ── Stage 5: Targeted share package export ────────────────────────────
+
+        buildSharePackage(requirementIds) {
+            const reqSet = new Set(Array.isArray(requirementIds) ? requirementIds : []);
+
+            // Collect linked entity IDs via relationships
+            const linkedRiskIds      = new Set();
+            const linkedActionIds    = new Set();
+            const linkedDirectionIds = new Set();
+            const includedRelIds     = new Set();
+
+            this.relationships.forEach(r => {
+                const involvesReq = (r.sourceType === 'requirement' && reqSet.has(r.sourceId))
+                                 || (r.targetType === 'requirement' && reqSet.has(r.targetId));
+                if (!involvesReq) return;
+                includedRelIds.add(r.id);
+                if (r.sourceType === 'risk') linkedRiskIds.add(r.sourceId);
+                if (r.targetType === 'risk') linkedRiskIds.add(r.targetId);
+                if (r.sourceType === 'action') linkedActionIds.add(r.sourceId);
+                if (r.targetType === 'action') linkedActionIds.add(r.targetId);
+                if (r.sourceType === 'direction') linkedDirectionIds.add(r.sourceId);
+                if (r.targetType === 'direction') linkedDirectionIds.add(r.targetId);
+            });
+
+            // Also include risk↔action relationships for included risks/actions
+            const additionalRels = this.relationships.filter(r => {
+                if (includedRelIds.has(r.id)) return false;
+                return (linkedRiskIds.has(r.sourceId) || linkedRiskIds.has(r.targetId)
+                     || linkedActionIds.has(r.sourceId) || linkedActionIds.has(r.targetId));
+            });
+            additionalRels.forEach(r => includedRelIds.add(r.id));
+
+            const compliance = {};
+            reqSet.forEach(id => { if (this.compliance[id]) compliance[id] = this.compliance[id]; });
+
+            const evidenceRecords = this.evidenceRecords.filter(e => reqSet.has(e.requirementId));
+            const risks      = this.risks.filter(r => linkedRiskIds.has(r.id));
+            const actions    = this.actions.filter(a => linkedActionIds.has(a.id));
+            const directions = this.directions.filter(d => linkedDirectionIds.has(d.id));
+            const relationships = this.relationships.filter(r => includedRelIds.has(r.id));
+            const requirementDetails = Array.from(reqSet).map(id => {
+                const r = this.requirements[id];
+                return r ? { id: r.id, title: r.title, domainId: r.domainId } : null;
+            }).filter(Boolean);
+
+            return this.buildDataEnvelope({
+                scope: { type: 'share-package', requirementCount: reqSet.size },
+                summary: {
+                    requirements: requirementDetails.length,
+                    complianceRecords: Object.keys(compliance).length,
+                    evidenceRecords: evidenceRecords.length,
+                    directions: directions.length,
+                    risks: risks.length,
+                    actions: actions.length,
+                    relationships: relationships.length,
+                },
+                data: {
+                    requirements: requirementDetails,
+                    compliance,
+                    evidenceRecords,
+                    directions,
+                    risks,
+                    actions,
+                    relationships,
+                    projects: [],
+                    incidents: [],
+                    importBatches: [],
+                    mergeReviews: [],
+                }
+            });
+        }
+
+        exportSharePackage(domainId) {
+            if (!domainId) { this.showNotification('Select a domain for the share package.', 'warning'); return; }
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) { this.showNotification('Domain not found.', 'error'); return; }
+            try {
+                const payload = this.buildSharePackage(domain.requirements || []);
+                this.downloadJsonFile(payload, `pspf-share-${domain.id}`);
+                this.showNotification(`Share package exported for ${domain.title}`, 'success');
+            } catch (err) {
+                console.error('Share package export failed:', err);
+                this.showNotification('Share package export failed. Please try again.', 'error');
+            }
+        }
+
+        // ── Stage 5: Staged import with merge review ──────────────────────────
+
+        /**
+         * Computes a diff between an incoming sanitised data snapshot and current state.
+         * Returns per-entity-type arrays of { added, conflicts, matched }
+         */
+        computeImportDiff(incoming, current) {
+            const ARRAY_TYPES = ['projects', 'risks', 'incidents', 'actions', 'directions', 'relationships', 'evidenceRecords'];
+            const result = {};
+
+            ARRAY_TYPES.forEach(type => {
+                const inArr  = Array.isArray(incoming[type]) ? incoming[type] : [];
+                const curMap = new Map((Array.isArray(current[type]) ? current[type] : []).map(e => [e.id, e]));
+                const added = [], conflicts = [], matched = [];
+                inArr.forEach(item => {
+                    if (!curMap.has(item.id)) {
+                        added.push(item);
+                    } else {
+                        const existing = curMap.get(item.id);
+                        const changed  = JSON.stringify(existing) !== JSON.stringify(item);
+                        if (changed) conflicts.push({ incoming: item, existing });
+                        else         matched.push(item);
+                    }
+                });
+                result[type] = { added, conflicts, matched };
+            });
+
+            // Compliance is an object keyed by reqId — treat differently
+            const inComp  = (incoming.compliance && typeof incoming.compliance === 'object') ? incoming.compliance : {};
+            const curComp = (current.compliance  && typeof current.compliance  === 'object') ? current.compliance  : {};
+            const compAdded = [], compConflicts = [], compMatched = [];
+            Object.entries(inComp).forEach(([key, val]) => {
+                if (!curComp[key]) {
+                    compAdded.push({ key, incoming: val });
+                } else if (JSON.stringify(curComp[key]) !== JSON.stringify(val)) {
+                    compConflicts.push({ key, incoming: val, existing: curComp[key] });
+                } else {
+                    compMatched.push({ key });
+                }
+            });
+            result.compliance = { added: compAdded, conflicts: compConflicts, matched: compMatched };
+
+            return result;
+        }
+
+        /**
+         * Applies a staged import with the given strategy:
+         *   'merge-incoming' — add new, overwrite conflicts with incoming
+         *   'merge-keep-mine' — add new, keep existing for conflicts
+         *   'replace-all' — replace all arrays/objects wholesale
+         */
+        applyMerge(sanitizedData, diff, strategy) {
+            const ARRAY_TYPES = ['projects', 'risks', 'incidents', 'actions', 'directions', 'relationships', 'evidenceRecords'];
+
+            if (strategy === 'replace-all') {
+                ARRAY_TYPES.forEach(type => { this[type] = Array.isArray(sanitizedData[type]) ? sanitizedData[type] : this[type]; });
+                this.compliance    = sanitizedData.compliance    || this.compliance;
+                this.importBatches = Array.isArray(sanitizedData.importBatches) ? sanitizedData.importBatches : this.importBatches;
+                this.mergeReviews  = Array.isArray(sanitizedData.mergeReviews)  ? sanitizedData.mergeReviews  : this.mergeReviews;
+                return;
+            }
+
+            // Merge strategies: start from current, add new, optionally overwrite conflicts
+            ARRAY_TYPES.forEach(type => {
+                const { added, conflicts } = diff[type];
+                const curMap = new Map(this[type].map(e => [e.id, e]));
+                added.forEach(item => curMap.set(item.id, item));
+                if (strategy === 'merge-incoming') {
+                    conflicts.forEach(({ incoming }) => curMap.set(incoming.id, incoming));
+                }
+                this[type] = Array.from(curMap.values());
+            });
+
+            // Compliance
+            const { added: cAdded, conflicts: cConflicts } = diff.compliance;
+            cAdded.forEach(({ key, incoming }) => { this.compliance[key] = incoming; });
+            if (strategy === 'merge-incoming') {
+                cConflicts.forEach(({ key, incoming }) => { this.compliance[key] = incoming; });
+            }
+        }
+
+        recordImportBatch({ strategy, filename, diff, appliedAt }) {
+            const totalAdded    = this._diffCount(diff, 'added');
+            const totalConflicts = this._diffCount(diff, 'conflicts');
+            const totalMatched  = this._diffCount(diff, 'matched');
+            this.importBatches.push({
+                id: `ib-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                appliedAt,
+                filename: filename || 'unknown',
+                strategy,
+                totalAdded,
+                totalConflicts,
+                totalMatched,
+            });
+        }
+
+        _diffCount(diff, key) {
+            return Object.values(diff).reduce((sum, v) => sum + (Array.isArray(v[key]) ? v[key].length : 0), 0);
+        }
+
+        stageImport(parsedData, filename) {
+            const validation = this.validateImportData(parsedData);
+            if (!validation.valid) {
+                this.showNotification(`Import failed: ${validation.errors.join(', ')}`, 'error', 8000);
+                return;
+            }
+            const payloadData     = this.resolveImportPayload(parsedData);
+            const sanitizedData   = this.sanitizeImportData(payloadData || {});
+            const currentSnapshot = this.getPortableDataSnapshot();
+            const diff            = this.computeImportDiff(sanitizedData, currentSnapshot);
+            const diagnostics     = this.computeIntegrityDiagnosticsForData(sanitizedData);
+
+            this._stagedImportData     = sanitizedData;
+            this._stagedImportDiff     = diff;
+            this._stagedImportFile     = filename || 'imported file';
+            this._stagedImportWarnings = validation.warnings;
+            this._stagedImportDiag     = diagnostics;
+
+            this.openImportReviewModal();
+        }
+
+        openImportReviewModal() {
+            if (!this.ensureCapabilityAvailable('advancedMerge')) return;
+            const modal = document.getElementById('importReviewModal');
+            if (!modal) return;
+            this.renderImportReview();
+            this.openModal(modal, { initialFocusSelector: 'input[name="importStrategy"]' });
+        }
+
+        renderImportReview() {
+            const diff = this._stagedImportDiff;
+            if (!diff) return;
+
+            // Source info
+            const sourceEl = document.getElementById('importReviewSource');
+            if (sourceEl) {
+                sourceEl.innerHTML = `
+                    <div class="import-review-file">
+                        <span class="import-review-file-icon">📄</span>
+                        <span class="import-review-file-name">${this.escapeHtml(this._stagedImportFile)}</span>
+                        ${this._stagedImportWarnings?.length ? `<span class="import-review-warn">⚠️ ${this._stagedImportWarnings.map(w => this.escapeHtml(w)).join('; ')}</span>` : ''}
+                    </div>`;
+            }
+
+            // Diff table
+            const tbody = document.getElementById('importDiffBody');
+            if (tbody) {
+                const LABELS = {
+                    projects: 'Projects', risks: 'Risks', incidents: 'Events',
+                    actions: 'Actions', directions: 'Directions',
+                    relationships: 'Relationships', evidenceRecords: 'Evidence records',
+                    compliance: 'Compliance records'
+                };
+                tbody.innerHTML = Object.entries(diff).map(([type, counts]) => {
+                    const added    = counts.added?.length    ?? 0;
+                    const conflicts = counts.conflicts?.length ?? 0;
+                    const matched  = counts.matched?.length  ?? 0;
+                    return `<tr>
+                        <td>${LABELS[type] || type}</td>
+                        <td class="diff-col-new${added    ? ' has-value' : ''}">${added}</td>
+                        <td class="diff-col-conflict${conflicts ? ' has-value' : ''}">${conflicts}</td>
+                        <td class="diff-col-match">${matched}</td>
+                    </tr>`;
+                }).join('');
+            }
+
+            // Conflict details
+            const conflictList = document.getElementById('importConflictList');
+            const conflictDetails = document.getElementById('importConflictDetails');
+            if (conflictList && conflictDetails) {
+                const conflicts = Object.entries(diff).flatMap(([type, counts]) =>
+                    (counts.conflicts || []).map(c => ({ type, ...c }))
+                );
+                if (!conflicts.length) {
+                    conflictDetails.style.display = 'none';
+                } else {
+                    conflictDetails.style.display = '';
+                    conflictList.innerHTML = conflicts.map(c => {
+                        const label = c.incoming?.id || c.key || c.incoming?.title || 'Unknown';
+                        return `<div class="import-conflict-item">
+                            <span class="import-conflict-type">${this.escapeHtml(c.type)}</span>
+                            <span class="import-conflict-id">${this.escapeHtml(String(label))}</span>
+                        </div>`;
+                    }).join('');
+                }
+            }
+
+            // Integrity warning
+            const warnEl = document.getElementById('importIntegrityWarning');
+            if (warnEl) {
+                const d = this._stagedImportDiag;
+                if (d && d.totalIssues > 0) {
+                    warnEl.classList.remove('hidden');
+                    warnEl.innerHTML = `⚠️ <strong>${d.totalIssues} integrity anomal${d.totalIssues === 1 ? 'y' : 'ies'} detected</strong> in the imported file (orphans: ${d.orphanRiskLinks + d.orphanIncidentLinks}, relationship issues: ${d.relationshipErrors}). You can still apply the import.`;
+                } else {
+                    warnEl.classList.add('hidden');
+                }
+            }
+        }
+
+        renderImportHistory() {
+            const list = document.getElementById('importHistoryList');
+            if (!list) return;
+            if (!this.importBatches.length) {
+                list.innerHTML = '<p class="empty-state">No imports recorded yet.</p>';
+                return;
+            }
+            list.innerHTML = [...this.importBatches].reverse().map(batch => {
+                const strategyLabel = { 'merge-incoming': 'Merge (incoming)', 'merge-keep-mine': 'Merge (keep mine)', 'replace-all': 'Replace all' }[batch.strategy] || batch.strategy;
+                const date = batch.appliedAt ? new Date(batch.appliedAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown';
+                return `<div class="import-history-item">
+                    <div class="import-history-meta">
+                        <span class="import-history-file">${this.escapeHtml(batch.filename || 'unknown file')}</span>
+                        <span class="import-history-date">${this.escapeHtml(date)}</span>
+                    </div>
+                    <div class="import-history-stats">
+                        <span class="import-stat import-stat-added">+${batch.totalAdded} added</span>
+                        <span class="import-stat import-stat-conflict">${batch.totalConflicts} conflicts</span>
+                        <span class="import-stat import-stat-match">${batch.totalMatched} unchanged</span>
+                        <span class="import-stat import-stat-strategy">${this.escapeHtml(strategyLabel)}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
         exportData() {
             try {
                 const data = this.getPortableDataSnapshot();
@@ -6599,66 +6983,8 @@ export class PSPFExplorer {
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
-                    const importData = JSON.parse(e.target.result);
-                    
-                    // Validate the backup file structure and data
-                    const validation = this.validateImportData(importData);
-                    
-                    if (!validation.valid) {
-                        this.showNotification(`Import failed: ${validation.errors.join(', ')}`, 'error', 8000);
-                        return;
-                    }
-
-                    // Show warnings if any
-                    let confirmMessage = 'This will replace all current data with imported data.';
-                    if (validation.warnings.length > 0) {
-                        confirmMessage += `\\n\\nWarnings:\\n${validation.warnings.join('\\n')}`;
-                    }
-                    confirmMessage += '\\n\\nContinue?';
-
-                    if (!confirm(confirmMessage)) {
-                        return;
-                    }
-
-                    // Sanitize and import the data
-                    const payloadData = this.resolveImportPayload(importData);
-                    const sanitizedData = this.sanitizeImportData(payloadData || {});
-                    const incomingDiagnostics = this.computeIntegrityDiagnosticsForData(sanitizedData);
-
-                    if (incomingDiagnostics.totalIssues > 0) {
-                        const anomalyPrompt = [
-                            `Imported file has ${incomingDiagnostics.totalIssues} integrity anomaly${incomingDiagnostics.totalIssues === 1 ? '' : 'ies'}:`,
-                            `- Orphan risk links: ${incomingDiagnostics.orphanRiskLinks}`,
-                            `- Orphan event links: ${incomingDiagnostics.orphanIncidentLinks}`,
-                            `- Relationship issues: ${incomingDiagnostics.relationshipErrors}`,
-                            '',
-                            'Do you still want to import this data?'
-                        ].join('\n');
-
-                        if (!confirm(anomalyPrompt)) {
-                            return;
-                        }
-                    }
-                    
-                    this.projects = sanitizedData.projects;
-                    this.risks = sanitizedData.risks;
-                    this.incidents = sanitizedData.incidents;
-                    this.compliance = sanitizedData.compliance;
-                    this.actions = sanitizedData.actions;
-                    this.directions = sanitizedData.directions;
-                    this.relationships = sanitizedData.relationships;
-                    this.evidenceRecords = sanitizedData.evidenceRecords;
-                    this.importBatches = sanitizedData.importBatches;
-                    this.mergeReviews = sanitizedData.mergeReviews;
-
-                    this.saveData();
-                    this.updateDataStats();
-                    this.renderHome();
-
-                    const summary = `Imported: ${this.projects.length} projects, ${this.risks.length} risks, ${this.incidents.length} events, ${Object.keys(this.compliance).length} compliance records`;
-                    
-                    this.showNotification(summary, 'success', 6000);
-                    
+                    const parsed = JSON.parse(e.target.result);
+                    this.stageImport(parsed, file.name);
                 } catch (error) {
                     console.error('Import failed:', error);
                     this.showNotification(`Import failed: ${error.message || 'Invalid JSON format'}`, 'error');
