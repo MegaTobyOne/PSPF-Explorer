@@ -15,6 +15,14 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="theme-color" content="#6f88de">
     <title>PSPF Explorer 2026</title>
+    <meta http-equiv="refresh" content="0; url=pspf-explorer.html">
+    <script>
+        (function redirectToCoreApp() {
+            const target = 'pspf-explorer.html';
+            const suffix = window.location.search + window.location.hash;
+            window.location.replace(target + suffix);
+        })();
+    </script>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles/main.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,6 +30,9 @@
     
 </head>
 <body>
+    <noscript>
+        <p>JavaScript is required. Continue to <a href="pspf-explorer.html">PSPF Explorer</a>.</p>
+    </noscript>
     <!-- Welcome Modal for First-Time Users -->
     <div id="welcomeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle" aria-describedby="welcomeModalDesc" aria-hidden="true">
         <div class="modal-content" tabindex="-1">
