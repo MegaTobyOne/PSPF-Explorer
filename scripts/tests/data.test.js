@@ -1066,3 +1066,141 @@ test('buildSharePackage includes linked entities', () => {
   assert.strictEqual(pkg.data.relationships.length, 2);
   assert.strictEqual(pkg.scope.type, 'share-package');
 });
+
+// ── Stage 6: Integration and External Capture ─────────────────────────────
+
+test('validateExternalCapture rejects invalid schema', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const result = explorer.validateExternalCapture({ schema: 'wrong.schema', systemName: 'X', systemId: 'y', records: { risks: [{}] } });
+  assert.ok(!result.valid);
+  assert.ok(result.errors.some(e => e.includes('Unsupported schema')));
+});
+
+test('validateExternalCapture rejects missing systemName', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const result = explorer.validateExternalCapture({ schema: 'pspf-explorer-external.v1', systemId: 'y', records: { risks: [{}] } });
+  assert.ok(!result.valid);
+  assert.ok(result.errors.some(e => e.includes('systemName')));
+});
+
+test('validateExternalCapture rejects empty records', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const result = explorer.validateExternalCapture({ schema: 'pspf-explorer-external.v1', systemName: 'X', systemId: 'y', records: { risks: [], actions: [], directions: [] } });
+  assert.ok(!result.valid);
+  assert.ok(result.errors.some(e => e.includes('No records')));
+});
+
+test('validateExternalCapture accepts valid payload', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const result = explorer.validateExternalCapture({
+    schema: 'pspf-explorer-external.v1',
+    systemName: 'ACME GRC', systemId: 'acme-001',
+    capturedAt: new Date().toISOString(),
+    records: { risks: [{ id: 'r1', name: 'Risk A', likelihood: 'medium', impact: 'high', severity: 'high' }] }
+  });
+  assert.ok(result.valid, result.errors?.join(', '));
+});
+
+test('applyExternalCapture stamps _externalSource lineage on new records', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.risks = []; explorer.actions = []; explorer.directions = [];
+  explorer.projects = []; explorer.incidents = []; explorer.relationships = [];
+  explorer.compliance = {}; explorer.evidenceRecords = []; explorer.importBatches = []; explorer.mergeReviews = [];
+
+  explorer.applyExternalCapture({
+    systemName: 'GRC Tool', systemId: 'grc-1', capturedAt: '2025-01-01T00:00:00Z',
+    records: { risks: [{ id: 'ext-r1', name: 'External Risk', likelihood: 'medium', impact: 'high', severity: 'high', description: '' }] }
+  });
+
+  assert.strictEqual(explorer.risks.length, 1);
+  const r = explorer.risks[0];
+  assert.ok(explorer.isExternalRecord(r));
+  assert.strictEqual(r._externalSource.systemName, 'GRC Tool');
+  assert.strictEqual(r._externalSource.externalId, 'ext-r1');
+  assert.deepStrictEqual(r._externalSource.lockedFields, ['name', 'likelihood', 'impact', 'severity']);
+});
+
+test('applyExternalCapture updates locked fields on re-ingest', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.risks = [{
+    id: 'risk-ext-grc-1-ext-r1',
+    name: 'Old Name', likelihood: 'low', impact: 'low', severity: 'low', description: 'my local note',
+    _externalSource: { systemName: 'GRC Tool', systemId: 'grc-1', externalId: 'ext-r1', capturedAt: '2025-01-01T00:00:00Z', lockedFields: ['name', 'likelihood', 'impact', 'severity'] }
+  }];
+  explorer.actions = []; explorer.directions = [];
+  explorer.projects = []; explorer.incidents = []; explorer.relationships = [];
+  explorer.compliance = {}; explorer.evidenceRecords = []; explorer.importBatches = []; explorer.mergeReviews = [];
+
+  explorer.applyExternalCapture({
+    systemName: 'GRC Tool', systemId: 'grc-1', capturedAt: '2025-06-01T00:00:00Z',
+    records: { risks: [{ id: 'ext-r1', name: 'Updated Name', likelihood: 'high', impact: 'high', severity: 'critical', description: 'external desc' }] }
+  });
+
+  assert.strictEqual(explorer.risks.length, 1);
+  const r = explorer.risks[0];
+  assert.strictEqual(r.name, 'Updated Name');           // locked field updated
+  assert.strictEqual(r.severity, 'critical');            // locked field updated
+  assert.strictEqual(r.description, 'my local note');   // non-locked field preserved
+});
+
+test('isExternalRecord returns false for local records', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  assert.ok(!explorer.isExternalRecord({ id: 'local-1', name: 'Local Risk' }));
+  assert.ok(!explorer.isExternalRecord(null));
+});
+
+test('isFieldLocked returns true only for locked fields on external records', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  const record = {
+    id: 'r1', name: 'X',
+    _externalSource: { systemName: 'S', systemId: 's1', externalId: 'e1', capturedAt: '', lockedFields: ['name', 'severity'] }
+  };
+  assert.ok( explorer.isFieldLocked(record, 'name'));
+  assert.ok( explorer.isFieldLocked(record, 'severity'));
+  assert.ok(!explorer.isFieldLocked(record, 'description'));
+  assert.ok(!explorer.isFieldLocked({ id: 'local' }, 'name'));
+});
+
+test('saveRisk preserves locked field values for external records', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <span id="dataProjectCount"></span>
+    <span id="dataRiskCount"></span>
+    <span id="dataIncidentCount"></span>
+    <span id="dataLastModified"></span>
+    <div id="riskModal">
+      <h3 id="riskModalTitle"></h3>
+      <form id="riskForm">
+        <input id="riskName" value="Local Override Attempt">
+        <textarea id="riskDesc">My local note</textarea>
+        <select id="riskLikelihood"><option value="low" selected>low</option></select>
+        <select id="riskImpact"><option value="low" selected>low</option></select>
+        <textarea id="riskMitigation">local mit</textarea>
+      </form>
+    </div>`;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.editingRisk = 'r-ext-1';
+  explorer.currentProjectId = null;
+  explorer.risks = [{
+    id: 'r-ext-1', name: 'Canonical Name', likelihood: 'high', impact: 'very-high', severity: 'critical', description: '', mitigation: '',
+    _externalSource: { systemName: 'GRC', systemId: 'g1', externalId: 'e1', capturedAt: '', lockedFields: ['name', 'likelihood', 'impact', 'severity'] }
+  }];
+  explorer.projects = []; explorer.incidents = []; explorer.actions = [];
+  explorer.directions = []; explorer.relationships = []; explorer.evidenceRecords = [];
+  explorer.compliance = {}; explorer.importBatches = []; explorer.mergeReviews = [];
+
+  explorer.saveRisk();
+
+  const saved = explorer.risks.find(r => r.id === 'r-ext-1');
+  assert.strictEqual(saved.name, 'Canonical Name');   // locked — not overwritten
+  assert.strictEqual(saved.severity, 'critical');      // locked — not overwritten
+  assert.strictEqual(saved.description, 'My local note'); // non-locked — updated
+});

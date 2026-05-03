@@ -119,6 +119,23 @@ const ACTION_STATUSES = Object.freeze([
     { key: 'cancelled',   label: 'Cancelled'   },
 ]);
 
+const EXTERNAL_CAPTURE_SCHEMA = 'pspf-explorer-external.v1';
+
+/**
+ * Fields treated as canonical/locked when sourced from an external system.
+ * Local edits to these fields are blocked in edit modals.
+ */
+const EXTERNAL_LOCKED_FIELDS = Object.freeze({
+    risks:      ['name', 'likelihood', 'impact', 'severity'],
+    actions:    ['title', 'type', 'status', 'dueDate'],
+    directions: ['title', 'instrumentNumber', 'issuedAt', 'description'],
+});
+
+/** Strips unsafe chars from an ID that will form part of a local entity ID. */
+function sanitizeExternalId(id) {
+    return String(id).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'unknown';
+}
+
 const createDefaultTagDefinitions = () => {
     return Object.keys(DEFAULT_TAG_DEFINITIONS).reduce((acc, key) => {
         acc[key] = { ...DEFAULT_TAG_DEFINITIONS[key] };
@@ -1091,6 +1108,16 @@ export class PSPFExplorer {
                 exportSharePackageBtn.addEventListener('click', () => {
                     this.exportSharePackage(sharePackageDomainSelect?.value);
                 });
+            }
+
+            // External capture
+            const externalCaptureInput = document.getElementById('externalCaptureInput');
+            const externalCaptureBtn   = document.getElementById('externalCaptureBtn');
+            if (externalCaptureInput) {
+                externalCaptureInput.addEventListener('change', (e) => this.ingestExternalCaptureFile(e));
+            }
+            if (externalCaptureBtn && externalCaptureInput) {
+                externalCaptureBtn.addEventListener('click', () => externalCaptureInput.click());
             }
 
             // Project detail tabs (event delegation on container so re-renders are handled)
@@ -2946,10 +2973,14 @@ export class PSPFExplorer {
                     document.getElementById('directionInstrumentNumber').value = dir.instrumentNumber || '';
                     document.getElementById('directionIssuedAt').value = dir.issuedAt ? dir.issuedAt.split('T')[0] : '';
                     document.getElementById('directionDescription').value = dir.description || '';
+                    this._applyExternalFieldGuards('directions', dir, form);
                 }
             } else {
                 titleEl.textContent = 'Add Direction';
                 form.reset();
+                form.querySelector('.external-record-banner')?.remove();
+                form.querySelectorAll('.field-locked').forEach(el => { el.disabled = false; el.classList.remove('field-locked'); });
+                form.querySelectorAll('.lock-icon').forEach(el => el.remove());
             }
             this.openModal(modal, { initialFocusSelector: '#directionTitle' });
         }
@@ -2968,7 +2999,13 @@ export class PSPFExplorer {
             if (this.editingDirection) {
                 const idx = this.directions.findIndex(d => d.id === this.editingDirection);
                 if (idx !== -1) {
-                    this.directions[idx] = { ...this.directions[idx], ...directionData };
+                    const existing = this.directions[idx];
+                    if (this.isExternalRecord(existing)) {
+                        (existing._externalSource.lockedFields || []).forEach(f => {
+                            if (f in existing) directionData[f] = existing[f];
+                        });
+                    }
+                    this.directions[idx] = { ...existing, ...directionData };
                 }
             } else {
                 directionData.id = `dir-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -3007,11 +3044,14 @@ export class PSPFExplorer {
                     .filter(r => (r.sourceId === dir.id && r.sourceType === 'direction' && r.targetType === 'requirement')
                                || (r.targetId === dir.id && r.targetType === 'direction' && r.sourceType === 'requirement'))
                     .length;
+                const externalBadge = this.isExternalRecord(dir)
+                    ? `<span class="external-record-badge" title="Sourced from ${this.escapeHtml(dir._externalSource.systemName)}">🔗 External</span>`
+                    : '';
                 return `
                     <div class="entity-card" data-entity-id="${safeId}">
                         <div class="entity-card-header">
                             <div>
-                                <h4 class="entity-card-title">${this.escapeHtml(dir.title)}</h4>
+                                <h4 class="entity-card-title">${this.escapeHtml(dir.title)}${externalBadge ? ' ' + externalBadge : ''}</h4>
                                 ${dir.instrumentNumber ? `<span class="entity-meta">${this.escapeHtml(dir.instrumentNumber)}</span>` : ''}
                                 ${dir.issuedAt ? `<span class="entity-meta">Issued ${this.escapeHtml(dir.issuedAt)}</span>` : ''}
                             </div>
@@ -3044,10 +3084,14 @@ export class PSPFExplorer {
                     document.getElementById('actionStatus').value = action.status || 'not-started';
                     document.getElementById('actionDueDate').value = action.dueDate || '';
                     document.getElementById('actionDescription').value = action.description || '';
+                    this._applyExternalFieldGuards('actions', action, form);
                 }
             } else {
                 titleEl.textContent = 'Add Action';
                 form.reset();
+                form.querySelector('.external-record-banner')?.remove();
+                form.querySelectorAll('.field-locked').forEach(el => { el.disabled = false; el.classList.remove('field-locked'); });
+                form.querySelectorAll('.lock-icon').forEach(el => el.remove());
             }
             this.openModal(modal, { initialFocusSelector: '#actionTitle' });
         }
@@ -3070,7 +3114,13 @@ export class PSPFExplorer {
             if (this.editingAction) {
                 const idx = this.actions.findIndex(a => a.id === this.editingAction);
                 if (idx !== -1) {
-                    this.actions[idx] = { ...this.actions[idx], ...actionData };
+                    const existing = this.actions[idx];
+                    if (this.isExternalRecord(existing)) {
+                        (existing._externalSource.lockedFields || []).forEach(f => {
+                            if (f in existing) actionData[f] = existing[f];
+                        });
+                    }
+                    this.actions[idx] = { ...existing, ...actionData };
                 }
             } else {
                 actionData.id = `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -3109,11 +3159,14 @@ export class PSPFExplorer {
                 const statusMeta = ACTION_STATUSES.find(s => s.key === action.status) || ACTION_STATUSES[0];
                 const overdue = action.dueDate && action.status !== 'completed' && action.status !== 'cancelled'
                     && new Date(action.dueDate) < new Date();
+                const externalBadge = this.isExternalRecord(action)
+                    ? `<span class="external-record-badge" title="Sourced from ${this.escapeHtml(action._externalSource.systemName)}">🔗 External</span>`
+                    : '';
                 return `
                     <div class="entity-card action-card status-${this.escapeHtml(action.status)}${overdue ? ' overdue' : ''}" data-entity-id="${safeId}">
                         <div class="entity-card-header">
                             <div>
-                                <h4 class="entity-card-title">${this.escapeHtml(action.title)}</h4>
+                                <h4 class="entity-card-title">${this.escapeHtml(action.title)}${externalBadge ? ' ' + externalBadge : ''}</h4>
                                 <span class="entity-type-badge">${typeMeta.icon} ${this.escapeHtml(typeMeta.label)}</span>
                                 <span class="entity-status-badge status-${this.escapeHtml(action.status)}">${this.escapeHtml(statusMeta.label)}</span>
                                 ${action.dueDate ? `<span class="entity-meta${overdue ? ' overdue-label' : ''}">Due ${this.escapeHtml(action.dueDate)}</span>` : ''}
@@ -5542,10 +5595,17 @@ export class PSPFExplorer {
                     document.getElementById('riskLikelihood').value = risk.likelihood;
                     document.getElementById('riskImpact').value = risk.impact;
                     document.getElementById('riskMitigation').value = risk.mitigation || '';
+                    this._applyExternalFieldGuards('risks', risk, form);
                 }
             } else {
                 title.textContent = 'Add Risk';
                 form.reset();
+                form.querySelector('.external-record-banner')?.remove();
+                form.querySelectorAll('.field-locked').forEach(el => {
+                    el.disabled = false;
+                    el.classList.remove('field-locked');
+                });
+                form.querySelectorAll('.lock-icon').forEach(el => el.remove());
             }
 
             if (modal) {
@@ -5577,7 +5637,14 @@ export class PSPFExplorer {
             if (this.editingRisk) {
                 const index = this.risks.findIndex(r => r.id === this.editingRisk);
                 if (index !== -1) {
-                    this.risks[index] = { ...this.risks[index], ...riskData };
+                    const existing = this.risks[index];
+                    // Restore locked field values for external records
+                    if (this.isExternalRecord(existing)) {
+                        (existing._externalSource.lockedFields || []).forEach(f => {
+                            if (f in existing) riskData[f] = existing[f];
+                        });
+                    }
+                    this.risks[index] = { ...existing, ...riskData };
                 }
             } else {
                 riskData.id = Date.now().toString();
@@ -5649,11 +5716,14 @@ export class PSPFExplorer {
             risksList.innerHTML = risksToShow.map(risk => {
                 const severityIcon = this.getRiskSeverityIcon(risk.severity);
                 const severityClass = `severity-${risk.severity}`;
+                const externalBadge = this.isExternalRecord(risk)
+                    ? `<span class="external-record-badge" title="Sourced from ${this.escapeHtml(risk._externalSource.systemName)}">🔗 External</span>`
+                    : '';
 
                 return `
                     <div class="risk-card ${severityClass}">
                         <div class="risk-header">
-                            <h4>${risk.name}</h4>
+                            <h4>${risk.name}${externalBadge ? ' ' + externalBadge : ''}</h4>
                             <div class="risk-severity">
                                 <span class="severity-badge ${risk.severity}">${severityIcon} ${risk.severity.toUpperCase()}</span>
                             </div>
@@ -5953,6 +6023,7 @@ export class PSPFExplorer {
             this.renderDataIntegrityDiagnostics();
             this.populateScopedExportSelectors();
             this.renderImportHistory();
+            this.renderExternalCaptureSummary();
         }
 
         computeDataIntegrityDiagnostics() {
@@ -6831,6 +6902,196 @@ export class PSPFExplorer {
             }).join('');
         }
 
+        // ── Stage 6: Integration and External Capture ─────────────────────────
+
+        isExternalRecord(record) {
+            return !!(record && record._externalSource && record._externalSource.systemId);
+        }
+
+        isFieldLocked(record, fieldName) {
+            if (!this.isExternalRecord(record)) return false;
+            const locked = record._externalSource.lockedFields;
+            return Array.isArray(locked) && locked.includes(fieldName);
+        }
+
+        validateExternalCapture(data) {
+            const errors = [];
+            if (!data || typeof data !== 'object') { return { valid: false, errors: ['Not a valid JSON object'] }; }
+            if (data.schema !== EXTERNAL_CAPTURE_SCHEMA) {
+                errors.push(`Unsupported schema "${data.schema || '(none)'}". Expected "${EXTERNAL_CAPTURE_SCHEMA}".`);
+            }
+            if (!data.systemName || typeof data.systemName !== 'string') errors.push('Missing or invalid systemName.');
+            if (!data.systemId   || typeof data.systemId   !== 'string') errors.push('Missing or invalid systemId.');
+            if (!data.records    || typeof data.records    !== 'object') errors.push('Missing records object.');
+            if (errors.length) return { valid: false, errors };
+
+            const rec = data.records;
+            const VALID_ENTITY_TYPES = ['risks', 'actions', 'directions'];
+            for (const type of VALID_ENTITY_TYPES) {
+                if (rec[type] !== undefined && !Array.isArray(rec[type])) {
+                    errors.push(`records.${type} must be an array.`);
+                }
+            }
+            const hasAny = VALID_ENTITY_TYPES.some(t => Array.isArray(rec[t]) && rec[t].length > 0);
+            if (!hasAny) errors.push('No records found. Provide at least one non-empty risks, actions, or directions array.');
+            return { valid: errors.length === 0, errors };
+        }
+
+        /**
+         * Ingest external records: stamp _externalSource lineage, merge into local arrays.
+         * On re-ingest, locked fields are refreshed from the source; local-only fields preserved.
+         */
+        applyExternalCapture(data) {
+            const { systemName, systemId, capturedAt = new Date().toISOString(), records } = data;
+            const ENTITY_MAP = [
+                { type: 'risks',      arr: this.risks,      prefix: 'risk',  lockedFields: EXTERNAL_LOCKED_FIELDS.risks      },
+                { type: 'actions',    arr: this.actions,    prefix: 'act',   lockedFields: EXTERNAL_LOCKED_FIELDS.actions    },
+                { type: 'directions', arr: this.directions, prefix: 'dir',   lockedFields: EXTERNAL_LOCKED_FIELDS.directions },
+            ];
+
+            let totalAdded = 0, totalUpdated = 0;
+
+            ENTITY_MAP.forEach(({ type, arr, prefix, lockedFields }) => {
+                const incoming = Array.isArray(records[type]) ? records[type] : [];
+                incoming.forEach(extRecord => {
+                    const externalId = String(extRecord.id || '');
+                    if (!externalId) return;
+
+                    // Find existing by systemId + externalId
+                    const existingIdx = arr.findIndex(r =>
+                        r._externalSource?.systemId === systemId &&
+                        r._externalSource?.externalId === externalId
+                    );
+
+                    const source = { systemName, systemId, externalId, capturedAt, lockedFields };
+
+                    if (existingIdx !== -1) {
+                        // Update locked fields from incoming, keep local fields
+                        const existing = arr[existingIdx];
+                        const updated = { ...existing };
+                        lockedFields.forEach(field => {
+                            if (extRecord[field] !== undefined) updated[field] = extRecord[field];
+                        });
+                        updated._externalSource = source;
+                        arr[existingIdx] = updated;
+                        totalUpdated++;
+                    } else {
+                        // New record: assign local id, stamp source
+                        const newId = `${prefix}-ext-${sanitizeExternalId(systemId)}-${sanitizeExternalId(externalId)}`;
+                        const newRecord = { ...extRecord, id: newId, createdAt: capturedAt, _externalSource: source };
+                        arr.push(newRecord);
+                        totalAdded++;
+                    }
+                });
+            });
+
+            this.saveData();
+            this.renderExternalCaptureSummary();
+            this.showNotification(`External capture applied: ${totalAdded} added, ${totalUpdated} updated.`, 'success', 5000);
+        }
+
+        ingestExternalCaptureFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    const validation = this.validateExternalCapture(parsed);
+                    if (!validation.valid) {
+                        this.showNotification(`External capture failed: ${validation.errors.join(', ')}`, 'error', 8000);
+                        return;
+                    }
+                    this.applyExternalCapture(parsed);
+                } catch (err) {
+                    console.error('External capture ingest failed:', err);
+                    this.showNotification(`External capture failed: ${err.message || 'Invalid JSON'}`, 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        renderExternalCaptureSummary() {
+            const el = document.getElementById('externalCaptureSummary');
+            if (!el) return;
+
+            const counts = {
+                risks:      this.risks.filter(r => this.isExternalRecord(r)).length,
+                actions:    this.actions.filter(a => this.isExternalRecord(a)).length,
+                directions: this.directions.filter(d => this.isExternalRecord(d)).length,
+            };
+            const total = counts.risks + counts.actions + counts.directions;
+
+            if (total === 0) {
+                el.classList.add('hidden');
+                return;
+            }
+            el.classList.remove('hidden');
+            const systems = new Set([
+                ...this.risks.filter(r => this.isExternalRecord(r)).map(r => r._externalSource.systemName),
+                ...this.actions.filter(a => this.isExternalRecord(a)).map(a => a._externalSource.systemName),
+                ...this.directions.filter(d => this.isExternalRecord(d)).map(d => d._externalSource.systemName),
+            ]);
+            el.innerHTML = `
+                <div class="external-capture-stats">
+                    <span class="external-stat">📊 ${total} external record${total !== 1 ? 's' : ''}</span>
+                    ${counts.risks      ? `<span class="external-stat">${counts.risks} risk${counts.risks !== 1 ? 's' : ''}</span>` : ''}
+                    ${counts.actions    ? `<span class="external-stat">${counts.actions} action${counts.actions !== 1 ? 's' : ''}</span>` : ''}
+                    ${counts.directions ? `<span class="external-stat">${counts.directions} direction${counts.directions !== 1 ? 's' : ''}</span>` : ''}
+                    <span class="external-stat-source">from ${[...systems].map(s => this.escapeHtml(s)).join(', ')}</span>
+                </div>`;
+        }
+
+        /**
+         * Applies locked-field guards to an edit modal when the record is externally sourced.
+         * Disables locked inputs and inserts an inline banner.
+         */
+        _applyExternalFieldGuards(entityType, record, formEl) {
+            if (!formEl || !this.isExternalRecord(record)) return;
+
+            const lockedFields = record._externalSource.lockedFields || EXTERNAL_LOCKED_FIELDS[entityType] || [];
+            const systemName   = record._externalSource.systemName || 'an external system';
+
+            // Remove any prior banner
+            formEl.querySelector('.external-record-banner')?.remove();
+
+            // Insert banner at top of form
+            const banner = document.createElement('div');
+            banner.className = 'external-record-banner';
+            banner.setAttribute('role', 'note');
+            banner.innerHTML = `🔒 <strong>External record</strong> — sourced from <strong>${this.escapeHtml(systemName)}</strong>. Locked fields cannot be edited locally.`;
+            formEl.prepend(banner);
+
+            // Disable locked field inputs
+            const FIELD_ID_MAP = {
+                // risks
+                name: 'riskName', likelihood: 'riskLikelihood', impact: 'riskImpact', severity: null,
+                // actions
+                title: ['actionTitle', 'directionTitle'], type: 'actionType', status: 'actionStatus', dueDate: 'actionDueDate',
+                // directions
+                instrumentNumber: 'directionInstrumentNumber', issuedAt: 'directionIssuedAt', description: ['directionDescription', 'riskDesc'],
+            };
+
+            lockedFields.forEach(field => {
+                let ids = FIELD_ID_MAP[field];
+                if (!ids) return;
+                if (!Array.isArray(ids)) ids = [ids];
+                ids.forEach(id => {
+                    const input = formEl.querySelector(`#${id}`);
+                    if (input) {
+                        input.disabled = true;
+                        input.classList.add('field-locked');
+                        // Accessible label
+                        const label = formEl.querySelector(`label[for="${id}"]`);
+                        if (label && !label.querySelector('.lock-icon')) {
+                            label.insertAdjacentHTML('beforeend', ' <span class="lock-icon" aria-label="locked">🔒</span>');
+                        }
+                    }
+                });
+            });
+        }
+
         exportData() {
             try {
                 const data = this.getPortableDataSnapshot();
@@ -7366,6 +7627,19 @@ export class PSPFExplorer {
                 return id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
             };
 
+            const sanitizeExternalSource = (src) => {
+                if (!src || typeof src !== 'object') return undefined;
+                return {
+                    systemName:  sanitizeString(src.systemName,  200),
+                    systemId:    sanitizeString(src.systemId,    100),
+                    externalId:  sanitizeString(src.externalId,  100),
+                    capturedAt:  typeof src.capturedAt === 'string' ? sanitizeString(src.capturedAt, 40) : new Date().toISOString(),
+                    lockedFields: Array.isArray(src.lockedFields)
+                        ? src.lockedFields.filter(f => typeof f === 'string').map(f => sanitizeString(f, 50))
+                        : [],
+                };
+            };
+
             // Sanitize projects
             const projects = (data.projects || []).map(project => ({
                 id: sanitizeId(project.id),
@@ -7380,20 +7654,24 @@ export class PSPFExplorer {
             }));
 
             // Sanitize risks
-            const risks = (data.risks || []).map(risk => ({
-                id: sanitizeId(risk.id),
-                name: sanitizeString(risk.name, 500),
-                description: sanitizeString(risk.description, 5000),
-                likelihood: ['very-low', 'low', 'medium', 'high', 'very-high'].includes(risk.likelihood) 
-                    ? risk.likelihood : 'medium',
-                impact: ['very-low', 'low', 'medium', 'high', 'very-high'].includes(risk.impact) 
-                    ? risk.impact : 'medium',
-                severity: ['low', 'medium', 'high', 'critical'].includes(risk.severity) 
-                    ? risk.severity : 'medium',
-                mitigation: sanitizeString(risk.mitigation, 5000),
-                projectId: risk.projectId ? sanitizeOptionalId(risk.projectId) : null,
-                createdAt: risk.createdAt || new Date().toISOString()
-            }));
+            const risks = (data.risks || []).map(risk => {
+                const rec = {
+                    id: sanitizeId(risk.id),
+                    name: sanitizeString(risk.name, 500),
+                    description: sanitizeString(risk.description, 5000),
+                    likelihood: ['very-low', 'low', 'medium', 'high', 'very-high'].includes(risk.likelihood) 
+                        ? risk.likelihood : 'medium',
+                    impact: ['very-low', 'low', 'medium', 'high', 'very-high'].includes(risk.impact) 
+                        ? risk.impact : 'medium',
+                    severity: ['low', 'medium', 'high', 'critical'].includes(risk.severity) 
+                        ? risk.severity : 'medium',
+                    mitigation: sanitizeString(risk.mitigation, 5000),
+                    projectId: risk.projectId ? sanitizeOptionalId(risk.projectId) : null,
+                    createdAt: risk.createdAt || new Date().toISOString()
+                };
+                if (risk._externalSource) rec._externalSource = sanitizeExternalSource(risk._externalSource);
+                return rec;
+            });
 
             // Sanitize incidents
             const incidents = (data.incidents || []).map(incident => ({
@@ -7424,26 +7702,34 @@ export class PSPFExplorer {
                 });
             }
 
-            const directions = (data.directions || []).map(direction => ({
-                id: sanitizeId(direction.id),
-                title: sanitizeString(direction.title, 500),
-                instrumentNumber: sanitizeString(direction.instrumentNumber, 200),
-                issuedAt: typeof direction.issuedAt === 'string' ? sanitizeString(direction.issuedAt, 30) : null,
-                description: sanitizeString(direction.description, 5000),
-                createdAt: direction.createdAt || new Date().toISOString()
-            }));
+            const directions = (data.directions || []).map(direction => {
+                const rec = {
+                    id: sanitizeId(direction.id),
+                    title: sanitizeString(direction.title, 500),
+                    instrumentNumber: sanitizeString(direction.instrumentNumber, 200),
+                    issuedAt: typeof direction.issuedAt === 'string' ? sanitizeString(direction.issuedAt, 30) : null,
+                    description: sanitizeString(direction.description, 5000),
+                    createdAt: direction.createdAt || new Date().toISOString()
+                };
+                if (direction._externalSource) rec._externalSource = sanitizeExternalSource(direction._externalSource);
+                return rec;
+            });
 
             const allowedActionTypes = ['remediation', 'uplift', 'review', 'training', 'other'];
             const allowedActionStatuses = ['not-started', 'in-progress', 'completed', 'cancelled'];
-            const actions = (data.actions || []).map(action => ({
-                id: sanitizeId(action.id),
-                title: sanitizeString(action.title, 500),
-                type: allowedActionTypes.includes(action.type) ? action.type : 'other',
-                status: allowedActionStatuses.includes(action.status) ? action.status : 'not-started',
-                dueDate: typeof action.dueDate === 'string' ? sanitizeString(action.dueDate, 30) : null,
-                description: sanitizeString(action.description, 5000),
-                createdAt: action.createdAt || new Date().toISOString()
-            }));
+            const actions = (data.actions || []).map(action => {
+                const rec = {
+                    id: sanitizeId(action.id),
+                    title: sanitizeString(action.title, 500),
+                    type: allowedActionTypes.includes(action.type) ? action.type : 'other',
+                    status: allowedActionStatuses.includes(action.status) ? action.status : 'not-started',
+                    dueDate: typeof action.dueDate === 'string' ? sanitizeString(action.dueDate, 30) : null,
+                    description: sanitizeString(action.description, 5000),
+                    createdAt: action.createdAt || new Date().toISOString()
+                };
+                if (action._externalSource) rec._externalSource = sanitizeExternalSource(action._externalSource);
+                return rec;
+            });
 
             const relationships = (data.relationships || []).map(link => ({
                 id: sanitizeId(link.id),

@@ -6448,3 +6448,87 @@ select:focus-visible {
 .import-stat-conflict { background: color-mix(in srgb, var(--color-warning, #b45309) 12%, white); color: var(--color-warning, #b45309); }
 .import-stat-match   { background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); }
 .import-stat-strategy { background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary); font-weight: 400; }
+
+/* ── Stage 6: External Capture ───────────────────────────────────── */
+
+/* External record badge — inline in list cards */
+.external-record-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--color-primary, #2563eb) 10%, white);
+    color: var(--color-primary, #2563eb);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #2563eb) 30%, white);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* Lock icon on form labels */
+.lock-icon {
+    font-size: 0.78rem;
+    opacity: 0.7;
+    margin-left: 0.15rem;
+}
+
+/* Disabled locked form fields */
+.field-locked {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: var(--bg-secondary, #f3f4f6) !important;
+}
+
+/* Banner inside edit modals for external records */
+.external-record-banner {
+    padding: 0.55rem 0.75rem;
+    background: color-mix(in srgb, var(--color-primary, #2563eb) 8%, white);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #2563eb) 25%, white);
+    border-radius: 8px;
+    font-size: 0.86rem;
+    color: var(--color-primary, #2563eb);
+    margin-bottom: 0.75rem;
+}
+
+/* External capture card summary */
+.external-capture-summary {
+    margin-top: 0.75rem;
+}
+
+.external-capture-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.external-stat {
+    font-size: 0.82rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--color-primary, #2563eb) 8%, white);
+    color: var(--color-primary, #2563eb);
+    font-weight: 600;
+}
+
+.external-stat-source {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Format hint details */
+.field-hint-details {
+    margin-top: 0.6rem;
+}
+
+.field-hint-details summary {
+    cursor: pointer;
+    user-select: none;
+}
+
+.field-hint-details p {
+    margin-top: 0.35rem;
+}
