@@ -632,10 +632,20 @@
             <!-- Project Management View -->
             <section id="projectView" class="view">
                 <div class="view-header">
-                    <h2>Project Management</h2>
-                    <p class="subtitle">Manage your compliance projects and activities</p>
-                    <button id="addProjectBtn" class="btn btn-primary">Add New Project</button>
+                    <h2>Work Management</h2>
+                    <p class="subtitle">Manage your compliance projects, risks, actions, and PSPF Directions.</p>
+                    <div class="work-view-subnav" role="tablist" aria-label="Work management sections">
+                        <button id="workTabProjects" class="work-tab-btn active" role="tab" aria-selected="true" data-action="switch-work-tab" data-tab="projects">Projects</button>
+                        <button id="workTabDirections" class="work-tab-btn" role="tab" aria-selected="false" data-action="switch-work-tab" data-tab="directions">Directions</button>
+                        <button id="workTabActions" class="work-tab-btn" role="tab" aria-selected="false" data-action="switch-work-tab" data-tab="actions">Actions</button>
+                    </div>
                 </div>
+
+                <!-- Projects panel -->
+                <div id="workPanelProjects" class="work-panel">
+                    <div class="panel-toolbar">
+                        <button id="addProjectBtn" class="btn btn-primary">Add Project</button>
+                    </div>
 
                 <div class="project-requirements-widget">
                     <div class="widget-header">
@@ -663,6 +673,36 @@
                         </div>
                     </div>
                 </div>
+                </div> <!-- /workPanelProjects -->
+
+                <!-- Directions panel -->
+                <div id="workPanelDirections" class="work-panel hidden">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3 class="panel-title">PSPF Directions</h3>
+                            <p class="subtitle-sm">Directions and other PSPF instruments issued between annual releases.</p>
+                        </div>
+                        <button id="addDirectionBtn" class="btn btn-primary">Add Direction</button>
+                    </div>
+                    <div id="directionsList" class="entity-list" aria-live="polite">
+                        <p class="empty-state">No Directions recorded yet. Add a Direction to start tracking obligations.</p>
+                    </div>
+                </div>
+
+                <!-- Actions panel -->
+                <div id="workPanelActions" class="work-panel hidden">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3 class="panel-title">Actions</h3>
+                            <p class="subtitle-sm">Explicit remediation and uplift actions linked to requirements, risks, and Directions.</p>
+                        </div>
+                        <button id="addActionBtn" class="btn btn-primary">Add Action</button>
+                    </div>
+                    <div id="actionsList" class="entity-list" aria-live="polite">
+                        <p class="empty-state">No Actions recorded yet. Add an Action to start tracking remediation work.</p>
+                    </div>
+                </div>
+
             </section>
 
             <!-- My Work View -->
@@ -849,7 +889,7 @@
                 <p><strong>💾 Your Data is Private:</strong> All data is stored locally in your browser. Nothing is sent to any server. Use Export to backup your work.</p>
             </div>
             <div class="footer-meta">
-                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026</p>
+                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026 • <span class="app-version">v2.01</span></p>
                 <p><a href="https://www.protectivesecurity.gov.au/pspf-annual-release" target="_blank" rel="noopener noreferrer">Authoritative Source for PSPF</a></p>
             </div>
         </div>
@@ -1003,7 +1043,87 @@
         </div>
     </div>
 
-    
+    <!-- Direction Modal -->
+    <div id="directionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="directionModalTitle" aria-describedby="directionModalHint" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="directionModalTitle">Add Direction</h3>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="directionModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="directionModalHint" class="visually-hidden">Press Escape to close this dialog.</p>
+            <form id="directionForm">
+                <div class="form-group">
+                    <label for="directionTitle">Title</label>
+                    <input type="text" id="directionTitle" required placeholder="e.g., Direction 2025-01: Cyber Uplift">
+                </div>
+                <div class="form-group">
+                    <label for="directionInstrumentNumber">Instrument number <span class="field-optional">(optional)</span></label>
+                    <input type="text" id="directionInstrumentNumber" placeholder="e.g., 2025-01">
+                </div>
+                <div class="form-group">
+                    <label for="directionIssuedAt">Date issued <span class="field-optional">(optional)</span></label>
+                    <input type="date" id="directionIssuedAt">
+                </div>
+                <div class="form-group">
+                    <label for="directionDescription">Description</label>
+                    <textarea id="directionDescription" rows="4" placeholder="Describe the Direction's obligations and context…"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelDirection">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Direction</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Action Modal -->
+    <div id="actionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="actionModalTitle" aria-describedby="actionModalHint" aria-hidden="true">
+        <div class="modal-content" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="actionModalTitle">Add Action</h3>
+                <button type="button" class="modal-close" data-action="close-modal" data-modal-id="actionModal" aria-label="Close dialog">×</button>
+            </div>
+            <p id="actionModalHint" class="visually-hidden">Press Escape to close this dialog.</p>
+            <form id="actionForm">
+                <div class="form-group">
+                    <label for="actionTitle">Title</label>
+                    <input type="text" id="actionTitle" required placeholder="e.g., Update information handling procedure">
+                </div>
+                <div class="form-group">
+                    <label for="actionType">Type</label>
+                    <select id="actionType">
+                        <option value="remediation">Remediation</option>
+                        <option value="uplift">Uplift</option>
+                        <option value="review">Review</option>
+                        <option value="training">Training</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="actionStatus">Status</label>
+                    <select id="actionStatus">
+                        <option value="not-started">Not Started</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="actionDueDate">Due date <span class="field-optional">(optional)</span></label>
+                    <input type="date" id="actionDueDate">
+                </div>
+                <div class="form-group">
+                    <label for="actionDescription">Description</label>
+                    <textarea id="actionDescription" rows="3" placeholder="Describe what needs to be done and why…"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelAction">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Action</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script type="module" src="scripts/main.js"></script>
 
 </body>

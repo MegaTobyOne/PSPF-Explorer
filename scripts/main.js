@@ -104,6 +104,21 @@ const EVIDENCE_TYPES = Object.freeze([
     { key: 'other',          label: 'Other evidence',          icon: '📎' },
 ]);
 
+const ACTION_TYPES = Object.freeze([
+    { key: 'remediation', label: 'Remediation', icon: '🔧' },
+    { key: 'uplift',      label: 'Uplift',       icon: '📈' },
+    { key: 'review',      label: 'Review',       icon: '🔍' },
+    { key: 'training',    label: 'Training',     icon: '🎓' },
+    { key: 'other',       label: 'Other',        icon: '📋' },
+]);
+
+const ACTION_STATUSES = Object.freeze([
+    { key: 'not-started', label: 'Not Started' },
+    { key: 'in-progress', label: 'In Progress' },
+    { key: 'completed',   label: 'Completed'   },
+    { key: 'cancelled',   label: 'Cancelled'   },
+]);
+
 const createDefaultTagDefinitions = () => {
     return Object.keys(DEFAULT_TAG_DEFINITIONS).reduce((acc, key) => {
         acc[key] = { ...DEFAULT_TAG_DEFINITIONS[key] };
@@ -231,6 +246,8 @@ export class PSPFExplorer {
             this.setupRequirementsUXControls();
             this.renderHome();
             this.renderProjects();
+            this.renderDirections();
+            this.renderActions();
             this.renderTagManagement();
             this.renderMyWorkView();
             this.renderProgress();
@@ -972,6 +989,48 @@ export class PSPFExplorer {
                 cancelIncident.addEventListener('click', () => this.hideModal('incidentModal'));
             }
 
+            // Direction modal
+            const directionForm = document.getElementById('directionForm');
+            const cancelDirection = document.getElementById('cancelDirection');
+            if (directionForm) {
+                directionForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.saveDirection();
+                });
+            }
+            if (cancelDirection) {
+                cancelDirection.addEventListener('click', () => {
+                    this.hideModal('directionModal');
+                    this.editingDirection = null;
+                });
+            }
+
+            // Action modal
+            const actionForm = document.getElementById('actionForm');
+            const cancelAction = document.getElementById('cancelAction');
+            if (actionForm) {
+                actionForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.saveAction();
+                });
+            }
+            if (cancelAction) {
+                cancelAction.addEventListener('click', () => {
+                    this.hideModal('actionModal');
+                    this.editingAction = null;
+                });
+            }
+
+            // Wire up Directions and Actions toolbar buttons
+            const addDirectionBtn = document.getElementById('addDirectionBtn');
+            if (addDirectionBtn) {
+                addDirectionBtn.addEventListener('click', () => this.showDirectionModal());
+            }
+            const addActionBtn = document.getElementById('addActionBtn');
+            if (addActionBtn) {
+                addActionBtn.addEventListener('click', () => this.showActionModal());
+            }
+
             // Project detail tabs (event delegation on container so re-renders are handled)
             const projectDetails = document.getElementById('projectDetails');
             if (projectDetails) {
@@ -1305,6 +1364,67 @@ export class PSPFExplorer {
                     const reviewedReqId = target.dataset.requirementId;
                     if (reviewedReqId) {
                         this.reviewCompliance(reviewedReqId, '');
+                    }
+                    break;
+                }
+
+                // Work view sub-nav
+                case 'switch-work-tab': {
+                    const tab = target.dataset.tab;
+                    if (tab) this.switchWorkTab(tab);
+                    break;
+                }
+
+                // Direction actions
+                case 'edit-direction': {
+                    const editDirId = target.dataset.directionId;
+                    if (editDirId) this.showDirectionModal(editDirId);
+                    break;
+                }
+
+                case 'delete-direction': {
+                    const delDirId = target.dataset.directionId;
+                    if (delDirId) this.deleteDirection(delDirId);
+                    break;
+                }
+
+                // Action actions
+                case 'edit-action': {
+                    const editActId = target.dataset.actionId;
+                    if (editActId) this.showActionModal(editActId);
+                    break;
+                }
+
+                case 'delete-action': {
+                    const delActId = target.dataset.actionId;
+                    if (delActId) this.deleteAction(delActId);
+                    break;
+                }
+
+                // Requirement linkage
+                case 'add-requirement-link': {
+                    const linkReqId2 = target.dataset.requirementId;
+                    const targetType = target.dataset.targetType;
+                    const selectId = target.dataset.selectId;
+                    if (!linkReqId2 || !targetType || !selectId) break;
+                    const sel = document.getElementById(selectId);
+                    const targetId = sel?.value;
+                    if (!targetId) { this.showNotification('Select an item to link first.', 'warning'); break; }
+                    const added = this.addRelationship('requirement', linkReqId2, targetType, targetId, 'addresses');
+                    if (added) {
+                        this.showRequirementDetails(linkReqId2);
+                    } else {
+                        this.showNotification('This link already exists.', 'warning');
+                    }
+                    break;
+                }
+
+                case 'remove-requirement-link': {
+                    const relId = target.dataset.relId;
+                    const relReqId = target.dataset.requirementId;
+                    if (relId) {
+                        this.removeRelationship(relId);
+                        if (relReqId) this.showRequirementDetails(relReqId);
                     }
                     break;
                 }
@@ -2442,6 +2562,7 @@ export class PSPFExplorer {
                     </button>
                 </div>
                 ${this.renderTagsInDetails(reqId)}
+                ${this.renderRequirementLinksSection(reqId)}
             `;
         }
 
@@ -2722,6 +2843,365 @@ export class PSPFExplorer {
             compliance.lastReviewedNotes = (notes || '').trim();
             this.saveData();
             this.showRequirementDetails(reqId);
+        }
+
+        // ── Work view sub-navigation ──────────────────────────────────────────
+
+        switchWorkTab(tab) {
+            const tabs = ['projects', 'directions', 'actions'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`workTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                const panel = document.getElementById(`workPanel${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                const isActive = t === tab;
+                if (btn) {
+                    btn.classList.toggle('active', isActive);
+                    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                }
+                if (panel) panel.classList.toggle('hidden', !isActive);
+            });
+            if (tab === 'directions') this.renderDirections();
+            if (tab === 'actions') this.renderActions();
+        }
+
+        // ── Directions ────────────────────────────────────────────────────────
+
+        showDirectionModal(directionId = null) {
+            this.editingDirection = directionId || null;
+            const modal = document.getElementById('directionModal');
+            const titleEl = document.getElementById('directionModalTitle');
+            const form = document.getElementById('directionForm');
+            if (!modal || !form) return;
+
+            if (directionId) {
+                const dir = this.directions.find(d => d.id === directionId);
+                if (dir) {
+                    titleEl.textContent = 'Edit Direction';
+                    document.getElementById('directionTitle').value = dir.title || '';
+                    document.getElementById('directionInstrumentNumber').value = dir.instrumentNumber || '';
+                    document.getElementById('directionIssuedAt').value = dir.issuedAt ? dir.issuedAt.split('T')[0] : '';
+                    document.getElementById('directionDescription').value = dir.description || '';
+                }
+            } else {
+                titleEl.textContent = 'Add Direction';
+                form.reset();
+            }
+            this.openModal(modal, { initialFocusSelector: '#directionTitle' });
+        }
+
+        saveDirection() {
+            const title = (document.getElementById('directionTitle')?.value || '').trim();
+            if (!title) return;
+
+            const directionData = {
+                title,
+                instrumentNumber: (document.getElementById('directionInstrumentNumber')?.value || '').trim(),
+                issuedAt: document.getElementById('directionIssuedAt')?.value || null,
+                description: (document.getElementById('directionDescription')?.value || '').trim(),
+            };
+
+            if (this.editingDirection) {
+                const idx = this.directions.findIndex(d => d.id === this.editingDirection);
+                if (idx !== -1) {
+                    this.directions[idx] = { ...this.directions[idx], ...directionData };
+                }
+            } else {
+                directionData.id = `dir-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                directionData.createdAt = new Date().toISOString();
+                this.directions.push(directionData);
+            }
+
+            this.saveData();
+            this.hideModal('directionModal');
+            this.editingDirection = null;
+            this.renderDirections();
+        }
+
+        deleteDirection(directionId) {
+            if (!confirm('Delete this Direction? Any relationship links to it will also be removed.')) return;
+            this.directions = this.directions.filter(d => d.id !== directionId);
+            this.relationships = this.relationships.filter(
+                r => !(r.sourceId === directionId || r.targetId === directionId)
+            );
+            this.saveData();
+            this.renderDirections();
+        }
+
+        renderDirections() {
+            const list = document.getElementById('directionsList');
+            if (!list) return;
+
+            if (!this.directions.length) {
+                list.innerHTML = '<p class="empty-state">No Directions recorded yet. Add a Direction to start tracking obligations.</p>';
+                return;
+            }
+
+            list.innerHTML = this.directions.map(dir => {
+                const safeId = this.escapeHtml(dir.id);
+                const linkedReqs = this.relationships
+                    .filter(r => (r.sourceId === dir.id && r.sourceType === 'direction' && r.targetType === 'requirement')
+                               || (r.targetId === dir.id && r.targetType === 'direction' && r.sourceType === 'requirement'))
+                    .length;
+                return `
+                    <div class="entity-card" data-entity-id="${safeId}">
+                        <div class="entity-card-header">
+                            <div>
+                                <h4 class="entity-card-title">${this.escapeHtml(dir.title)}</h4>
+                                ${dir.instrumentNumber ? `<span class="entity-meta">${this.escapeHtml(dir.instrumentNumber)}</span>` : ''}
+                                ${dir.issuedAt ? `<span class="entity-meta">Issued ${this.escapeHtml(dir.issuedAt)}</span>` : ''}
+                            </div>
+                            <div class="entity-card-actions">
+                                <button class="btn btn-outline btn-small" data-action="edit-direction" data-direction-id="${safeId}">Edit</button>
+                                <button class="btn btn-danger btn-small" data-action="delete-direction" data-direction-id="${safeId}">Delete</button>
+                            </div>
+                        </div>
+                        ${dir.description ? `<p class="entity-description">${this.escapeHtml(dir.description)}</p>` : ''}
+                        <p class="entity-links-summary">${linkedReqs} linked requirement${linkedReqs !== 1 ? 's' : ''}</p>
+                    </div>`;
+            }).join('');
+        }
+
+        // ── Actions ───────────────────────────────────────────────────────────
+
+        showActionModal(actionId = null) {
+            this.editingAction = actionId || null;
+            const modal = document.getElementById('actionModal');
+            const titleEl = document.getElementById('actionModalTitle');
+            const form = document.getElementById('actionForm');
+            if (!modal || !form) return;
+
+            if (actionId) {
+                const action = this.actions.find(a => a.id === actionId);
+                if (action) {
+                    titleEl.textContent = 'Edit Action';
+                    document.getElementById('actionTitle').value = action.title || '';
+                    document.getElementById('actionType').value = action.type || 'remediation';
+                    document.getElementById('actionStatus').value = action.status || 'not-started';
+                    document.getElementById('actionDueDate').value = action.dueDate || '';
+                    document.getElementById('actionDescription').value = action.description || '';
+                }
+            } else {
+                titleEl.textContent = 'Add Action';
+                form.reset();
+            }
+            this.openModal(modal, { initialFocusSelector: '#actionTitle' });
+        }
+
+        saveAction() {
+            const title = (document.getElementById('actionTitle')?.value || '').trim();
+            if (!title) return;
+
+            const typeVal = document.getElementById('actionType')?.value || 'other';
+            const statusVal = document.getElementById('actionStatus')?.value || 'not-started';
+
+            const actionData = {
+                title,
+                type: ACTION_TYPES.find(t => t.key === typeVal) ? typeVal : 'other',
+                status: ACTION_STATUSES.find(s => s.key === statusVal) ? statusVal : 'not-started',
+                dueDate: document.getElementById('actionDueDate')?.value || null,
+                description: (document.getElementById('actionDescription')?.value || '').trim(),
+            };
+
+            if (this.editingAction) {
+                const idx = this.actions.findIndex(a => a.id === this.editingAction);
+                if (idx !== -1) {
+                    this.actions[idx] = { ...this.actions[idx], ...actionData };
+                }
+            } else {
+                actionData.id = `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                actionData.createdAt = new Date().toISOString();
+                this.actions.push(actionData);
+            }
+
+            this.saveData();
+            this.hideModal('actionModal');
+            this.editingAction = null;
+            this.renderActions();
+        }
+
+        deleteAction(actionId) {
+            if (!confirm('Delete this Action? Any relationship links to it will also be removed.')) return;
+            this.actions = this.actions.filter(a => a.id !== actionId);
+            this.relationships = this.relationships.filter(
+                r => !(r.sourceId === actionId || r.targetId === actionId)
+            );
+            this.saveData();
+            this.renderActions();
+        }
+
+        renderActions() {
+            const list = document.getElementById('actionsList');
+            if (!list) return;
+
+            if (!this.actions.length) {
+                list.innerHTML = '<p class="empty-state">No Actions recorded yet. Add an Action to start tracking remediation work.</p>';
+                return;
+            }
+
+            list.innerHTML = this.actions.map(action => {
+                const safeId = this.escapeHtml(action.id);
+                const typeMeta = ACTION_TYPES.find(t => t.key === action.type) || ACTION_TYPES[ACTION_TYPES.length - 1];
+                const statusMeta = ACTION_STATUSES.find(s => s.key === action.status) || ACTION_STATUSES[0];
+                const overdue = action.dueDate && action.status !== 'completed' && action.status !== 'cancelled'
+                    && new Date(action.dueDate) < new Date();
+                return `
+                    <div class="entity-card action-card status-${this.escapeHtml(action.status)}${overdue ? ' overdue' : ''}" data-entity-id="${safeId}">
+                        <div class="entity-card-header">
+                            <div>
+                                <h4 class="entity-card-title">${this.escapeHtml(action.title)}</h4>
+                                <span class="entity-type-badge">${typeMeta.icon} ${this.escapeHtml(typeMeta.label)}</span>
+                                <span class="entity-status-badge status-${this.escapeHtml(action.status)}">${this.escapeHtml(statusMeta.label)}</span>
+                                ${action.dueDate ? `<span class="entity-meta${overdue ? ' overdue-label' : ''}">Due ${this.escapeHtml(action.dueDate)}</span>` : ''}
+                            </div>
+                            <div class="entity-card-actions">
+                                <button class="btn btn-outline btn-small" data-action="edit-action" data-action-id="${safeId}">Edit</button>
+                                <button class="btn btn-danger btn-small" data-action="delete-action" data-action-id="${safeId}">Delete</button>
+                            </div>
+                        </div>
+                        ${action.description ? `<p class="entity-description">${this.escapeHtml(action.description)}</p>` : ''}
+                    </div>`;
+            }).join('');
+        }
+
+        // ── Relationships / Linkage ───────────────────────────────────────────
+
+        addRelationship(sourceType, sourceId, targetType, targetId, relation = 'supports') {
+            // Prevent self-reference
+            if (sourceType === targetType && sourceId === targetId) return null;
+            // Prevent duplicates
+            const exists = this.relationships.some(
+                r => r.sourceType === sourceType && r.sourceId === sourceId
+                  && r.targetType === targetType && r.targetId === targetId
+            );
+            if (exists) return null;
+
+            const rel = {
+                id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                sourceType,
+                sourceId,
+                targetType,
+                targetId,
+                relation,
+                createdAt: new Date().toISOString()
+            };
+            this.relationships.push(rel);
+            this.saveData();
+            return rel;
+        }
+
+        removeRelationship(relId) {
+            const before = this.relationships.length;
+            this.relationships = this.relationships.filter(r => r.id !== relId);
+            if (this.relationships.length !== before) this.saveData();
+        }
+
+        getLinkedEntities(entityType, entityId) {
+            return this.relationships.filter(
+                r => (r.sourceType === entityType && r.sourceId === entityId)
+                  || (r.targetType === entityType && r.targetId === entityId)
+            );
+        }
+
+        renderRequirementLinksSection(reqId) {
+            const links = this.getLinkedEntities('requirement', reqId);
+
+            const linkedDirections = links
+                .filter(r => r.sourceType === 'direction' || r.targetType === 'direction')
+                .map(r => {
+                    const dirId = r.sourceType === 'direction' ? r.sourceId : r.targetId;
+                    return { rel: r, entity: this.directions.find(d => d.id === dirId) };
+                })
+                .filter(x => x.entity);
+
+            const linkedRisks = links
+                .filter(r => r.sourceType === 'risk' || r.targetType === 'risk')
+                .map(r => {
+                    const riskId = r.sourceType === 'risk' ? r.sourceId : r.targetId;
+                    return { rel: r, entity: this.risks.find(d => d.id === riskId) };
+                })
+                .filter(x => x.entity);
+
+            const linkedActions = links
+                .filter(r => r.sourceType === 'action' || r.targetType === 'action')
+                .map(r => {
+                    const actId = r.sourceType === 'action' ? r.sourceId : r.targetId;
+                    return { rel: r, entity: this.actions.find(d => d.id === actId) };
+                })
+                .filter(x => x.entity);
+
+            const renderLinkList = (items, labelFn, badgeClass = '') => {
+                if (!items.length) return '<p class="link-empty-state">None linked.</p>';
+                return `<ul class="linked-entity-list">${items.map(({ rel, entity }) => `
+                    <li class="linked-entity-item${badgeClass ? ` ${badgeClass}` : ''}">
+                        <span class="linked-entity-label">${this.escapeHtml(labelFn(entity))}</span>
+                        <button class="btn-icon linked-entity-remove"
+                                data-action="remove-requirement-link"
+                                data-rel-id="${this.escapeHtml(rel.id)}"
+                                data-requirement-id="${this.escapeHtml(reqId)}"
+                                aria-label="Remove link">✕</button>
+                    </li>`).join('')}</ul>`;
+            };
+
+            const dirOptions = this.directions.map(d =>
+                `<option value="${this.escapeHtml(d.id)}">${this.escapeHtml(d.title)}</option>`
+            ).join('');
+            const riskOptions = this.risks.map(r =>
+                `<option value="${this.escapeHtml(r.id)}">${this.escapeHtml(r.name)}</option>`
+            ).join('');
+            const actionOptions = this.actions.map(a =>
+                `<option value="${this.escapeHtml(a.id)}">${this.escapeHtml(a.title)}</option>`
+            ).join('');
+
+            const safeReqId = this.escapeHtml(reqId);
+
+            return `
+                <div class="requirement-links-section">
+                    <h5>Linkage</h5>
+
+                    <div class="links-group">
+                        <h6>Directions</h6>
+                        ${renderLinkList(linkedDirections, e => e.title)}
+                        ${dirOptions ? `<div class="link-add-row">
+                            <select class="form-control form-control-sm link-select" id="linkDirSelect-${safeReqId}">
+                                <option value="">Link a Direction…</option>${dirOptions}
+                            </select>
+                            <button class="btn btn-outline btn-small"
+                                    data-action="add-requirement-link"
+                                    data-requirement-id="${safeReqId}"
+                                    data-target-type="direction"
+                                    data-select-id="linkDirSelect-${safeReqId}">Link</button>
+                        </div>` : ''}
+                    </div>
+
+                    <div class="links-group">
+                        <h6>Risks</h6>
+                        ${renderLinkList(linkedRisks, e => e.name)}
+                        ${riskOptions ? `<div class="link-add-row">
+                            <select class="form-control form-control-sm link-select" id="linkRiskSelect-${safeReqId}">
+                                <option value="">Link a Risk…</option>${riskOptions}
+                            </select>
+                            <button class="btn btn-outline btn-small"
+                                    data-action="add-requirement-link"
+                                    data-requirement-id="${safeReqId}"
+                                    data-target-type="risk"
+                                    data-select-id="linkRiskSelect-${safeReqId}">Link</button>
+                        </div>` : ''}
+                    </div>
+
+                    <div class="links-group">
+                        <h6>Actions</h6>
+                        ${renderLinkList(linkedActions, e => e.title)}
+                        ${actionOptions ? `<div class="link-add-row">
+                            <select class="form-control form-control-sm link-select" id="linkActionSelect-${safeReqId}">
+                                <option value="">Link an Action…</option>${actionOptions}
+                            </select>
+                            <button class="btn btn-outline btn-small"
+                                    data-action="add-requirement-link"
+                                    data-requirement-id="${safeReqId}"
+                                    data-target-type="action"
+                                    data-select-id="linkActionSelect-${safeReqId}">Link</button>
+                        </div>` : ''}
+                    </div>
+                </div>`;
         }
 
         calculateDomainHealth(domainId) {
@@ -6215,16 +6695,21 @@ export class PSPFExplorer {
             const directions = (data.directions || []).map(direction => ({
                 id: sanitizeId(direction.id),
                 title: sanitizeString(direction.title, 500),
+                instrumentNumber: sanitizeString(direction.instrumentNumber, 200),
+                issuedAt: typeof direction.issuedAt === 'string' ? sanitizeString(direction.issuedAt, 30) : null,
                 description: sanitizeString(direction.description, 5000),
-                sourceUrl: sanitizeString(direction.sourceUrl, 2000),
                 createdAt: direction.createdAt || new Date().toISOString()
             }));
 
+            const allowedActionTypes = ['remediation', 'uplift', 'review', 'training', 'other'];
+            const allowedActionStatuses = ['not-started', 'in-progress', 'completed', 'cancelled'];
             const actions = (data.actions || []).map(action => ({
                 id: sanitizeId(action.id),
                 title: sanitizeString(action.title, 500),
+                type: allowedActionTypes.includes(action.type) ? action.type : 'other',
+                status: allowedActionStatuses.includes(action.status) ? action.status : 'not-started',
+                dueDate: typeof action.dueDate === 'string' ? sanitizeString(action.dueDate, 30) : null,
                 description: sanitizeString(action.description, 5000),
-                status: sanitizeString(action.status, 100) || 'open',
                 createdAt: action.createdAt || new Date().toISOString()
             }));
 

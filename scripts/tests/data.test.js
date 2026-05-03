@@ -538,3 +538,208 @@ test('reviewCompliance preserves existing compliance status', () => {
   assert.strictEqual(explorer.compliance['GOV-001'].status, 'yes');
   assert.ok(explorer.compliance['GOV-001'].lastReviewedAt);
 });
+
+
+// ── Phase 3: Directions ───────────────────────────────────────────────────
+
+test('saveDirection creates a direction with correct fields', () => {
+  createSandboxDom();
+  // Provide stub elements for saveDirection to read
+  document.body.innerHTML = `
+    <input id="directionTitle" value="Direction One" />
+    <input id="directionInstrumentNumber" value="2025-01" />
+    <input id="directionIssuedAt" value="2025-01-01" />
+    <textarea id="directionDescription">Test description</textarea>
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.editingDirection = null;
+  explorer.renderDirections = () => {};
+  explorer.hideModal = () => {};
+
+  explorer.saveDirection();
+
+  assert.strictEqual(explorer.directions.length, 1);
+  const dir = explorer.directions[0];
+  assert.strictEqual(dir.title, 'Direction One');
+  assert.strictEqual(dir.instrumentNumber, '2025-01');
+  assert.strictEqual(dir.issuedAt, '2025-01-01');
+  assert.strictEqual(dir.description, 'Test description');
+  assert.ok(dir.id.startsWith('dir-'));
+  assert.ok(typeof dir.createdAt === 'string');
+});
+
+test('saveDirection updates an existing direction when editingDirection is set', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <input id="directionTitle" value="Updated Title" />
+    <input id="directionInstrumentNumber" value="" />
+    <input id="directionIssuedAt" value="" />
+    <textarea id="directionDescription">Updated</textarea>
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.directions = [{ id: 'dir-001', title: 'Original', instrumentNumber: '', issuedAt: null, description: '', createdAt: new Date().toISOString() }];
+  explorer.editingDirection = 'dir-001';
+  explorer.renderDirections = () => {};
+  explorer.hideModal = () => {};
+
+  explorer.saveDirection();
+
+  assert.strictEqual(explorer.directions.length, 1);
+  assert.strictEqual(explorer.directions[0].title, 'Updated Title');
+  assert.strictEqual(explorer.directions[0].description, 'Updated');
+  assert.strictEqual(explorer.directions[0].id, 'dir-001');
+});
+
+test('deleteDirection removes direction and cleans up relationships', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.renderDirections = () => {};
+  explorer.directions = [
+    { id: 'dir-001', title: 'Dir A', createdAt: new Date().toISOString() },
+    { id: 'dir-002', title: 'Dir B', createdAt: new Date().toISOString() },
+  ];
+  explorer.relationships = [
+    { id: 'rel-1', sourceType: 'direction', sourceId: 'dir-001', targetType: 'requirement', targetId: 'GOV-001', relation: 'supports', createdAt: new Date().toISOString() },
+    { id: 'rel-2', sourceType: 'direction', sourceId: 'dir-002', targetType: 'requirement', targetId: 'GOV-001', relation: 'supports', createdAt: new Date().toISOString() },
+  ];
+
+  explorer.deleteDirection('dir-001');
+
+  assert.strictEqual(explorer.directions.length, 1);
+  assert.strictEqual(explorer.directions[0].id, 'dir-002');
+  assert.strictEqual(explorer.relationships.length, 1);
+  assert.strictEqual(explorer.relationships[0].id, 'rel-2');
+});
+
+// ── Phase 3: Actions ──────────────────────────────────────────────────────
+
+test('saveAction creates an action with type and status', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <input id="actionTitle" value="Fix gap" />
+    <select id="actionType"><option value="remediation" selected>Remediation</option></select>
+    <select id="actionStatus"><option value="in-progress" selected>In Progress</option></select>
+    <input id="actionDueDate" value="2025-12-31" />
+    <textarea id="actionDescription">Must fix before audit</textarea>
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.editingAction = null;
+  explorer.renderActions = () => {};
+  explorer.hideModal = () => {};
+
+  explorer.saveAction();
+
+  assert.strictEqual(explorer.actions.length, 1);
+  const action = explorer.actions[0];
+  assert.strictEqual(action.title, 'Fix gap');
+  assert.strictEqual(action.type, 'remediation');
+  assert.strictEqual(action.status, 'in-progress');
+  assert.strictEqual(action.dueDate, '2025-12-31');
+  assert.ok(action.id.startsWith('act-'));
+});
+
+test('saveAction defaults to other/not-started for unknown type/status', () => {
+  createSandboxDom();
+  document.body.innerHTML = `
+    <input id="actionTitle" value="Fallback Test" />
+    <select id="actionType"><option value="unknown-type" selected>?</option></select>
+    <select id="actionStatus"><option value="bad-status" selected>?</option></select>
+    <input id="actionDueDate" value="" />
+    <textarea id="actionDescription"></textarea>
+  `;
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.editingAction = null;
+  explorer.renderActions = () => {};
+  explorer.hideModal = () => {};
+
+  explorer.saveAction();
+
+  assert.strictEqual(explorer.actions[0].type, 'other');
+  assert.strictEqual(explorer.actions[0].status, 'not-started');
+});
+
+test('deleteAction removes action and cleans up relationships', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+  explorer.renderActions = () => {};
+  explorer.actions = [
+    { id: 'act-001', title: 'Action A', type: 'remediation', status: 'not-started', createdAt: new Date().toISOString() },
+    { id: 'act-002', title: 'Action B', type: 'uplift', status: 'completed', createdAt: new Date().toISOString() },
+  ];
+  explorer.relationships = [
+    { id: 'rel-1', sourceType: 'action', sourceId: 'act-001', targetType: 'requirement', targetId: 'GOV-001', relation: 'addresses', createdAt: new Date().toISOString() },
+  ];
+
+  explorer.deleteAction('act-001');
+
+  assert.strictEqual(explorer.actions.length, 1);
+  assert.strictEqual(explorer.actions[0].id, 'act-002');
+  assert.strictEqual(explorer.relationships.length, 0);
+});
+
+// ── Phase 3: Relationships ────────────────────────────────────────────────
+
+test('addRelationship creates a link between two entities', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  const rel = explorer.addRelationship('requirement', 'GOV-001', 'risk', 'risk-001', 'addresses');
+
+  assert.ok(rel);
+  assert.strictEqual(rel.sourceType, 'requirement');
+  assert.strictEqual(rel.sourceId, 'GOV-001');
+  assert.strictEqual(rel.targetType, 'risk');
+  assert.strictEqual(rel.targetId, 'risk-001');
+  assert.strictEqual(rel.relation, 'addresses');
+  assert.ok(rel.id.startsWith('rel-'));
+  assert.strictEqual(explorer.relationships.length, 1);
+});
+
+test('addRelationship prevents duplicate links', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  explorer.addRelationship('requirement', 'GOV-001', 'risk', 'risk-001', 'addresses');
+  const dup = explorer.addRelationship('requirement', 'GOV-001', 'risk', 'risk-001', 'addresses');
+
+  assert.strictEqual(dup, null);
+  assert.strictEqual(explorer.relationships.length, 1);
+});
+
+test('addRelationship prevents self-reference', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  const self = explorer.addRelationship('requirement', 'GOV-001', 'requirement', 'GOV-001', 'supports');
+
+  assert.strictEqual(self, null);
+  assert.strictEqual(explorer.relationships.length, 0);
+});
+
+test('removeRelationship removes only the targeted link', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  const r1 = explorer.addRelationship('requirement', 'GOV-001', 'risk', 'risk-001', 'addresses');
+  const r2 = explorer.addRelationship('requirement', 'GOV-002', 'risk', 'risk-001', 'addresses');
+
+  explorer.removeRelationship(r1.id);
+
+  assert.strictEqual(explorer.relationships.length, 1);
+  assert.strictEqual(explorer.relationships[0].id, r2.id);
+});
+
+test('getLinkedEntities returns all links for an entity in either direction', () => {
+  createSandboxDom();
+  const explorer = new PSPFExplorer({ autoInit: false });
+
+  explorer.addRelationship('requirement', 'GOV-001', 'risk', 'risk-001', 'addresses');
+  explorer.addRelationship('direction', 'dir-001', 'requirement', 'GOV-001', 'governs');
+  explorer.addRelationship('requirement', 'GOV-002', 'risk', 'risk-001', 'addresses');
+
+  const links = explorer.getLinkedEntities('requirement', 'GOV-001');
+
+  assert.strictEqual(links.length, 2);
+  const ids = links.map(r => r.id);
+  assert.ok(ids.every(id => id));
+});
