@@ -202,6 +202,14 @@ export class PSPFExplorer {
             this.mergeReviews = this.cloneFallback(persistedStateData?.mergeReviews ?? this.readStorage('pspf_merge_reviews', []));
             this.progressHistory = this.readStorage('pspf_progress_history', {});
             this.normalizeProgressHistory();
+            this.posture = this.readStorage('pspf_posture', {
+                threatLevel: 'low',
+                defensivePosture: 'standard',
+                domainThreatLevels: {},
+                domainPostures: {}
+            });
+            if (!this.posture.domainThreatLevels) this.posture.domainThreatLevels = {};
+            if (!this.posture.domainPostures) this.posture.domainPostures = {};
 
             this.userProfiles = this.readStorage('pspf_user_profiles', {});
             this.currentUserProfile = null;
@@ -1601,6 +1609,39 @@ export class PSPFExplorer {
                     break;
                 }
 
+                case 'set-threat-level': {
+                    const level = target.dataset.level;
+                    if (level) this.updateThreatLevel(level);
+                    break;
+                }
+
+                case 'set-defensive-posture': {
+                    const postureVal = target.dataset.posture;
+                    if (postureVal) this.updateDefensivePosture(postureVal);
+                    break;
+                }
+
+                case 'set-domain-threat': {
+                    const domId = target.dataset.domain;
+                    const domLevel = target.value;
+                    if (domId !== undefined) this.updateDomainThreatLevel(domId, domLevel);
+                    break;
+                }
+
+                case 'set-domain-posture': {
+                    const domId2 = target.dataset.domain;
+                    const domPost = target.value;
+                    if (domId2 !== undefined) this.updateDomainPosture(domId2, domPost);
+                    break;
+                }
+
+                case 'set-target-maturity': {
+                    const matReqId = target.dataset.requirementId;
+                    const matVal = target.dataset.maturity ? parseInt(target.dataset.maturity, 10) : null;
+                    if (matReqId) this.updateTargetMaturity(matReqId, matVal);
+                    break;
+                }
+
                 default:
                     console.warn(`Unknown delegated action: ${action}`);
             }
@@ -2208,6 +2249,138 @@ export class PSPFExplorer {
                 });
         }
 
+        // ── Posture Panel (v2.12) ─────────────────────────────────────────────
+
+        static get THREAT_LEVELS() {
+            return [
+                { id: 'low',      label: 'Low',      color: '#16a34a', bg: '#dcfce7' },
+                { id: 'elevated', label: 'Elevated',  color: '#d97706', bg: '#fef3c7' },
+                { id: 'high',     label: 'High',      color: '#dc2626', bg: '#fee2e2' },
+                { id: 'critical', label: 'Critical',  color: '#7c3aed', bg: '#ede9fe' }
+            ];
+        }
+
+        static get DEFENSIVE_POSTURES() {
+            return [
+                { id: 'standard',       label: 'Standard',       icon: '🛡️' },
+                { id: 'shields-up',     label: 'Shields Up',     icon: '⚡' },
+                { id: 'active-defence', label: 'Active Defence', icon: '🔴' }
+            ];
+        }
+
+        renderPosturePanel() {
+            if (typeof document === 'undefined') return;
+            const card = document.getElementById('postureControlCard');
+            if (!card) return;
+
+            const p = this.posture;
+            const threatLevel = PSPFExplorer.THREAT_LEVELS.find(t => t.id === p.threatLevel) || PSPFExplorer.THREAT_LEVELS[0];
+            const posture     = PSPFExplorer.DEFENSIVE_POSTURES.find(d => d.id === p.defensivePosture) || PSPFExplorer.DEFENSIVE_POSTURES[0];
+
+            const threatBtns = PSPFExplorer.THREAT_LEVELS.map(t => `
+                <button type="button"
+                        class="posture-level-btn${p.threatLevel === t.id ? ' active' : ''}"
+                        style="${p.threatLevel === t.id ? `--posture-btn-color:${t.color};--posture-btn-bg:${t.bg}` : ''}"
+                        data-action="set-threat-level"
+                        data-level="${t.id}">${t.label}</button>
+            `).join('');
+
+            const postureBtns = PSPFExplorer.DEFENSIVE_POSTURES.map(d => `
+                <button type="button"
+                        class="posture-level-btn${p.defensivePosture === d.id ? ' active posture-active' : ''}"
+                        data-action="set-defensive-posture"
+                        data-posture="${d.id}">${d.icon} ${d.label}</button>
+            `).join('');
+
+            // Domain override rows
+            const domainRows = this.domains.map(domain => {
+                const dt = p.domainThreatLevels[domain.id] || '';
+                const dp = p.domainPostures[domain.id] || '';
+                const dtLabel = PSPFExplorer.THREAT_LEVELS.find(t => t.id === dt);
+                const dpLabel = PSPFExplorer.DEFENSIVE_POSTURES.find(d => d.id === dp);
+                const threatSelect = `<select class="posture-domain-select" data-action="set-domain-threat" data-domain="${domain.id}" aria-label="Threat level for ${this.escapeHtml(domain.title)}">
+                    <option value="">— Inherit global</option>
+                    ${PSPFExplorer.THREAT_LEVELS.map(t => `<option value="${t.id}"${dt === t.id ? ' selected' : ''}>${t.label}</option>`).join('')}
+                </select>`;
+                const postureSelect = `<select class="posture-domain-select" data-action="set-domain-posture" data-domain="${domain.id}" aria-label="Defensive posture for ${this.escapeHtml(domain.title)}">
+                    <option value="">— Inherit global</option>
+                    ${PSPFExplorer.DEFENSIVE_POSTURES.map(d => `<option value="${d.id}"${dp === d.id ? ' selected' : ''}>${d.icon} ${d.label}</option>`).join('')}
+                </select>`;
+                const effectiveThreat = dtLabel || threatLevel;
+                const effectivePosture = dpLabel || posture;
+                return `<tr>
+                    <td class="posture-domain-name">${this.escapeHtml(domain.title)}</td>
+                    <td>${threatSelect}</td>
+                    <td>${postureSelect}</td>
+                    <td><span class="posture-badge threat-${effectiveThreat.id}">${effectiveThreat.label}</span> <span class="posture-badge posture-${(effectivePosture.id)}">${effectivePosture.icon} ${effectivePosture.label}</span></td>
+                </tr>`;
+            }).join('');
+
+            card.innerHTML = `
+                <div class="posture-panel-header">
+                    <div>
+                        <h3>Threat &amp; Posture</h3>
+                        <p class="subtitle-sm">Set your organisation's threat level and defensive posture to contextualise compliance priorities.</p>
+                    </div>
+                    <div class="posture-current-badges">
+                        <span class="posture-badge threat-${threatLevel.id}">${threatLevel.label} Threat</span>
+                        <span class="posture-badge posture-${posture.id}">${posture.icon} ${posture.label}</span>
+                    </div>
+                </div>
+                <div class="posture-global-controls">
+                    <div class="posture-control-group">
+                        <label class="posture-control-label">Global threat level</label>
+                        <div class="posture-btn-row">${threatBtns}</div>
+                    </div>
+                    <div class="posture-control-group">
+                        <label class="posture-control-label">Global defensive posture</label>
+                        <div class="posture-btn-row">${postureBtns}</div>
+                    </div>
+                </div>
+                <details class="posture-domain-overrides">
+                    <summary>Per-domain overrides</summary>
+                    <table class="posture-domain-table">
+                        <thead><tr><th>Domain</th><th>Threat level</th><th>Posture</th><th>Effective</th></tr></thead>
+                        <tbody>${domainRows}</tbody>
+                    </table>
+                </details>
+            `;
+        }
+
+        updateThreatLevel(level) {
+            if (!PSPFExplorer.THREAT_LEVELS.find(t => t.id === level)) return;
+            this.posture.threatLevel = level;
+            this.saveData();
+            this.renderPosturePanel();
+        }
+
+        updateDefensivePosture(posture) {
+            if (!PSPFExplorer.DEFENSIVE_POSTURES.find(d => d.id === posture)) return;
+            this.posture.defensivePosture = posture;
+            this.saveData();
+            this.renderPosturePanel();
+        }
+
+        updateDomainThreatLevel(domainId, level) {
+            if (level) {
+                this.posture.domainThreatLevels[domainId] = level;
+            } else {
+                delete this.posture.domainThreatLevels[domainId];
+            }
+            this.saveData();
+            this.renderPosturePanel();
+        }
+
+        updateDomainPosture(domainId, posture) {
+            if (posture) {
+                this.posture.domainPostures[domainId] = posture;
+            } else {
+                delete this.posture.domainPostures[domainId];
+            }
+            this.saveData();
+            this.renderPosturePanel();
+        }
+
         updateDashboardStats() {
             const totalRequirements = this.domains.reduce((sum, domain) => sum + domain.requirements.length, 0);
             const totalProjects = this.projects.length;
@@ -2771,6 +2944,25 @@ export class PSPFExplorer {
 
                 ${this.renderEvidenceGuidanceSection(reqId)}
 
+                <div class="target-maturity-control">
+                    <h5>Target Maturity</h5>
+                    <p class="field-help">Set the target maturity level for this requirement (1 = ad hoc → 4 = optimised).</p>
+                    <div class="maturity-btn-row">
+                        ${[1,2,3,4].map(lvl => {
+                            const labels = { 1: 'Ad hoc', 2: 'Defined', 3: 'Managed', 4: 'Optimised' };
+                            const active = compliance.targetMaturity === lvl;
+                            return `<button type="button"
+                                class="maturity-btn${active ? ' active' : ''}"
+                                data-action="set-target-maturity"
+                                data-requirement-id="${reqId}"
+                                data-maturity="${lvl}"
+                                title="${labels[lvl]}"
+                                aria-pressed="${active}">${lvl} — ${labels[lvl]}</button>`;
+                        }).join('')}
+                    </div>
+                    ${compliance.targetMaturity ? `<p class="maturity-current">Target set to <strong>Level ${compliance.targetMaturity}</strong></p>` : '<p class="maturity-current maturity-none">No target set</p>'}
+                </div>
+
                 <div class="compliance-controls">
                     <h5>Reference URL</h5>
                     <input type="url" class="compliance-url" data-req="${reqId}" 
@@ -2971,6 +3163,18 @@ export class PSPFExplorer {
                 this.compliance[reqId].history = [];
             }
             return this.compliance[reqId];
+        }
+
+        updateTargetMaturity(reqId, maturityLevel) {
+            const compliance = this.ensureComplianceEntry(reqId);
+            // Toggle off if same value clicked again
+            if (compliance.targetMaturity === maturityLevel) {
+                compliance.targetMaturity = null;
+            } else {
+                compliance.targetMaturity = (maturityLevel >= 1 && maturityLevel <= 4) ? maturityLevel : null;
+            }
+            this.saveData();
+            this.showRequirementDetails(reqId);
         }
 
         recordComplianceHistory(reqId, status) {
@@ -3552,6 +3756,17 @@ export class PSPFExplorer {
             const canvas = document.getElementById('relationshipMapCanvas');
             if (!canvas) return;
 
+            // Tab bar wiring
+            document.getElementById('mapTabGraph')?.addEventListener('click', () => this._showMapTab('graph'));
+            document.getElementById('mapTabMatrix')?.addEventListener('click', () => this._showMapTab('matrix'));
+
+            document.getElementById('mapExitFocus')?.addEventListener('click', () => {
+                this._mapFocusMode = false;
+                this._mapSelectedKey = null;
+                document.getElementById('mapExitFocus')?.classList.add('hidden');
+                this._drawMap();
+            });
+
             ['mapFilterDirections', 'mapFilterRequirements', 'mapFilterRisks', 'mapFilterActions', 'mapFilterUnlinked'].forEach(id => {
                 document.getElementById(id)?.addEventListener('change', () => {
                     this._mapSelectedKey = null;
@@ -3561,6 +3776,8 @@ export class PSPFExplorer {
 
             document.getElementById('mapClearSelection')?.addEventListener('click', () => {
                 this._mapSelectedKey = null;
+                this._mapFocusMode = false;
+                document.getElementById('mapExitFocus')?.classList.add('hidden');
                 this._drawMap();
             });
 
@@ -3712,6 +3929,7 @@ export class PSPFExplorer {
                 }
             }
 
+            const isFocusMode = !!(this._mapFocusMode && selKey);
             const hovKey = this._mapHoveredKey || null;
 
             // Draw column headers
@@ -3739,6 +3957,9 @@ export class PSPFExplorer {
                 const tgtKey = `${tgt.type}:${tgt.id}`;
                 const isHighlighted = selKey && (srcKey === selKey || tgtKey === selKey);
                 const isDimmed = selKey && !isHighlighted;
+
+                // In focus mode, skip edges that don't involve the selected node
+                if (isFocusMode && !isHighlighted) return;
 
                 ctx.beginPath();
                 ctx.strokeStyle = isHighlighted ? '#f59e0b' : isDimmed ? 'rgba(160,160,160,0.15)' : 'rgba(120,120,120,0.35)';
@@ -3777,10 +3998,13 @@ export class PSPFExplorer {
                 const isDimmed   = selKey && !isSelected && !isRelated;
                 const isHovered  = key === hovKey;
 
+                // In focus mode, skip nodes that aren't selected or directly related
+                if (isFocusMode && isDimmed) return;
+
                 // Background
                 ctx.save();
-                ctx.globalAlpha = isDimmed ? 0.2 : 1;
-                ctx.fillStyle = isSelected ? c.bg : isRelated ? c.bg + 'cc' : c.dimBg;
+                ctx.globalAlpha = isDimmed ? 0.5 : 1;
+                ctx.fillStyle = isDimmed ? '#d1d5db' : isSelected ? c.bg : isRelated ? c.bg + 'cc' : c.dimBg;
                 this._drawRoundRect(ctx, node.x, node.y, L.nodeW, L.nodeH, 8);
                 ctx.fill();
 
@@ -3853,9 +4077,19 @@ export class PSPFExplorer {
             const node = this._hitTestMap(e.clientX, e.clientY);
             if (!node) {
                 this._mapSelectedKey = null;
+                this._mapFocusMode = false;
+                document.getElementById('mapExitFocus')?.classList.add('hidden');
             } else {
                 const key = `${node.type}:${node.id}`;
-                this._mapSelectedKey = this._mapSelectedKey === key ? null : key;
+                if (this._mapSelectedKey === key) {
+                    // Clicking the already-selected node toggles focus mode
+                    this._mapFocusMode = !this._mapFocusMode;
+                    document.getElementById('mapExitFocus')?.classList.toggle('hidden', !this._mapFocusMode);
+                } else {
+                    this._mapSelectedKey = key;
+                    this._mapFocusMode = false;
+                    document.getElementById('mapExitFocus')?.classList.add('hidden');
+                }
             }
             this._drawMap();
         }
@@ -3886,6 +4120,124 @@ export class PSPFExplorer {
                 this._mapHoveredKey = newKey;
                 this._drawMap();
             }
+        }
+
+        // ── Map tabs + coverage matrix (v2.12) ───────────────────────────────
+
+        _showMapTab(tabName) {
+            const graphTab   = document.getElementById('mapTabGraph');
+            const matrixTab  = document.getElementById('mapTabMatrix');
+            const graphPanel = document.getElementById('mapPanelGraph');
+            const matrixPanel = document.getElementById('mapPanelMatrix');
+            if (!graphTab || !matrixTab || !graphPanel || !matrixPanel) return;
+
+            const isGraph = tabName === 'graph';
+            graphTab.classList.toggle('active', isGraph);
+            matrixTab.classList.toggle('active', !isGraph);
+            graphTab.setAttribute('aria-selected', isGraph ? 'true' : 'false');
+            matrixTab.setAttribute('aria-selected', isGraph ? 'false' : 'true');
+            graphPanel.classList.toggle('hidden', !isGraph);
+            matrixPanel.classList.toggle('hidden', isGraph);
+
+            if (!isGraph) this.renderCoverageMatrix();
+        }
+
+        renderCoverageMatrix() {
+            const container = document.getElementById('coverageMatrixContainer');
+            if (!container) return;
+
+            // Build a lookup: requirementId → linked entity types present
+            const reqLinks = {}; // reqId → { direction: Set<id>, risk: Set<id>, action: Set<id> }
+            this.relationships.forEach(r => {
+                const reqId   = r.sourceType === 'requirement' ? r.sourceId
+                              : r.targetType === 'requirement' ? r.targetId : null;
+                const partner = r.sourceType === 'requirement'
+                              ? { type: r.targetType, id: r.targetId }
+                              : r.targetType === 'requirement'
+                              ? { type: r.sourceType, id: r.sourceId }
+                              : null;
+                if (!reqId || !partner) return;
+                if (!reqLinks[reqId]) reqLinks[reqId] = { direction: new Set(), risk: new Set(), action: new Set() };
+                if (partner.type in reqLinks[reqId]) reqLinks[reqId][partner.type].add(partner.id);
+            });
+
+            const COLS = [
+                { type: 'direction', label: 'Directions', color: '#1565c0' },
+                { type: 'risk',      label: 'Risks',      color: '#bf360c' },
+                { type: 'action',    label: 'Actions',    color: '#1b5e20' }
+            ];
+
+            const domainSections = this.domains.map(domain => {
+                const reqs = Array.isArray(domain.requirements) ? domain.requirements : [];
+                if (!reqs.length) return '';
+
+                const rows = reqs.map(reqId => {
+                    const req = this.requirements[reqId];
+                    const title = req?.title ? this.escapeHtml(req.title.slice(0, 60)) : reqId;
+                    const status = this.compliance[reqId]?.status || 'not-set';
+                    const links = reqLinks[reqId] || {};
+                    const cells = COLS.map(col => {
+                        const set = links[col.type];
+                        if (set && set.size > 0) {
+                            return `<td class="matrix-cell matrix-cell--linked" data-req="${this.escapeHtml(reqId)}" data-type="${col.type}" title="${set.size} ${col.label.toLowerCase()} linked" style="--matrix-col-color:${col.color}">
+                                <span class="matrix-dot" aria-label="${set.size} linked" data-action="matrix-focus" data-req="${this.escapeHtml(reqId)}" data-type="${col.type}">${set.size}</span>
+                            </td>`;
+                        }
+                        return `<td class="matrix-cell matrix-cell--empty"></td>`;
+                    }).join('');
+
+                    return `<tr class="matrix-row status-row-${status}">
+                        <td class="matrix-req-cell">
+                            <button class="matrix-req-btn" data-action="matrix-focus" data-req="${this.escapeHtml(reqId)}" title="Focus on ${this.escapeHtml(reqId)} in graph">
+                                <span class="req-status-dot status-${status}"></span>
+                                <span class="matrix-req-id">${this.escapeHtml(reqId)}</span>
+                            </button>
+                            <span class="matrix-req-title">${title}</span>
+                        </td>
+                        ${cells}
+                    </tr>`;
+                }).join('');
+
+                return `<tbody>
+                    <tr class="matrix-domain-header"><th colspan="4">${this.escapeHtml(domain.title)}</th></tr>
+                    ${rows}
+                </tbody>`;
+            }).join('');
+
+            if (!domainSections.trim()) {
+                container.innerHTML = '<p class="history-empty-msg">No requirements loaded.</p>';
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="matrix-header">
+                    <h3>Coverage Matrix</h3>
+                    <p class="subtitle-sm">Shows how requirements connect to Directions, Risks, and Actions. Click a requirement or dot to focus it in the graph.</p>
+                </div>
+                <div class="matrix-scroll-wrapper">
+                    <table class="coverage-matrix-table" role="grid">
+                        <thead>
+                            <tr>
+                                <th class="matrix-req-col">Requirement</th>
+                                ${COLS.map(c => `<th class="matrix-type-col" style="color:${c.color}">${c.label}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        ${domainSections}
+                    </table>
+                </div>`;
+
+            // Wire cell click handlers to focus in graph
+            container.querySelectorAll('[data-action="matrix-focus"]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const reqId = el.dataset.req;
+                    if (!reqId) return;
+                    this._showMapTab('graph');
+                    this._mapSelectedKey = `requirement:${reqId}`;
+                    this._mapFocusMode = true;
+                    document.getElementById('mapExitFocus')?.classList.remove('hidden');
+                    this._drawMap();
+                });
+            });
         }
 
         calculateDomainHealth(domainId) {
@@ -4007,6 +4359,7 @@ export class PSPFExplorer {
             this.renderEssentialEightWidget();
             this.renderGapReport();
             this.renderUnassignedWidget();
+            this.renderPosturePanel();
         }
         
         animateNumber(elementId, targetValue) {
@@ -4544,6 +4897,7 @@ export class PSPFExplorer {
 
             this.renderGapReport();
             this.renderUnassignedWidget();
+            this.renderPosturePanel();
             this.renderProgressHistorySection();
         }
 
@@ -8768,6 +9122,7 @@ export class PSPFExplorer {
             localStorage.setItem('pspf_merge_reviews', JSON.stringify(this.mergeReviews));
             localStorage.setItem('pspf_state_v2', JSON.stringify(this.buildLocalStateEnvelope()));
             this.saveProgressHistory();
+            localStorage.setItem('pspf_posture', JSON.stringify(this.posture));
             localStorage.setItem(DATA_MODEL_VERSION_KEY, CURRENT_DATA_MODEL_VERSION);
             localStorage.setItem('pspf_last_modified', new Date().toISOString());
         }

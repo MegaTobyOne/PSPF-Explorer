@@ -325,6 +325,10 @@
                     <h2>Progress Overview</h2>
                     <p class="subtitle">Track your compliance journey across all domains</p>
                 </div>
+
+                <div class="posture-control-card" id="postureControlCard">
+                    <!-- Posture controls rendered by renderPosturePanel() -->
+                </div>
                 
                 <div class="stats-overview" id="statsOverview">
                     <div class="stat-card" data-action="nav-view" data-view="project" data-nav-btn="projectBtn" tabindex="0" role="button" title="View all projects">
@@ -845,6 +849,13 @@
 
                 <!-- Desktop map -->
                 <div id="mapDesktopContent" class="map-desktop-content">
+                    <div class="map-tab-bar" role="tablist" aria-label="Map view tabs">
+                        <button class="map-tab active" id="mapTabGraph" role="tab" aria-selected="true" aria-controls="mapPanelGraph" data-tab="graph">Relationship Graph</button>
+                        <button class="map-tab" id="mapTabMatrix" role="tab" aria-selected="false" aria-controls="mapPanelMatrix" data-tab="matrix">Coverage Matrix</button>
+                    </div>
+
+                    <!-- Graph panel -->
+                    <div id="mapPanelGraph" role="tabpanel" aria-labelledby="mapTabGraph">
                     <div class="map-controls-bar">
                         <div class="map-filter-group">
                             <span class="map-filter-label">Show:</span>
@@ -855,6 +866,7 @@
                             <label class="map-filter-check"><input type="checkbox" id="mapFilterUnlinked"> <span>Show unlinked</span></label>
                         </div>
                         <div class="map-controls-actions">
+                            <button class="btn btn-outline btn-small map-focus-mode-btn hidden" id="mapExitFocus">Exit focus</button>
                             <button class="btn btn-outline btn-small" id="mapClearSelection">Clear selection</button>
                             <button class="btn btn-outline btn-small" id="mapExportPng">Export PNG</button>
                         </div>
@@ -871,6 +883,14 @@
                         <div id="mapEmptyState" class="map-empty-state hidden">
                             <p>No linked items to display yet.</p>
                             <p>Add links from within any requirement, direction, risk, or action record, then return here to explore connections.</p>
+                        </div>
+                    </div>
+                    </div><!-- /mapPanelGraph -->
+
+                    <!-- Coverage matrix panel -->
+                    <div id="mapPanelMatrix" role="tabpanel" aria-labelledby="mapTabMatrix" class="hidden">
+                        <div id="coverageMatrixContainer">
+                            <!-- Coverage matrix rendered by renderCoverageMatrix() -->
                         </div>
                     </div>
                 </div>
