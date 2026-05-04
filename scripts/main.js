@@ -270,6 +270,11 @@ export class PSPFExplorer {
             this.setupEventDelegation();
             this.applyRequirementsViewPreferences();
             this.setupRequirementsUXControls();
+            // Restore domain card collapse state
+            const savedCollapsed = this.storageAvailable ? localStorage.getItem('pspf_domains_grid_collapsed') : null;
+            if (savedCollapsed === 'true') {
+                this.isDomainGridCollapsed = true;
+            }
             this.renderHome();
             this.renderProjects();
             this.renderDirections();
@@ -514,6 +519,35 @@ export class PSPFExplorer {
                 case 'lg': return 1.08;
                 default: return 1;
             }
+        }
+
+        // Global font scale (separate from requirements-only text size pref).
+        // Stored in localStorage so it persists across sessions.
+        adjustGlobalFontSize(direction) {
+            const STEPS = [0.8, 0.875, 0.95, 1, 1.08, 1.2, 1.35];
+            const current = parseFloat(document.documentElement.style.getPropertyValue('--global-font-scale') || '1');
+            const idx = STEPS.findIndex(s => Math.abs(s - current) < 0.01);
+            const nextIdx = Math.max(0, Math.min(STEPS.length - 1, (idx === -1 ? 3 : idx) + direction));
+            const next = STEPS[nextIdx];
+            this.setGlobalFontScale(next);
+        }
+
+        setGlobalFontScale(scale) {
+            document.documentElement.style.setProperty('--global-font-scale', String(scale));
+            try { localStorage.setItem('pspf_global_font_scale', String(scale)); } catch { /* non-fatal */ }
+            const dec = document.getElementById('fontSizeDecBtn');
+            const inc = document.getElementById('fontSizeIncBtn');
+            if (dec) dec.disabled = scale <= 0.8;
+            if (inc) inc.disabled = scale >= 1.35;
+        }
+
+        applyGlobalFontScale() {
+            let scale = 1;
+            if (this.storageAvailable) {
+                const stored = localStorage.getItem('pspf_global_font_scale');
+                if (stored) scale = Math.max(0.8, Math.min(1.35, parseFloat(stored) || 1));
+            }
+            this.setGlobalFontScale(scale);
         }
 
         applyRequirementsViewPreferences() {
@@ -1073,6 +1107,26 @@ export class PSPFExplorer {
             if (addDirectionBtn) {
                 addDirectionBtn.addEventListener('click', () => this.showDirectionModal());
             }
+
+            // Directions top-level nav button
+            const directionsBtn = document.getElementById('directionsBtn');
+            if (directionsBtn) {
+                directionsBtn.addEventListener('click', () => {
+                    this.showView('directions');
+                    this.updateNavButtons('directionsBtn');
+                });
+            }
+
+            // Global font size controls
+            const fontSizeIncBtn = document.getElementById('fontSizeIncBtn');
+            const fontSizeDecBtn = document.getElementById('fontSizeDecBtn');
+            if (fontSizeIncBtn) {
+                fontSizeIncBtn.addEventListener('click', () => this.adjustGlobalFontSize(1));
+            }
+            if (fontSizeDecBtn) {
+                fontSizeDecBtn.addEventListener('click', () => this.adjustGlobalFontSize(-1));
+            }
+            this.applyGlobalFontScale();
             const addActionBtn = document.getElementById('addActionBtn');
             if (addActionBtn) {
                 addActionBtn.addEventListener('click', () => this.showActionModal());
@@ -1639,6 +1693,11 @@ export class PSPFExplorer {
                 this.renderProjects();
             }
 
+            // Special handling for directions view
+            if (viewName === 'directions') {
+                this.renderDirections();
+            }
+
             // Special handling for data view
             if (viewName === 'data') {
                 this.renderTagManagement();
@@ -1682,6 +1741,7 @@ export class PSPFExplorer {
 
         setDomainGridCollapsed(collapsed) {
             this.isDomainGridCollapsed = !!collapsed;
+            try { localStorage.setItem('pspf_domains_grid_collapsed', this.isDomainGridCollapsed ? 'true' : 'false'); } catch { /* non-fatal */ }
             this.updateDomainGridVisibility();
         }
 
@@ -2347,7 +2407,7 @@ export class PSPFExplorer {
                 if (!tag) {
                     return '';
                 }
-                return `<span class="tag" style="background-color: ${tag.color}">${tag.name}</span>`;
+                return `<span class="tag tag--removable" style="background-color: ${tag.color}">${this.escapeHtml(tag.name)} <button class="tag-remove-btn" data-action="toggle-tag" data-requirement-id="${requirementId}" data-tag-id="${tagId}" aria-label="Remove tag ${this.escapeHtml(tag.name)}">✕</button></span>`;
             }).join('');
 
             return `
@@ -2396,30 +2456,30 @@ export class PSPFExplorer {
             const status = compliance.status || 'not-set';
 
             if (status === 'not-set') {
-                actions.push({ icon: '🧭', text: 'Set an initial compliance status so trend tracking can begin.' });
+                actions.push({ key: 'set-status',      icon: '🧭', text: 'Set an initial compliance status so trend tracking can begin.' });
             }
             if (status === 'no') {
-                actions.push({ icon: '🚨', text: 'Log a remediation project or risk treatment plan for this gap.' });
+                actions.push({ key: 'remediation',     icon: '🚨', text: 'Log a remediation project or risk treatment plan for this gap.' });
             }
             if (status === 'partial') {
-                actions.push({ icon: '⚙️', text: 'Capture residual risk details and map supporting projects.' });
+                actions.push({ key: 'residual-risk',   icon: '⚙️', text: 'Capture residual risk details and map supporting projects.' });
             }
             if (!evidenceRecords.length && !compliance.url) {
-                actions.push({ icon: '🔗', text: 'Add at least one evidence record to support audit readiness.' });
+                actions.push({ key: 'evidence-record', icon: '🔗', text: 'Add at least one evidence record to support audit readiness.' });
             }
             if (!compliance.comment) {
-                actions.push({ icon: '📝', text: 'Add implementation notes or context for future reviewers.' });
+                actions.push({ key: 'comment',         icon: '📝', text: 'Add implementation notes or context for future reviewers.' });
             }
             if (!tags.length) {
-                actions.push({ icon: '🏷️', text: 'Assign a priority tag or owner so accountability is clear.' });
+                actions.push({ key: 'tags',            icon: '🏷️', text: 'Assign a priority tag or owner so accountability is clear.' });
             }
             if (compliance.lastReviewedAt) {
                 const daysSinceReview = (Date.now() - new Date(compliance.lastReviewedAt).getTime()) / 86400000;
                 if (daysSinceReview > 365) {
-                    actions.push({ icon: '📅', text: 'Compliance was last reviewed over a year ago — schedule a re-review.' });
+                    actions.push({ key: 'review-overdue', icon: '📅', text: 'Compliance was last reviewed over a year ago — schedule a re-review.' });
                 }
             } else if (status !== 'not-set') {
-                actions.push({ icon: '📅', text: 'Mark this requirement as reviewed to record when it was last checked.' });
+                actions.push({ key: 'review-pending',  icon: '📅', text: 'Mark this requirement as reviewed to record when it was last checked.' });
             }
 
             return actions;
@@ -2450,6 +2510,28 @@ export class PSPFExplorer {
 
         renderRequirementEvidenceChecklist(reqId) {
             const evidenceState = this.getRequirementEvidenceState(reqId);
+            const status = this.compliance[reqId]?.status || 'not-set';
+            const isNA = status === 'na';
+
+            if (isNA) {
+                return `
+                    <div class="evidence-checklist evidence-checklist--na">
+                        <h5>Evidence checklist</h5>
+                        <p class="evidence-na-notice">This requirement is marked N/A — all evidence items are treated as complete for progress reporting.</p>
+                        <ul>
+                            ${EVIDENCE_CHECKLIST_ITEMS.map(item => `
+                                <li class="evidence-item evidence-item--na">
+                                    <label>
+                                        <input type="checkbox" checked disabled aria-disabled="true">
+                                        <span class="evidence-label">${item.icon} ${this.escapeHtml(item.label)}</span>
+                                    </label>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
             return `
                 <div class="evidence-checklist">
                     <h5>Evidence checklist</h5>
@@ -2471,6 +2553,83 @@ export class PSPFExplorer {
                             `;
                         }).join('')}
                     </ul>
+                </div>
+            `;
+        }
+
+        /**
+         * Renders the combined evidence checklist + inline guidance panel for a requirement.
+         * Status-specific next-step hints are surfaced inline next to the relevant checklist item.
+         * Non-checklist hints (e.g. "Set status", "review overdue") appear as a banner above.
+         */
+        renderEvidenceGuidanceSection(reqId) {
+            const status = this.compliance[reqId]?.status || 'not-set';
+            const nextActions = this.getRequirementNextActions(reqId);
+
+            // Keys that map to a specific checklist item
+            const CHECKLIST_HINT_KEYS = new Set(['evidence-record', 'comment']);
+
+            // Split: banner actions vs checklist-linked hints
+            const bannerActions = nextActions.filter(a => !CHECKLIST_HINT_KEYS.has(a.key));
+            const hintByKey = Object.fromEntries(
+                nextActions.filter(a => CHECKLIST_HINT_KEYS.has(a.key)).map(a => [a.key, a])
+            );
+            // Map checklist item keys → hint keys
+            const CHECKLIST_HINT_MAP = { evidence: 'evidence-record', process: 'comment' };
+
+            const bannerHtml = bannerActions.length ? `
+                <div class="evidence-banner-actions">
+                    ${bannerActions.map(a => `
+                        <div class="evidence-banner-action">
+                            <span class="action-icon">${a.icon}</span>
+                            <span>${this.escapeHtml(a.text)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '';
+
+            if (status === 'na') {
+                return `
+                    <div class="evidence-guidance-section">
+                        <h5>Evidence &amp; Guidance</h5>
+                        ${bannerHtml}
+                        ${this.renderRequirementEvidenceChecklist(reqId)}
+                    </div>
+                `;
+            }
+
+            const evidenceState = this.getRequirementEvidenceState(reqId);
+            const checklistHtml = `
+                <div class="evidence-checklist">
+                    <h5>Evidence checklist</h5>
+                    <ul>
+                        ${EVIDENCE_CHECKLIST_ITEMS.map(item => {
+                            const checked = evidenceState[item.key];
+                            const hint = hintByKey[CHECKLIST_HINT_MAP[item.key]];
+                            return `
+                                <li class="evidence-item">
+                                    <label>
+                                        <input type="checkbox"
+                                               ${checked ? 'checked' : ''}
+                                               data-action="toggle-evidence"
+                                               data-requirement-id="${reqId}"
+                                               data-evidence-key="${item.key}">
+                                        <span class="evidence-label">${item.icon} ${this.escapeHtml(item.label)}</span>
+                                    </label>
+                                    <p class="evidence-item-description">${this.escapeHtml(item.description)}</p>
+                                    ${hint && !checked ? `<div class="evidence-inline-hint">${hint.icon} ${this.escapeHtml(hint.text)}</div>` : ''}
+                                </li>
+                            `;
+                        }).join('')}
+                    </ul>
+                </div>
+            `;
+
+            return `
+                <div class="evidence-guidance-section">
+                    <h5>Evidence &amp; Guidance</h5>
+                    ${bannerHtml}
+                    ${checklistHtml}
                 </div>
             `;
         }
@@ -2589,48 +2748,28 @@ export class PSPFExplorer {
                     <h5>Compliance Status</h5>
                     <div class="compliance-status-buttons">
                         ${[
-                            { id: 'not-set', label: 'Not Set' },
-                            { id: 'yes', label: 'Met' },
-                            { id: 'no', label: 'Not Met' },
-                            { id: 'partial', label: 'Risk Managed' },
-                            { id: 'na', label: 'N/A' }
+                            { id: 'not-set', label: 'Not Set',      activePrefix: '' },
+                            { id: 'yes',     label: 'Met',          activePrefix: '✓ ' },
+                            { id: 'no',      label: 'Not Met',      activePrefix: '✗ ' },
+                            { id: 'partial', label: 'Risk Managed', activePrefix: '~ ' },
+                            { id: 'na',      label: 'N/A',          activePrefix: '— ' }
                         ].map(statusOption => {
                             const isActive = compliance.status === statusOption.id;
+                            const displayLabel = isActive ? `${statusOption.activePrefix}${statusOption.label}` : statusOption.label;
                             return `
                                 <button type="button"
                                         class="compliance-status-button ${isActive ? 'active' : ''} status-${statusOption.id}"
                                         data-status="${statusOption.id}"
                                         aria-pressed="${isActive}"
                                         onclick="window.pspfExplorer.updateCompliance('${reqId}', '${statusOption.id}')">
-                                    ${statusOption.label}
+                                    ${displayLabel}
                                 </button>
                             `;
                         }).join('')}
                     </div>
                 </div>
 
-                <div class="requirement-insights">
-                    <div class="insight-card">
-                        <div class="insight-card-header">
-                            <h5>Next steps</h5>
-                        </div>
-                        ${nextActionsMarkup}
-                    </div>
-                    <div class="insight-card">
-                        ${this.renderRequirementEvidenceChecklist(reqId)}
-                    </div>
-                </div>
-                ${compliance.url ? `
-                    <div class="requirement-url-section">
-                        <h5>📎 Reference Link</h5>
-                        <div class="url-display">
-                            <a href="${compliance.url}" target="_blank" rel="noopener noreferrer" class="requirement-link">
-                                ${compliance.url}
-                                <span class="external-icon">↗</span>
-                            </a>
-                        </div>
-                    </div>
-                ` : ''}
+                ${this.renderEvidenceGuidanceSection(reqId)}
 
                 <div class="compliance-controls">
                     <h5>Reference URL</h5>
@@ -2659,11 +2798,8 @@ export class PSPFExplorer {
                     </button>
                 </div>
 
-                    <div class="requirement-history">
-                        <h5>Progress Timeline</h5>
-                        ${this.renderRequirementProgressHistory(reqId)}
-                    </div>
-                
+                ${this.renderTagsInDetails(reqId)}
+
                 <div class="linked-projects-section">
                     <h5>Linked Projects</h5>
                     <div class="linked-projects-list" id="linkedProjectsList-${reqId}">
@@ -2684,8 +2820,13 @@ export class PSPFExplorer {
                         + Link Project
                     </button>
                 </div>
-                ${this.renderTagsInDetails(reqId)}
+
                 ${this.renderRequirementLinksSection(reqId)}
+
+                <div class="requirement-history">
+                    <h5>Progress Timeline</h5>
+                    ${this.renderRequirementProgressHistory(reqId)}
+                </div>
             `;
         }
 
@@ -2972,7 +3113,7 @@ export class PSPFExplorer {
         // ── Work view sub-navigation ──────────────────────────────────────────
 
         switchWorkTab(tab) {
-            const tabs = ['projects', 'directions', 'actions'];
+            const tabs = ['projects', 'actions'];
             tabs.forEach(t => {
                 const btn = document.getElementById(`workTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
                 const panel = document.getElementById(`workPanel${t.charAt(0).toUpperCase() + t.slice(1)}`);
@@ -2983,7 +3124,6 @@ export class PSPFExplorer {
                 }
                 if (panel) panel.classList.toggle('hidden', !isActive);
             });
-            if (tab === 'directions') this.renderDirections();
             if (tab === 'actions') this.renderActions();
         }
 
@@ -3818,6 +3958,7 @@ export class PSPFExplorer {
         updateStats() {
             let totalRequirements = 0;
             let metRequirements = 0;
+            let naRequirements = 0;
 
             this.domains.forEach(domain => {
                 domain.requirements.forEach(reqId => {
@@ -3825,11 +3966,16 @@ export class PSPFExplorer {
                     const compliance = this.compliance[reqId];
                     if (compliance && compliance.status === 'yes') {
                         metRequirements++;
+                    } else if (compliance && compliance.status === 'na') {
+                        naRequirements++;
                     }
                 });
             });
 
-            const rawCompliancePercentage = totalRequirements > 0 ? (metRequirements / totalRequirements) * 100 : 0;
+            // Exclude N/A requirements from the denominator — percentage reflects only
+            // requirements where an active decision (met / not met / risk managed) has been made.
+            const effectiveTotal = totalRequirements - naRequirements;
+            const rawCompliancePercentage = effectiveTotal > 0 ? (metRequirements / effectiveTotal) * 100 : 0;
             const complianceLabel = this.formatPercentDisplay(rawCompliancePercentage);
 
             const totalProjects = this.projects.length;
@@ -5075,28 +5221,16 @@ export class PSPFExplorer {
 
             container.innerHTML = this.projects.map(project => {
                 const requirements = Array.isArray(project.requirements) ? project.requirements : [];
-                const requirementRows = requirements.length > 0 ? requirements.map(reqId => {
-                    const requirement = this.requirements[reqId];
-                    const title = requirement ? requirement.title : 'Unknown requirement';
-                    const domain = requirement ? this.domains.find(d => d.id === requirement.domainId) : null;
-                    const domainLabel = domain ? domain.title : '';
-                    const status = this.compliance[reqId]?.status || 'not-set';
-                    return `
-                        <div class="project-requirement-row">
-                            <div>
-                                <div class="project-requirement-title">${this.escapeHtml(title)}</div>
-                                <div class="project-requirement-meta">
-                                    <span class="requirement-code">${this.escapeHtml(reqId)}</span>
-                                    ${domainLabel ? `<span>• ${this.escapeHtml(domainLabel)}</span>` : ''}
-                                </div>
-                            </div>
-                            <span class="requirement-status ${status}">${this.getStatusText(status)}</span>
-                        </div>
-                    `;
-                }).join('') : `
-                    <div class="project-requirement-row empty-state">
-                        <p class="subtitle-sm">No requirements tagged yet.</p>
+                const requirementRows = requirements.length > 0 ? `
+                    <div class="project-requirement-badges">
+                        ${requirements.map(reqId => {
+                            const status = this.compliance[reqId]?.status || 'not-set';
+                            const title = this.requirements[reqId]?.title || reqId;
+                            return `<span class="req-badge req-badge--${status}" title="${this.escapeHtml(title)}">${this.escapeHtml(reqId)}</span>`;
+                        }).join('')}
                     </div>
+                ` : `
+                    <p class="subtitle-sm empty-state">No requirements linked yet.</p>
                 `;
 
                 return `

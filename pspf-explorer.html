@@ -93,11 +93,16 @@
                 <button id="searchBtn" class="nav-btn">Search</button>
                 <button id="progressBtn" class="nav-btn">Progress</button>
                 <button id="projectBtn" class="nav-btn">Projects</button>
+                <button id="directionsBtn" class="nav-btn">Directions</button>
                 <button id="myWorkBtn" class="nav-btn">My Work</button>
                 <button id="mapBtn" class="nav-btn">Map</button>
                 <button id="dataBtn" class="nav-btn">Data</button>
                 <button id="helpBtn" class="nav-btn">Help</button>
             </nav>
+            <div class="header-font-controls" aria-label="Global text size">
+                <button id="fontSizeDecBtn" class="header-font-btn" aria-label="Decrease text size" title="Smaller text">A−</button>
+                <button id="fontSizeIncBtn" class="header-font-btn" aria-label="Increase text size" title="Larger text">A+</button>
+            </div>
         </div>
     </header>
 
@@ -671,10 +676,9 @@
             <section id="projectView" class="view">
                 <div class="view-header">
                     <h2>Work Management</h2>
-                    <p class="subtitle">Manage your compliance projects, risks, actions, and PSPF Directions.</p>
+                    <p class="subtitle">Manage your compliance projects, risks, and actions.</p>
                     <div class="work-view-subnav" role="tablist" aria-label="Work management sections">
                         <button id="workTabProjects" class="work-tab-btn active" role="tab" aria-selected="true" data-action="switch-work-tab" data-tab="projects">Projects</button>
-                        <button id="workTabDirections" class="work-tab-btn" role="tab" aria-selected="false" data-action="switch-work-tab" data-tab="directions">Directions</button>
                         <button id="workTabActions" class="work-tab-btn" role="tab" aria-selected="false" data-action="switch-work-tab" data-tab="actions">Actions</button>
                     </div>
                 </div>
@@ -713,20 +717,6 @@
                 </div>
                 </div> <!-- /workPanelProjects -->
 
-                <!-- Directions panel -->
-                <div id="workPanelDirections" class="work-panel hidden">
-                    <div class="panel-toolbar">
-                        <div>
-                            <h3 class="panel-title">PSPF Directions</h3>
-                            <p class="subtitle-sm">Directions and other PSPF instruments issued between annual releases.</p>
-                        </div>
-                        <button id="addDirectionBtn" class="btn btn-primary">Add Direction</button>
-                    </div>
-                    <div id="directionsList" class="entity-list" aria-live="polite">
-                        <p class="empty-state">No Directions recorded yet. Add a Direction to start tracking obligations.</p>
-                    </div>
-                </div>
-
                 <!-- Actions panel -->
                 <div id="workPanelActions" class="work-panel hidden">
                     <div class="panel-toolbar">
@@ -741,6 +731,20 @@
                     </div>
                 </div>
 
+            </section>
+
+            <!-- Directions View -->
+            <section id="directionsView" class="view">
+                <div class="view-header">
+                    <h2>PSPF Directions</h2>
+                    <p class="subtitle">Directions and other PSPF instruments issued between annual releases.</p>
+                </div>
+                <div class="panel-toolbar">
+                    <button id="addDirectionBtn" class="btn btn-primary">Add Direction</button>
+                </div>
+                <div id="directionsList" class="entity-list" aria-live="polite">
+                    <p class="empty-state">No Directions recorded yet. Add a Direction to start tracking obligations.</p>
+                </div>
             </section>
 
             <!-- My Work View -->
@@ -990,7 +994,7 @@
                 <p><strong>💾 Your Data is Private:</strong> All data is stored locally in your browser. Nothing is sent to any server. Use Export to backup your work.</p>
             </div>
             <div class="footer-meta">
-                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026 • <span class="app-version">v2.10</span></p>
+                <p>PSPF Explorer • Australian Government Protective Security Policy Framework 2026 • <span class="app-version">v2.11</span></p>
                 <p><a href="https://www.protectivesecurity.gov.au/pspf-annual-release" target="_blank" rel="noopener noreferrer">Authoritative Source for PSPF</a></p>
             </div>
         </div>

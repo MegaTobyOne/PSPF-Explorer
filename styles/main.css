@@ -60,6 +60,7 @@
 
     /* User-adjustable UI settings */
     --ui-font-scale: 1;
+    --global-font-scale: 1;
     --req-list-width: 380px;
 
     /* Dark chip color helpers */
@@ -118,7 +119,7 @@ body {
     color: var(--text-primary);
     background: var(--bg-secondary);
     padding: 0;
-    font-size: calc(var(--font-size-base) * var(--ui-font-scale));
+    font-size: calc(var(--font-size-base) * var(--ui-font-scale) * var(--global-font-scale));
 }
 
 .site-notice {
@@ -176,6 +177,36 @@ h6 { font-size: var(--font-size-sm); }
 .nav {
     display: flex;
     gap: 0.5rem;
+}
+
+/* Global font size controls in header */
+.header-font-controls {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.header-font-btn {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: rgba(255,255,255,0.9);
+    border-radius: var(--radius-sm);
+    padding: 0.2rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    transition: background 0.15s, opacity 0.15s;
+    white-space: nowrap;
+}
+
+.header-font-btn:hover {
+    background: rgba(255,255,255,0.22);
+}
+
+.header-font-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
 }
 
 .nav-btn {
@@ -1072,6 +1103,29 @@ html[data-density="dense"] .requirement-name {
     margin-top: 8px;
 }
 
+.tag--removable {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.tag-remove-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+    padding: 0 0.1rem;
+    font-size: 0.75rem;
+    line-height: 1;
+    border-radius: 2px;
+}
+
+.tag-remove-btn:hover {
+    opacity: 1;
+    background: rgba(0,0,0,0.15);
+}
+
 .tag-filters {
     margin: 16px 0;
     padding: 12px;
@@ -1312,11 +1366,17 @@ html[data-density="dense"] .requirement-name {
 }
 
 .compliance-status-button.active {
-    background: var(--primary-color);
     color: #fff;
-    border-color: var(--primary-color);
-    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    transform: scale(1.05);
 }
+
+/* Active colours match status semantics */
+.compliance-status-button.active.status-not-set { background: var(--primary-color); border-color: var(--primary-color); }
+.compliance-status-button.active.status-yes     { background: #16a34a; border-color: #16a34a; }
+.compliance-status-button.active.status-no      { background: #dc2626; border-color: #dc2626; }
+.compliance-status-button.active.status-partial { background: #d97706; border-color: #d97706; }
+.compliance-status-button.active.status-na      { background: #0284c7; border-color: #0284c7; }
 
 .compliance-status-button.status-yes {
     border-color: #22c55e;
@@ -6609,5 +6669,103 @@ select:focus-visible {
 
 .analytics-reset-btn {
     margin-top: 1rem;
+}
+
+/* ── v2.11: Evidence guidance section ───────────────────── */
+.evidence-guidance-section {
+    margin-bottom: 1rem;
+}
+
+.evidence-guidance-section > h5 {
+    margin-bottom: 0.5rem;
+}
+
+.evidence-banner-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+}
+
+.evidence-banner-action {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.83rem;
+    color: var(--color-text-secondary, #4b5563);
+    background: var(--bg-secondary, #f9fafb);
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+}
+
+.evidence-banner-action .action-icon {
+    flex-shrink: 0;
+    line-height: 1.4;
+}
+
+.evidence-item-description {
+    margin: 0.15rem 0 0 1.5rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted, #6b7280);
+}
+
+.evidence-inline-hint {
+    margin: 0.2rem 0 0 1.5rem;
+    font-size: 0.8rem;
+    color: var(--color-primary, #2563eb);
+    font-style: italic;
+}
+
+/* ── v2.11: Project requirement badges ───────────────────── */
+.project-requirement-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.5rem 0 0.25rem;
+}
+
+.req-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: var(--font-mono, monospace);
+    padding: 0.2rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    cursor: default;
+}
+
+.req-badge--yes      { background: #dcfce7; color: #15803d; border-color: #86efac; }
+.req-badge--no       { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+.req-badge--partial  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.req-badge--na       { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
+.req-badge--not-set  { background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary, #6b7280); border-color: #e5e7eb; }
+
+/* ── v2.11: N/A evidence checklist ──────────────────────── */
+.evidence-checklist--na {
+    opacity: 0.75;
+}
+
+.evidence-na-notice {
+    font-size: 0.83rem;
+    color: var(--color-text-muted, #6b7280);
+    font-style: italic;
+    margin: 0 0 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: #e0f2fe;
+    border-radius: 6px;
+    border-left: 3px solid #0ea5e9;
+}
+
+.evidence-item--na label {
+    cursor: default;
+    color: var(--text-secondary, #6b7280);
+}
+
+.evidence-item--na input[type="checkbox"] {
+    accent-color: #0ea5e9;
+    cursor: default;
 }
 
