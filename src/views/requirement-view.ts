@@ -9,6 +9,7 @@ import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
 import '../components/compliance-badge.ts';
 import '../components/compliance-editor.ts';
+import '../components/work-log.ts';
 
 @customElement('pspf-requirement-view')
 export class RequirementView extends LitElement {
@@ -125,6 +126,7 @@ export class RequirementView extends LitElement {
             : ''}
         </dl>
         <pspf-compliance-editor .requirementId=${req.id}></pspf-compliance-editor>
+        <pspf-work-log .requirementId=${req.id}></pspf-work-log>
       </article>
     `;
   }
