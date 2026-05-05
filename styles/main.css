@@ -72,6 +72,7 @@
     --chip-br-warning: rgba(245, 158, 11, 0.35);
     --chip-bg-danger: rgba(239, 68, 68, 0.15);
     --chip-br-danger: rgba(239, 68, 68, 0.35);
+    --chip-bg-danger-hover: rgba(239, 68, 68, 0.25);
     --chip-bg-orange: rgba(249, 115, 22, 0.15);
     --chip-br-orange: rgba(249, 115, 22, 0.35);
 }
@@ -7024,7 +7025,7 @@ select:focus-visible {
 }
 
 .map-focus-mode-btn:hover {
-    background: rgba(239, 68, 68, 0.2);
+    background: var(--chip-bg-danger-hover);
 }
 
 /* Coverage matrix */

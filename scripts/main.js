@@ -2990,7 +2990,10 @@ export class PSPFExplorer {
                     </button>
                 </div>
 
-                ${this.renderTagsInDetails(reqId)}
+                <div class="requirement-history">
+                    <h5>Progress Timeline</h5>
+                    ${this.renderRequirementProgressHistory(reqId)}
+                </div>
 
                 <div class="linked-projects-section">
                     <h5>Linked Projects</h5>
@@ -3015,10 +3018,7 @@ export class PSPFExplorer {
 
                 ${this.renderRequirementLinksSection(reqId)}
 
-                <div class="requirement-history">
-                    <h5>Progress Timeline</h5>
-                    ${this.renderRequirementProgressHistory(reqId)}
-                </div>
+                ${this.renderTagsInDetails(reqId)}
             `;
         }
 
