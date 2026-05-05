@@ -12,6 +12,7 @@ const ROUTES = [
   '/coverage',
   '/directions',
   '/relationships',
+  '/share',
   '/backup',
   '/restore',
   '/help',
