@@ -17,6 +17,7 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
+    "perf:budget": "node scripts/perf-budget.mjs",
     "sbom": "cyclonedx-npm --output-file sbom.json --omit dev"
   },
   "dependencies": {

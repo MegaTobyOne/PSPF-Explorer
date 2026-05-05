@@ -1,0 +1,67 @@
+#!/usr/bin/env node
+/**
+ * Perf budget — asserts the production build stays within size budgets.
+ *
+ * Run with: `npm run perf:budget` (after `npm run build`).
+ *
+ * The budget covers gzipped JS only — the source maps and unminified bytes
+ * never ship. Adjust thresholds when intentional changes land; do not silence
+ * the check.
+ */
+
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = fileURLToPath(new URL('../dist/assets/', import.meta.url));
+
+/** @type {Array<{ pattern: RegExp, label: string, maxGzipKb: number }>} */
+const BUDGETS = [
+  { pattern: /^index-.*\.js$/, label: 'app shell', maxGzipKb: 20 },
+  { pattern: /^pspf-.*\.js$/, label: 'pspf data', maxGzipKb: 20 },
+  { pattern: /^requirement-view-.*\.js$/, label: 'requirement view', maxGzipKb: 6 },
+  { pattern: /^analytics-view-.*\.js$/, label: 'analytics view', maxGzipKb: 4 },
+  { pattern: /^home-view-.*\.js$/, label: 'home view', maxGzipKb: 2 },
+];
+
+const TOTAL_GZIP_KB_BUDGET = 80;
+
+const files = readdirSync(ROOT).filter((f) => f.endsWith('.js'));
+let totalGzip = 0;
+let failed = false;
+
+for (const file of files) {
+  const path = join(ROOT, file);
+  const bytes = readFileSync(path);
+  const gz = gzipSync(bytes).length;
+  totalGzip += gz;
+
+  for (const b of BUDGETS) {
+    if (b.pattern.test(file)) {
+      const kb = gz / 1024;
+      const status = kb <= b.maxGzipKb ? 'OK ' : 'FAIL';
+      console.log(
+        `${status}  ${b.label.padEnd(20)} ${file}  ${kb.toFixed(2)} KB gz (budget ${b.maxGzipKb} KB)`,
+      );
+      if (kb > b.maxGzipKb) failed = true;
+    }
+  }
+}
+
+const totalKb = totalGzip / 1024;
+const totalStatus = totalKb <= TOTAL_GZIP_KB_BUDGET ? 'OK ' : 'FAIL';
+console.log(
+  `\n${totalStatus}  total JS gzipped: ${totalKb.toFixed(2)} KB (budget ${TOTAL_GZIP_KB_BUDGET} KB)`,
+);
+if (totalKb > TOTAL_GZIP_KB_BUDGET) failed = true;
+
+// Verify dist/index.html is not bloated
+const indexHtml = statSync(join(ROOT, '..', 'index.html')).size;
+console.log(`     index.html: ${(indexHtml / 1024).toFixed(2)} KB`);
+
+if (failed) {
+  console.error('\n✗ Perf budget violated.');
+  process.exit(1);
+}
+console.log('\n✓ Perf budget satisfied.');
