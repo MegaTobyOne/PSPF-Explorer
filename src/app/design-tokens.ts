@@ -62,6 +62,7 @@ export const designTokens = css`
       --colour-fg: #0f172a;
       --colour-fg-muted: #475569;
       --colour-border: #e2e8f0;
+      --colour-accent: #1d4ed8;
       --colour-status-not-set: #cbd5e1;
     }
   }
