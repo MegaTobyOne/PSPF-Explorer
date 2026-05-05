@@ -1,6 +1,11 @@
-import { LitElement, css, html } from 'lit';
-import { customElement } from 'lit/decorators.js';
+import { LitElement, css, html, type PropertyValues } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import { provide } from '@lit/context';
 import { designTokens } from './design-tokens.ts';
+import { HashRouter } from './router.ts';
+import { routes, NAV_ROUTES } from './routes.ts';
+import { AppStore } from '../state/app-store.ts';
+import { appStoreContext } from '../state/contexts.ts';
 
 @customElement('pspf-app')
 export class PspfApp extends LitElement {
@@ -30,6 +35,11 @@ export class PspfApp extends LitElement {
         margin: 0;
       }
 
+      h1 a {
+        color: inherit;
+        text-decoration: none;
+      }
+
       .classification {
         font-size: var(--text-xs);
         font-weight: 700;
@@ -39,6 +49,29 @@ export class PspfApp extends LitElement {
         background: var(--colour-classification-bg);
         padding: var(--space-1) var(--space-2);
         border-radius: var(--radius-sm);
+      }
+
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        border-bottom: 1px solid var(--colour-border);
+        background: var(--colour-bg-elevated);
+        font-size: var(--text-sm);
+      }
+
+      nav a {
+        color: var(--colour-fg-muted);
+        text-decoration: none;
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-sm);
+      }
+
+      nav a:hover,
+      nav a:focus-visible {
+        color: var(--colour-fg);
+        background: var(--colour-border);
       }
 
       main {
@@ -54,19 +87,61 @@ export class PspfApp extends LitElement {
         display: flex;
         justify-content: space-between;
       }
+
+      .loading {
+        font-size: var(--text-sm);
+        color: var(--colour-fg-muted);
+      }
     `,
   ];
+
+  @state() private store: AppStore | undefined;
+  @state() private bootError: string | undefined;
+
+  @provide({ context: appStoreContext })
+  private storeContext!: AppStore;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    void this.boot();
+  }
+
+  private async boot(): Promise<void> {
+    try {
+      const store = await AppStore.open();
+      this.storeContext = store;
+      this.store = store;
+    } catch (error) {
+      this.bootError =
+        error instanceof Error ? error.message : 'Could not open the local database.';
+    }
+  }
+
+  override firstUpdated(_changed: PropertyValues): void {
+    const outlet = this.renderRoot.querySelector<HTMLElement>('#outlet');
+    if (!outlet) return;
+    const router = new HashRouter(outlet, routes);
+    router.start();
+  }
 
   override render() {
     return html`
       <header>
-        <h1>PSPF Explorer</h1>
+        <h1><a href="#/">PSPF Explorer</a></h1>
         <span class="classification" aria-label="Information classification"
           >OFFICIAL: Sensitive</span
         >
       </header>
+      <nav aria-label="Primary">
+        ${NAV_ROUTES.map((r) => html`<a href="#${r.path}">${r.label}</a>`)}
+      </nav>
       <main>
-        <p>v3 scaffold ready. Phase 1 features land next.</p>
+        ${this.bootError
+          ? html`<p role="alert">Startup failed: ${this.bootError}</p>`
+          : !this.store
+            ? html`<p class="loading">Loading…</p>`
+            : ''}
+        <div id="outlet"></div>
       </main>
       <footer>
         <span>v${__APP_VERSION__}</span>
