@@ -50,6 +50,11 @@ export const routes: readonly RouteSpec[] = [
     load: () => import('../views/relationships-view.ts'),
   },
   {
+    path: '/map',
+    component: 'pspf-relationship-map-view',
+    load: () => import('../views/relationship-map-view.ts'),
+  },
+  {
     path: '/share',
     component: 'pspf-share-view',
     load: () => import('../views/share-view.ts'),
@@ -93,6 +98,7 @@ export const NAV_ROUTES: readonly { path: string; label: string }[] = [
   { path: '/coverage', label: 'Coverage' },
   { path: '/directions', label: 'Directions' },
   { path: '/relationships', label: 'Relationships' },
+  { path: '/map', label: 'Map' },
   { path: '/share', label: 'Share' },
   { path: '/grc', label: 'GRC capture' },
   { path: '/integrity', label: 'Integrity' },

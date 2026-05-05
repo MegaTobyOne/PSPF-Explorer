@@ -23,7 +23,16 @@ const BUDGETS = [
   { pattern: /^requirement-view-.*\.js$/, label: 'requirement view', maxGzipKb: 6 },
   { pattern: /^analytics-view-.*\.js$/, label: 'analytics view', maxGzipKb: 4 },
   { pattern: /^home-view-.*\.js$/, label: 'home view', maxGzipKb: 2 },
+  {
+    pattern: /^(cytoscape|relationship-map-view)-.*\.js$/,
+    label: 'relationship map (lazy)',
+    maxGzipKb: 160,
+  },
 ];
+
+// Lazy chunks excluded from the total-JS budget because they only load on a
+// specific route. Each must still have its own per-file budget above.
+const EXCLUDE_FROM_TOTAL = /^(cytoscape|relationship-map-view)-.*\.js$/;
 
 const TOTAL_GZIP_KB_BUDGET = 80;
 
@@ -35,7 +44,7 @@ for (const file of files) {
   const path = join(ROOT, file);
   const bytes = readFileSync(path);
   const gz = gzipSync(bytes).length;
-  totalGzip += gz;
+  if (!EXCLUDE_FROM_TOTAL.test(file)) totalGzip += gz;
 
   for (const b of BUDGETS) {
     if (b.pattern.test(file)) {
