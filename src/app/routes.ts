@@ -55,6 +55,11 @@ export const routes: readonly RouteSpec[] = [
     load: () => import('../views/share-view.ts'),
   },
   {
+    path: '/grc',
+    component: 'pspf-grc-view',
+    load: () => import('../views/grc-view.ts'),
+  },
+  {
     path: '/backup',
     component: 'pspf-backup-view',
     load: () => import('../views/backup-view.ts'),
@@ -89,6 +94,7 @@ export const NAV_ROUTES: readonly { path: string; label: string }[] = [
   { path: '/directions', label: 'Directions' },
   { path: '/relationships', label: 'Relationships' },
   { path: '/share', label: 'Share' },
+  { path: '/grc', label: 'GRC capture' },
   { path: '/integrity', label: 'Integrity' },
   { path: '/backup', label: 'Backup' },
   { path: '/restore', label: 'Restore' },

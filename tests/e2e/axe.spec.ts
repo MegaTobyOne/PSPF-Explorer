@@ -13,6 +13,7 @@ const ROUTES = [
   '/directions',
   '/relationships',
   '/share',
+  '/grc',
   '/backup',
   '/restore',
   '/help',
