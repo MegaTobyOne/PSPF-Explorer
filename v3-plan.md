@@ -474,6 +474,13 @@ Against brief §6 budgets:
 - ✅ Integrity worker + view (orphans / duplicates / self-loops / dangling endpoints) — closes deferred Phase 1 step 19.
 - ✅ Keyboard command palette (Cmd/Ctrl+K) — global navigator over all routes.
 - ✅ Print stylesheet for domain summaries.
+- ✅ Reporting-language UX update: "Not yet implemented" / "Fully implemented" labels in UI summaries and status views.
+- ✅ Persistent breadcrumbs on Home, Domain, and Requirement pages.
+- ✅ Relationship entry autocomplete and validation in Relationships view.
+- ✅ Requirement-level quick relationship linking (risk/action/direction).
+- ✅ Compliance notes persistence fix on status changes.
+- ✅ Compliance status history (audit-trail lite) with human-friendly timestamps.
+- ✅ Header markings updated to include TLP:AMBER+STRICT next to OFFICIAL: Sensitive.
 - 🔲 Multiple workspaces (separate idb DB per workspace).
 - 🔲 Undo/redo for destructive operations.
 - 🔲 Diff view for share-package merges.

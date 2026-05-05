@@ -1,87 +1,39 @@
 # PSPF Explorer
 
-**v3.0 (alpha)** — Offline-first compliance management for the Australian Government [Protective Security Policy Framework (PSPF) 2025](https://www.protectivesecurity.gov.au/pspf-annual-release).
+PSPF Explorer is an offline-first web app for tracking your organisation's implementation of the Australian Government [Protective Security Policy Framework (PSPF) 2025](https://www.protectivesecurity.gov.au/pspf-annual-release).
 
-> v3 has shipped Phase 1 and Phase 2 in full, plus the first slice of Phase 3 (integrity worker, command palette, print stylesheet). The previous v2 release lives under [archive/v2/](archive/v2/) and remains available at the existing GitHub Pages URL until cutover. See [purpose.md](purpose.md) for the v3 brief.
+It covers all 218 requirements across six domains: Governance, Information, Personnel, Physical, Risk, and Technology.
 
-## What it is
+## What you can do
 
-A static single-page web application that helps Australian Government security and governance practitioners track their entity's compliance against all 218 PSPF 2025 requirements across six security domains (Governance, Information, Personnel, Physical, Risk, Technology). All data stays in the browser — no servers, no telemetry, no third-party CDNs.
+- Browse requirements by domain and open full requirement detail.
+- Record implementation status with evidence and notes.
+- Track risks, actions, directions, and cross-entity relationships.
+- Save filtered views for repeat reporting.
+- Use coverage and analytics views to monitor progress.
+- Export and restore local data with JSON backup files.
 
-## Features (Phase 1)
+## Status labels
 
-- **Browse the catalogue** — six domain pages with the full PSPF 2025 requirement set, plus per-requirement detail views.
-- **Compliance editing** — record state (yes / no / risk-managed / not-applicable), evidence, reviewer, target maturity and review date.
-- **Per-requirement work log** — capture notes and effort against requirements.
-- **Risk register** — likelihood × impact scoring, status tracking and per-risk requirement / action linkage.
-- **Action tracker** — type, status and due date with overdue surfacing on the dashboard.
-- **Tags** — custom labels with optional priority.
-- **Saved views** — store filter combinations (domain, state, tag, free-text) for repeat use.
-- **Posture** — global threat level / posture plus per-domain overrides.
-- **Analytics** — KPIs, compliance breakdown by state and by domain, risk band distribution, action statuses, overdue counts.
-- **Backup / restore / clear data** — JSON snapshot of every record, validated on import.
-- **Help** — orientation, keyboard navigation and privacy notes.
+- Fully implemented
+- Not yet implemented
+- Risk-managed
+- Not applicable
+- Not set
 
-## Features (Phase 2)
+## Data and privacy
 
-- **Coverage matrix** — domain × compliance state with totals and percentage compliant.
-- **PSPF Directions register** — capture each direction reference, issue date, description and the requirements it touches.
-- **Relationships register** — typed cross-entity links (requirement↔risk, requirement↔action, risk↔action, requirement↔direction).
-- **Relationship map** — lazy-loaded Cytoscape graph with a keyboard-accessible adjacency-list fallback.
-- **Share packages** — export a JSON subset of risks/actions/tags/views/directions/relationships and merge it back with skip-on-conflict semantics.
-- **GRC capture** — ingest external compliance evidence via a locked-schema JSON envelope; unknown fields are rejected.
+- Your data stays in your browser (IndexedDB on your device).
+- No telemetry.
+- No runtime dependence on external services after the app is loaded.
 
-## Features (Phase 3 — in progress)
+## Access
 
-- **Integrity diagnostics** — background-worker scan for orphan refs, duplicate titles, self-loops and dangling relationship endpoints.
-- **Keyboard command palette** — ⌘K / Ctrl+K to filter and jump to any route.
-- **Print stylesheet** — dedicated print layout for domain summaries (header / nav / footer hidden, dark colours flattened).
+- Live site: [https://megatobyone.github.io/PSPF-Explorer/](https://megatobyone.github.io/PSPF-Explorer/)
 
-## Privacy and data
+## Security marking
 
-- All user data is stored locally via IndexedDB (`pspf-explorer.v3`).
-- The application makes no network requests after initial load — it is fully usable offline.
-- The PSPF requirement catalogue ships with the build and is never modified by user edits.
-- Treat the workspace as **OFFICIAL: Sensitive** by default. See [SECURITY.md](SECURITY.md).
+- Default handling context: OFFICIAL: Sensitive
+- Traffic Light Protocol: TLP:AMBER+STRICT
 
-## Develop
-
-Requires Node.js 20.11+.
-
-```sh
-npm install
-npm run dev          # http://localhost:5173 (Vite)
-npm run test         # unit tests (Vitest, watch)
-npm run test:run     # unit tests with coverage
-npm run test:e2e     # Playwright E2E (Chromium)
-npm run typecheck    # tsc --noEmit
-npm run lint         # eslint + prettier --check
-npm run format       # prettier --write
-npm run build        # static build into dist/
-npm run preview      # serve dist/ on :4173
-npm run perf:budget  # assert gzipped JS sizes (run after build)
-npm run sbom         # write CycloneDX sbom.json
-```
-
-### Tech stack
-
-- [Lit 3](https://lit.dev/) web components with TypeScript decorators
-- [@lit/context](https://lit.dev/docs/data/context/) + [@preact/signals-core](https://github.com/preactjs/signals) for reactive state
-- [idb](https://github.com/jakearchibald/idb) for typed IndexedDB access
-- [Vite](https://vitejs.dev/) for the build, [Vitest](https://vitest.dev/) for unit tests, [Playwright](https://playwright.dev/) for E2E, [@axe-core/playwright](https://www.deque.com/axe/) for accessibility checks
-
-### Quality gates
-
-- `npm run typecheck` — zero errors
-- `npm run lint` — zero errors
-- `npm run test:run` — 74 unit tests across the data, domain and state layers
-- `npm run test:e2e` — 43 Playwright specs, including a 15-route axe-core sweep
-- `npm run perf:budget` — total non-lazy JS ≤ 80 KB gzipped (currently ~72 KB); Cytoscape stays in its own lazy chunk
-
-### Generating an SBOM
-
-The CycloneDX SBOM (`sbom.json`) is regenerated by `npm run sbom`. It is committed alongside releases so consumers can audit the runtime dependency graph.
-
-## License
-
-See [LICENSE](LICENSE) if present, or contact the maintainers.
+See [SECURITY.md](SECURITY.md) for security notes.
