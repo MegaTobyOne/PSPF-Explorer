@@ -1,0 +1,62 @@
+import { test, expect } from '@playwright/test';
+
+test('user can create, edit and delete a PSPF direction with linked requirements', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
+  });
+  await page.reload();
+
+  await page
+    .locator('pspf-app')
+    .getByRole('link', { name: /^Directions$/ })
+    .click();
+  const view = page.locator('pspf-directions-view');
+  await expect(view.locator('[data-testid="empty"]')).toBeVisible();
+
+  await view.getByLabel('Reference').fill('PSPF Direction 001-2025');
+  await view.getByLabel('Title').fill('Heightened cyber posture');
+  await view.getByLabel('Issued').fill('2025-04-01');
+  await view
+    .getByLabel('Description')
+    .fill('Move to Active Defence posture for technology domain.');
+  await view.getByLabel('Linked requirement IDs', { exact: false }).fill('TECH-1, TECH-2');
+  await view.getByRole('button', { name: 'Add direction' }).click();
+
+  const item = view.locator('li.direction').first();
+  await expect(item).toBeVisible();
+  await expect(item.getByText('PSPF Direction 001-2025')).toBeVisible();
+  await expect(item.getByText('Heightened cyber posture')).toBeVisible();
+  await expect(item.getByRole('link', { name: 'TECH-1' })).toBeVisible();
+  await expect(item.getByRole('link', { name: 'TECH-2' })).toBeVisible();
+
+  // Edit
+  await item.getByRole('button', { name: 'Edit' }).click();
+  await item.getByLabel('Title').fill('Heightened cyber posture (rev 1)');
+  await item.getByRole('button', { name: 'Save' }).click();
+  await expect(item.getByText('Heightened cyber posture (rev 1)')).toBeVisible();
+
+  // Survives reload
+  await page.reload();
+  await page
+    .locator('pspf-app')
+    .getByRole('link', { name: /^Directions$/ })
+    .click();
+  await expect(
+    page.locator('pspf-directions-view').getByText('Heightened cyber posture (rev 1)'),
+  ).toBeVisible();
+
+  // Delete
+  page.once('dialog', (d) => void d.accept());
+  await page
+    .locator('pspf-directions-view li.direction')
+    .first()
+    .getByRole('button', {
+      name: 'Delete',
+    })
+    .click();
+  await expect(page.locator('pspf-directions-view [data-testid="empty"]')).toBeVisible();
+});

@@ -9,6 +9,7 @@ const ROUTES = [
   '/views',
   '/posture',
   '/analytics',
+  '/directions',
   '/backup',
   '/restore',
   '/help',

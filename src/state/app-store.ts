@@ -19,16 +19,19 @@ import { getMeta, setMeta } from '../data/meta-store.ts';
 import { getPosture, putPosture } from '../data/posture-store.ts';
 import {
   deleteAction,
+  deleteDirection,
   deleteRisk,
   deleteSavedView,
   deleteTag,
   deleteWorkTracking,
   listActions,
+  listDirections,
   listRisks,
   listSavedViews,
   listTags,
   listWorkTracking,
   putAction,
+  putDirection,
   putRisk,
   putSavedView,
   putTag,
@@ -36,6 +39,7 @@ import {
 } from '../data/stores.ts';
 import {
   asActionId,
+  asDirectionId,
   asRiskId,
   asSavedViewId,
   asTagId,
@@ -44,6 +48,8 @@ import {
   type ActionId,
   type ComplianceEntry,
   type ComplianceState,
+  type Direction,
+  type DirectionId,
   type EvidenceRef,
   type PostureRecord,
   type RequirementId,
@@ -67,6 +73,7 @@ export class AppStore {
   readonly tags: Signal<readonly Tag[]>;
   readonly savedViews: Signal<readonly SavedView[]>;
   readonly workTracking: Signal<readonly WorkTrackingEntry[]>;
+  readonly directions: Signal<readonly Direction[]>;
   readonly posture: Signal<PostureRecord | undefined>;
   readonly ready: Signal<boolean>;
 
@@ -78,6 +85,7 @@ export class AppStore {
     this.tags = signal([]);
     this.savedViews = signal([]);
     this.workTracking = signal([]);
+    this.directions = signal([]);
     this.posture = signal(undefined);
     this.ready = signal(false);
   }
@@ -90,23 +98,24 @@ export class AppStore {
   }
 
   async loadAll(): Promise<void> {
-    const [compliance, risks, actions, tags, savedViews, workTracking, posture] = await Promise.all(
-      [
+    const [compliance, risks, actions, tags, savedViews, workTracking, directions, posture] =
+      await Promise.all([
         listCompliance(this.db),
         listRisks(this.db),
         listActions(this.db),
         listTags(this.db),
         listSavedViews(this.db),
         listWorkTracking(this.db),
+        listDirections(this.db),
         getPosture(this.db),
-      ],
-    );
+      ]);
     this.compliance.value = new Map(compliance.map((e) => [e.requirementId, e]));
     this.risks.value = risks;
     this.actions.value = actions;
     this.tags.value = tags;
     this.savedViews.value = savedViews;
     this.workTracking.value = workTracking;
+    this.directions.value = directions;
     this.posture.value = posture;
     this.ready.value = true;
   }
@@ -310,6 +319,42 @@ export class AppStore {
   async setPosture(record: PostureRecord): Promise<void> {
     await putPosture(this.db, record);
     this.posture.value = record;
+  }
+
+  // ---------- Directions ----------
+
+  async createDirection(
+    input: Omit<Direction, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Direction> {
+    const now = new Date().toISOString();
+    const direction: Direction = {
+      ...input,
+      id: asDirectionId(newId()),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await putDirection(this.db, direction);
+    this.directions.value = [...this.directions.value, direction];
+    return direction;
+  }
+
+  async updateDirection(id: DirectionId, patch: Partial<Direction>): Promise<Direction> {
+    const existing = this.directions.value.find((d) => d.id === id);
+    if (!existing) throw new Error(`Direction ${id} not found`);
+    const updated: Direction = {
+      ...existing,
+      ...patch,
+      id,
+      updatedAt: new Date().toISOString(),
+    };
+    await putDirection(this.db, updated);
+    this.directions.value = this.directions.value.map((d) => (d.id === id ? updated : d));
+    return updated;
+  }
+
+  async removeDirection(id: DirectionId): Promise<void> {
+    await deleteDirection(this.db, id);
+    this.directions.value = this.directions.value.filter((d) => d.id !== id);
   }
 
   // ---------- Meta ----------
