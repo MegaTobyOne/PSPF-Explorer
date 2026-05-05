@@ -13,9 +13,11 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'PSPF_BASE=/ npm run build && PSPF_BASE=/ npm run preview',
+    command: process.env.CI
+      ? 'PSPF_BASE=/ npm run preview'
+      : 'PSPF_BASE=/ npm run build && PSPF_BASE=/ npm run preview',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
   },
 });
