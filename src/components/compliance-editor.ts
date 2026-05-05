@@ -14,6 +14,7 @@ import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
 import { complianceLabel } from '../domain/compliance-display.ts';
+import { formatDateTime } from '../domain/date-display.ts';
 
 @customElement('pspf-compliance-editor')
 export class ComplianceEditor extends LitElement {
@@ -327,7 +328,7 @@ export class ComplianceEditor extends LitElement {
                         ${complianceLabel(event.fromState)} → ${complianceLabel(event.toState)}
                       </div>
                       <div class="history-meta">
-                        ${event.createdAt}${event.noteSnapshot
+                        ${formatDateTime(event.createdAt)}${event.noteSnapshot
                           ? html` · note: ${event.noteSnapshot}`
                           : ''}
                       </div>

@@ -6,6 +6,7 @@ import type { RequirementId, WorkTrackingEntry } from '../data/types.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
+import { formatDateTime } from '../domain/date-display.ts';
 
 @customElement('pspf-work-log')
 export class WorkLog extends LitElement {
@@ -174,7 +175,9 @@ export class WorkLog extends LitElement {
       <li class="entry">
         <div>
           <p>${e.note}</p>
-          <div class="meta">${e.createdAt}${e.effort ? html` · effort: ${e.effort}` : ''}</div>
+          <div class="meta">
+            ${formatDateTime(e.createdAt)}${e.effort ? html` · effort: ${e.effort}` : ''}
+          </div>
         </div>
         <button @click=${(): void => void this.#remove(e)}>Remove</button>
       </li>
