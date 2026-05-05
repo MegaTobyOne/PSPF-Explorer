@@ -2,18 +2,32 @@
 
 **v3.0 (alpha)** — Offline-first compliance management for the Australian Government [Protective Security Policy Framework (PSPF) 2025](https://www.protectivesecurity.gov.au/pspf-annual-release).
 
-> v3 is under active development. The previous v2 release lives under [archive/v2/](archive/v2/) and remains available at the existing GitHub Pages URL until v3 reaches Phase 1 feature parity. See [purpose.md](purpose.md) for the v3 brief and [v3-plan.md](v3-plan.md) for the implementation plan.
+> v3 is under active development. The previous v2 release lives under [archive/v2/](archive/v2/) and remains available at the existing GitHub Pages URL until v3 reaches Phase 1 feature parity. See [purpose.md](purpose.md) for the v3 brief.
 
 ## What it is
 
-A single-page web application that helps Australian Government security and governance practitioners track their entity's compliance against all 218 PSPF 2025 requirements across six domains. All data stays in the browser — no servers, no telemetry, no third-party CDNs.
+A static single-page web application that helps Australian Government security and governance practitioners track their entity's compliance against all 218 PSPF 2025 requirements across six security domains (Governance, Information, Personnel, Physical, Risk, Technology). All data stays in the browser — no servers, no telemetry, no third-party CDNs.
 
-## Status
+## Features (Phase 1)
 
-- Phase 0 — Project scaffold, tooling, CI (in progress)
-- Phase 1 — Core compliance tool
-- Phase 2 — Collaboration and relationship features
-- Phase 3 — Polish and power features
+- **Browse the catalogue** — six domain pages with the full PSPF 2025 requirement set, plus per-requirement detail views.
+- **Compliance editing** — record state (yes / no / risk-managed / not-applicable), evidence, reviewer, target maturity and review date.
+- **Per-requirement work log** — capture notes and effort against requirements.
+- **Risk register** — likelihood × impact scoring, status tracking and per-risk requirement / action linkage.
+- **Action tracker** — type, status and due date with overdue surfacing on the dashboard.
+- **Tags** — custom labels with optional priority.
+- **Saved views** — store filter combinations (domain, state, tag, free-text) for repeat use.
+- **Posture** — global threat level / posture plus per-domain overrides.
+- **Analytics** — KPIs, compliance breakdown by state and by domain, risk band distribution, action statuses, overdue counts.
+- **Backup / restore / clear data** — JSON snapshot of every record, validated on import.
+- **Help** — orientation, keyboard navigation and privacy notes.
+
+## Privacy and data
+
+- All user data is stored locally via IndexedDB (`pspf-explorer.v3`).
+- The application makes no network requests after initial load — it is fully usable offline.
+- The PSPF requirement catalogue ships with the build and is never modified by user edits.
+- Treat the workspace as **OFFICIAL: Sensitive** by default. See [SECURITY.md](SECURITY.md).
 
 ## Develop
 
@@ -21,17 +35,38 @@ Requires Node.js 20.11+.
 
 ```sh
 npm install
-npm run dev          # http://localhost:5173
-npm run test         # unit tests (watch)
-npm run test:e2e     # Playwright E2E
+npm run dev          # http://localhost:5173 (Vite)
+npm run test         # unit tests (Vitest, watch)
+npm run test:run     # unit tests with coverage
+npm run test:e2e     # Playwright E2E (Chromium)
+npm run typecheck    # tsc --noEmit
+npm run lint         # eslint + prettier --check
+npm run format       # prettier --write
 npm run build        # static build into dist/
 npm run preview      # serve dist/ on :4173
+npm run perf:budget  # assert gzipped JS sizes (run after build)
+npm run sbom         # write CycloneDX sbom.json
 ```
 
-## Privacy and data
+### Tech stack
 
-- All user data is stored locally via IndexedDB under the schema id `pspf-explorer.v3`.
-- The application makes no network requests after initial load.
-- Treat the workspace as **OFFICIAL: Sensitive** by default.
+- [Lit 3](https://lit.dev/) web components with TypeScript decorators
+- [@lit/context](https://lit.dev/docs/data/context/) + [@preact/signals-core](https://github.com/preactjs/signals) for reactive state
+- [idb](https://github.com/jakearchibald/idb) for typed IndexedDB access
+- [Vite](https://vitejs.dev/) for the build, [Vitest](https://vitest.dev/) for unit tests, [Playwright](https://playwright.dev/) for E2E, [@axe-core/playwright](https://www.deque.com/axe/) for accessibility checks
 
-See [SECURITY.md](SECURITY.md) for the security posture and threat model.
+### Quality gates (Phase 1)
+
+- `npm run typecheck` — zero errors
+- `npm run lint` — zero errors
+- `npm run test:run` — all unit tests green; coverage trending toward 60%+
+- `npm run test:e2e` — all Playwright specs green, including 10 axe sweeps across top-level routes
+- `npm run perf:budget` — total app JS ≤ 80 KB gzipped
+
+### Generating an SBOM
+
+The CycloneDX SBOM (`sbom.json`) is regenerated by `npm run sbom`. It is committed alongside releases so consumers can audit the runtime dependency graph.
+
+## License
+
+See [LICENSE](LICENSE) if present, or contact the maintainers.
