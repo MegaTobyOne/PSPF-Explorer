@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
       - name: Build
         env:
-          PSPF_BASE: /pspf-explorer/
+          PSPF_BASE: /PSPF-Explorer/
         run: npm run build
       - name: Generate SBOM
         run: npm run sbom
