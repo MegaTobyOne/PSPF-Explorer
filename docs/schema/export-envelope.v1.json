@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pspf-explorer.local/schemas/export-envelope.v1.json",
+  "title": "PSPF Explorer v3 export envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "exportedAt", "appVersion", "data"],
+  "properties": {
+    "schema": { "const": "pspf-explorer.v3" },
+    "schemaVersion": { "const": 1 },
+    "exportedAt": { "type": "string", "format": "date-time" },
+    "appVersion": { "type": "string", "maxLength": 64 },
+    "data": { "$ref": "#/$defs/Data" }
+  },
+  "$defs": {
+    "Iso": { "type": "string", "format": "date-time" },
+    "RequirementId": { "type": "string", "pattern": "^[A-Z]+-\\d{3,4}$" },
+    "Ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "ComplianceState": {
+      "enum": ["yes", "no", "risk-managed", "not-applicable", "not-set"]
+    },
+    "Maturity": { "type": "integer", "enum": [1, 2, 3, 4] },
+    "DomainKey": {
+      "enum": ["governance", "information", "personnel", "physical", "risk", "technology"]
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value", "addedAt"],
+      "properties": {
+        "kind": { "enum": ["url", "note"] },
+        "value": { "type": "string", "maxLength": 32768 },
+        "addedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "ComplianceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirementId", "state", "evidence", "createdAt", "updatedAt"],
+      "properties": {
+        "requirementId": { "$ref": "#/$defs/RequirementId" },
+        "state": { "$ref": "#/$defs/ComplianceState" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRef" } },
+        "targetMaturity": { "$ref": "#/$defs/Maturity" },
+        "reviewedAt": { "$ref": "#/$defs/Iso" },
+        "reviewer": { "type": "string", "maxLength": 256 },
+        "notes": { "type": "string", "maxLength": 32768 },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "Risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "likelihood",
+        "impact",
+        "status",
+        "requirementIds",
+        "actionIds",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/Ulid" },
+        "title": { "type": "string", "maxLength": 512 },
+        "description": { "type": "string", "maxLength": 32768 },
+        "likelihood": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "impact": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "status": { "enum": ["open", "monitored", "closed"] },
+        "requirementIds": { "type": "array", "items": { "$ref": "#/$defs/RequirementId" } },
+        "actionIds": { "type": "array", "items": { "$ref": "#/$defs/Ulid" } },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "Action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "type",
+        "status",
+        "requirementIds",
+        "riskIds",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/Ulid" },
+        "title": { "type": "string", "maxLength": 512 },
+        "description": { "type": "string", "maxLength": 32768 },
+        "type": { "enum": ["remediation", "uplift", "review", "investigation"] },
+        "status": { "enum": ["todo", "in-progress", "blocked", "done", "cancelled"] },
+        "dueAt": { "$ref": "#/$defs/Iso" },
+        "requirementIds": { "type": "array", "items": { "$ref": "#/$defs/RequirementId" } },
+        "riskIds": { "type": "array", "items": { "$ref": "#/$defs/Ulid" } },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "Tag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "colour", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Ulid" },
+        "label": { "type": "string", "maxLength": 128 },
+        "colour": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "priority": { "type": "integer", "enum": [1, 2, 3, 4] },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "SavedView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "filters", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Ulid" },
+        "name": { "type": "string", "maxLength": 128 },
+        "filters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "domain": { "$ref": "#/$defs/DomainKey" },
+            "states": { "type": "array", "items": { "$ref": "#/$defs/ComplianceState" } },
+            "tagIds": { "type": "array", "items": { "$ref": "#/$defs/Ulid" } },
+            "q": { "type": "string", "maxLength": 512 }
+          }
+        },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "WorkTrackingEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "requirementId", "note", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Ulid" },
+        "requirementId": { "$ref": "#/$defs/RequirementId" },
+        "note": { "type": "string", "maxLength": 32768 },
+        "effort": { "type": "string", "maxLength": 64 },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "PostureSetting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threat", "posture", "updatedAt"],
+      "properties": {
+        "threat": { "enum": ["low", "elevated", "high", "critical"] },
+        "posture": { "enum": ["standard", "shields-up", "active-defence"] },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "PostureRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["global", "perDomain"],
+      "properties": {
+        "global": { "$ref": "#/$defs/PostureSetting" },
+        "perDomain": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^(governance|information|personnel|physical|risk|technology)$": {
+              "$ref": "#/$defs/PostureSetting"
+            }
+          }
+        }
+      }
+    },
+    "Direction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "reference",
+        "title",
+        "issuedAt",
+        "requirementIds",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/Ulid" },
+        "reference": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 512 },
+        "issuedAt": { "$ref": "#/$defs/Iso" },
+        "description": { "type": "string", "maxLength": 32768 },
+        "requirementIds": { "type": "array", "items": { "$ref": "#/$defs/RequirementId" } },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "Relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "endpoints", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Ulid" },
+        "kind": {
+          "enum": ["requirement-risk", "requirement-action", "risk-action", "requirement-direction"]
+        },
+        "endpoints": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "string", "maxLength": 64 }
+        },
+        "createdAt": { "$ref": "#/$defs/Iso" },
+        "updatedAt": { "$ref": "#/$defs/Iso" }
+      }
+    },
+    "Data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compliance",
+        "risks",
+        "actions",
+        "tags",
+        "savedViews",
+        "workTracking",
+        "posture"
+      ],
+      "properties": {
+        "compliance": { "type": "array", "items": { "$ref": "#/$defs/ComplianceEntry" } },
+        "risks": { "type": "array", "items": { "$ref": "#/$defs/Risk" } },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/Action" } },
+        "tags": { "type": "array", "items": { "$ref": "#/$defs/Tag" } },
+        "savedViews": { "type": "array", "items": { "$ref": "#/$defs/SavedView" } },
+        "workTracking": { "type": "array", "items": { "$ref": "#/$defs/WorkTrackingEntry" } },
+        "posture": { "$ref": "#/$defs/PostureRecord" },
+        "directions": { "type": "array", "items": { "$ref": "#/$defs/Direction" } },
+        "relationships": { "type": "array", "items": { "$ref": "#/$defs/Relationship" } }
+      }
+    }
+  }
+}

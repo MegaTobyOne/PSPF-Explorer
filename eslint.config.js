@@ -15,6 +15,7 @@ export default tseslint.config(
       'test-results/**',
       'node_modules/**',
       '.vscode/**',
+      'scripts/**',
       '**/*.config.js',
     ],
   },
