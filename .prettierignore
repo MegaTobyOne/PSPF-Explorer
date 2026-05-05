@@ -1,0 +1,9 @@
+dist
+archive
+coverage
+playwright-report
+test-results
+node_modules
+package-lock.json
+sbom.json
+.vscode

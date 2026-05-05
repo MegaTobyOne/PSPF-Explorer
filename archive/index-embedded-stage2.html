@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PSPF Explorer - Interactive Compliance Framework compliance tracking and management tool">
+    <meta name="author" content="PSPF Explorer">
+    <meta name="robots" content="noindex, nofollow">
+    <title>PSPF Explorer</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+</head>
+<body>
+    <!-- Welcome Modal for First-Time Users -->
+    <div id="welcomeModal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to PSPF Explorer</h2>
+            <p>Transform your compliance framework from static documents into an engaging, interactive experience!</p>
+            
+            <div class="welcome-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Watch the Heartbeat</h3>
+                        <p>Each domain has a heartbeat pulse that shows its health. Unhealthy pulses indicate areas needing attention.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Mark Requirements as Met</h3>
+                        <p>Click domains to see requirements. Mark them as "Yes" when complete. Add detailed comments for "No" items to improve the pulse.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Manage Your Work</h3>
+                        <p>Add projects, tasks, and track activities. The more you document and complete, the healthier your domains become!</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="pulse-demo">
+                <div class="pulse-example healthy">
+                    <div class="pulse-dot"></div>
+                    <span>Healthy: All requirements met</span>
+                </div>
+                <div class="pulse-example warning">
+                    <div class="pulse-dot"></div>
+                    <span>Warning: Some requirements not met with good explanations</span>
+                </div>
+                <div class="pulse-example critical">
+                    <div class="pulse-dot"></div>
+                    <span>Critical: Requirements not met with poor or no explanations</span>
+                </div>
+            </div>
+            
+            <button id="closeWelcome" class="btn btn-primary">Start Exploring</button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">PSPF Explorer</h1>
+            <nav class="nav">
+                <button id="homeBtn" class="nav-btn active">Home</button>
+                <button id="searchBtn" class="nav-btn">Search</button>
+                <button id="progressBtn" class="nav-btn">Progress</button>
+                <button id="dataBtn" class="nav-btn">Data</button>
+                <button id="helpBtn" class="nav-btn">Help</button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Breadcrumb Navigation -->
+            <nav class="breadcrumb" id="breadcrumb">
+                <a href="#" data-level="home">Framework Domains</a>
+            </nav>
+
+            <!-- Home View - Domain Overview -->
+            <section id="homeView" class="view active">
+                <div class="view-header">
+                    <h2>Compliance Policy Framework 2025</h2>
+                    <p class="subtitle">Watch the heartbeat of your compliance status. Healthy pulses mean strong protection.</p>
+                </div>
+
+                <div class="domains-grid" id="domainsGrid">
+                    <!-- Domain cards will be dynamically generated -->
+                </div>
+
+                <!-- Requirements Section (initially hidden) -->
+                <div class="requirements-section hidden" id="requirementsSection">
+                    <div class="requirements-header">
+                        <h3 id="selectedDomainTitle">Domain Requirements</h3>
+                        <p id="selectedDomainDescription">Select a domain above to view its requirements</p>
+                    </div>
+                    <div class="requirements-grid" id="requirementsGrid">
+                        <!-- Requirements will be dynamically generated -->
+                    </div>
+                </div>
+
+                <div class="stats-overview" id="statsOverview">
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalProjects">0</span>
+                        <span class="stat-label">Active Projects</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="totalTasks">0</span>
+                        <span class="stat-label">Total Tasks</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="completedTasks">0</span>
+                        <span class="stat-label">Completed Tasks</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number" id="overallCompliance">0%</span>
+                        <span class="stat-label">Requirements Met</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Progress View -->
+            <section id="progressView" class="view">
+                <div class="view-header">
+                    <h2>Progress Overview</h2>
+                    <p class="subtitle">Track your compliance journey across all framework domains</p>
+                </div>
+                <div class="progress-grid" id="progressGrid">
+                    <!-- Progress cards will be dynamically generated -->
+                </div>
+            </section>
+
+            <!-- Search View -->
+            <section id="searchView" class="view">
+                <div class="view-header">
+                    <h2>Search</h2>
+                    <div class="search-bar">
+                        <input type="text" id="searchInput" placeholder="Search projects, tasks, activities, or events...">
+                        <button id="searchSubmit" class="btn btn-primary">Search</button>
+                    </div>
+                </div>
+                <div class="search-results" id="searchResults">
+                    <!-- Search results will be displayed here -->
+                </div>
+            </section>
+
+            <!-- Data Management View -->
+            <section id="dataView" class="view">
+                <div class="view-header">
+                    <h2>Data Management</h2>
+                    <p class="subtitle">Export, import, and manage your PSPF Explorer data</p>
+                </div>
+                
+                <div class="data-management">
+                    <div class="data-section">
+                        <div class="data-card">
+                            <h3>🗂️ Export Data</h3>
+                            <p>Download all your projects, tasks, activities, and events as a backup file.</p>
+                            <button id="exportDataBtn" class="btn btn-primary">Export All Data</button>
+                        </div>
+                        
+                        <div class="data-card">
+                            <h3>📥 Import Data</h3>
+                            <p>Restore data from a previously exported backup file.</p>
+                            <input type="file" id="importFileInput" accept=".json" class="hidden" title="Select backup file to import">
+                            <button id="importDataBtn" class="btn btn-secondary">Import Data</button>
+                        </div>
+                        
+                        <div class="data-card warning">
+                            <h3>🗑️ Clear Data</h3>
+                            <p>Remove all data and start fresh. This action cannot be undone.</p>
+                            <button id="clearDataBtn" class="btn btn-danger">Clear All Data</button>
+                        </div>
+                    </div>
+                    
+                    <div class="data-info">
+                        <h3>📊 Data Summary</h3>
+                        <div class="data-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Projects:</span>
+                                <span class="stat-value" id="dataProjectCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Tasks:</span>
+                                <span class="stat-value" id="dataTaskCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Activities:</span>
+                                <span class="stat-value" id="dataRiskCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Events:</span>
+                                <span class="stat-value" id="dataIncidentCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Last Modified:</span>
+                                <span class="stat-value" id="dataLastModified">Never</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+    // PSPF Explorer - Core Features Embedded JavaScript Application
+    // Stage 2: Core domains, navigation, progress tracking
+    
+    class PSPFExplorer {
+        constructor() {
+            this.loadData();
+            this.currentView = 'home';
+            this.selectedDomain = null;
+            this.currentDomain = null;
+            this.init();
+        }
+
+        init() {
+            this.setupEventListeners();
+            this.render();
+            this.showWelcomeModalIfFirstTime();
+        }
+
+        loadData() {
+            // Load user data from localStorage
+            this.projects = JSON.parse(localStorage.getItem('pspf_projects') || '[]');
+            this.tasks = JSON.parse(localStorage.getItem('pspf_tasks') || '[]');
+            this.risks = JSON.parse(localStorage.getItem('pspf_risks') || '[]');
+            this.incidents = JSON.parse(localStorage.getItem('pspf_incidents') || '[]');
+            this.compliance = JSON.parse(localStorage.getItem('pspf_compliance') || '{}');
+            
+            // Load framework data
+            this.loadFrameworkData();
+        }
+
+        loadFrameworkData() {
+            // Framework 2025 - The six core domains (with generic terminology)
+            this.domains = [
+                {
+                    id: 'governance',
+                    title: 'Governance',
+                    description: 'Strategic leadership, executive oversight, governance accountability and reporting',
+                    requirements: ['gov-1', 'gov-2', 'gov-3', 'gov-4']
+                },
+                {
+                    id: 'risk',
+                    title: 'Risk Management',
+                    description: 'Risk management, third-party evaluation, and mitigation strategies',
+                    requirements: ['risk-1', 'risk-2', 'risk-3', 'risk-4']
+                },
+                {
+                    id: 'information',
+                    title: 'Information',
+                    description: 'Information classification, need-to-know principle and handling procedures',
+                    requirements: ['info-1', 'info-2', 'info-3', 'info-4', 'info-5']
+                },
+                {
+                    id: 'technology',
+                    title: 'Technology',
+                    description: 'Technology strategy, system controls, emerging tech, and infrastructure',
+                    requirements: ['tech-1', 'tech-2', 'tech-3', 'tech-4', 'tech-5']
+                },
+                {
+                    id: 'personnel',
+                    title: 'Personnel',
+                    description: 'Personnel screening, pre-employment checks and ongoing monitoring',
+                    requirements: ['pers-1', 'pers-2', 'pers-3', 'pers-4', 'pers-5']
+                },
+                {
+                    id: 'physical',
+                    title: 'Physical',
+                    description: 'Physical zones, facility management, access controls and asset handling',
+                    requirements: ['phys-1', 'phys-2', 'phys-3', 'phys-4', 'phys-5']
+                }
+            ];
+
+            this.requirements = {
+                // Governance domain requirements
+                'gov-1': {
+                    id: 'gov-1',
+                    domainId: 'governance',
+                    title: 'Executive Oversight',
+                    description: 'Organizations must have senior executive responsible for oversight.',
+                    guidance: 'Appoint a senior executive to oversee all matters and ensure appropriate governance structures are in place.'
+                },
+                'gov-2': {
+                    id: 'gov-2',
+                    domainId: 'governance',
+                    title: 'Information Officer',
+                    description: 'Organizations must appoint an information officer to oversee systems with explicit reporting.',
+                    guidance: 'Appoint a qualified officer with appropriate authority and resources to manage systems across the organization.'
+                },
+                'gov-3': {
+                    id: 'gov-3',
+                    domainId: 'governance',
+                    title: 'Annual Compliance Reporting',
+                    description: 'Organizations must provide annual compliance reporting to leadership.',
+                    guidance: 'Establish regular reporting cycles to keep senior leadership informed of compliance status.'
+                },
+                'gov-4': {
+                    id: 'gov-4',
+                    domainId: 'governance',
+                    title: 'Governance Framework',
+                    description: 'Organizations must establish governance accountability and reporting structures.',
+                    guidance: 'Implement clear governance structures with defined roles, responsibilities, and accountability mechanisms.'
+                },
+
+                // Risk domain requirements  
+                'risk-1': {
+                    id: 'risk-1',
+                    domainId: 'risk',
+                    title: 'Risk Management',
+                    description: 'Organizations must implement risk management processes aligned with enterprise frameworks.',
+                    guidance: 'Integrate risk management into enterprise processes with clear tolerance statements.'
+                },
+                'risk-2': {
+                    id: 'risk-2',
+                    domainId: 'risk',
+                    title: 'Third-Party Management',
+                    description: 'Organizations must manage third-party and supply chain risks effectively.',
+                    guidance: 'Assess and monitor risks from third-party relationships and supply chain dependencies.'
+                },
+                'risk-3': {
+                    id: 'risk-3',
+                    domainId: 'risk',
+                    title: 'Mitigation Strategies',
+                    description: 'Organizations must implement measures to identify and mitigate operational risks.',
+                    guidance: 'Develop capabilities to detect and respond to challenges across all domains.'
+                },
+                'risk-4': {
+                    id: 'risk-4',
+                    domainId: 'risk',
+                    title: 'Documentation and Sharing',
+                    description: 'Organizations must document risk tolerance, ownership, and share identified risks appropriately.',
+                    guidance: 'Maintain comprehensive risk registers and share intelligence with relevant stakeholders.'
+                },
+                
+                // Information domain requirements
+                'info-1': {
+                    id: 'info-1',
+                    domainId: 'information',
+                    title: 'Classifications and Markings',
+                    description: 'Organizations must apply appropriate markings using classification systems.',
+                    guidance: 'Implement consistent classification and marking systems following organizational standards.'
+                },
+                'info-2': {
+                    id: 'info-2',
+                    domainId: 'information',
+                    title: 'Need-to-Know Principle',
+                    description: 'Organizations must implement need-to-know principles and handling requirements.',
+                    guidance: 'Restrict information access based on legitimate business need and implement appropriate handling controls.'
+                },
+                'info-3': {
+                    id: 'info-3',
+                    domainId: 'information',
+                    title: 'Recordkeeping Standards',
+                    description: 'Organizations must implement recordkeeping standards and information sharing protocols.',
+                    guidance: 'Maintain records in accordance with standards and implement sharing mechanisms.'
+                },
+                'info-4': {
+                    id: 'info-4',
+                    domainId: 'information',
+                    title: 'Handling Procedures',
+                    description: 'Organizations must establish comprehensive information handling and disposal protocols.',
+                    guidance: 'Create detailed procedures covering creation, transmission, storage, and disposal of information.'
+                },
+                'info-5': {
+                    id: 'info-5',
+                    domainId: 'information',
+                    title: 'Information Controls',
+                    description: 'Organizations must implement technical and administrative controls to protect information assets.',
+                    guidance: 'Deploy layered controls including encryption, access controls, and monitoring systems.'
+                }
+            };
+        }
+
+        setupEventListeners() {
+            // Navigation buttons
+            document.getElementById('homeBtn').addEventListener('click', () => {
+                this.navigateTo('home');
+                this.updateNavButtons('homeBtn');
+            });
+            
+            document.getElementById('searchBtn').addEventListener('click', () => {
+                this.navigateTo('search');
+                this.updateNavButtons('searchBtn');
+            });
+            
+            document.getElementById('progressBtn').addEventListener('click', () => {
+                this.navigateTo('progress');
+                this.updateNavButtons('progressBtn');
+            });
+
+            document.getElementById('dataBtn').addEventListener('click', () => {
+                this.navigateTo('data');
+                this.updateNavButtons('dataBtn');
+            });
+            
+            document.getElementById('helpBtn').addEventListener('click', () => {
+                this.showWelcomeModal();
+            });
+
+            // Welcome modal
+            document.getElementById('closeWelcome').addEventListener('click', () => {
+                this.hideWelcomeModal();
+                localStorage.setItem('pspf_welcome_seen', 'true');
+            });
+
+            // Modal close on backdrop click
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.classList.remove('active');
+                    }
+                });
+            });
+
+            // Data management event listeners
+            const exportDataBtn = document.getElementById('exportDataBtn');
+            if (exportDataBtn) {
+                exportDataBtn.addEventListener('click', () => this.exportData());
+            }
+
+            const importDataBtn = document.getElementById('importDataBtn');
+            const importFileInput = document.getElementById('importFileInput');
+            if (importDataBtn && importFileInput) {
+                importDataBtn.addEventListener('click', () => importFileInput.click());
+                importFileInput.addEventListener('change', (e) => this.importData(e));
+            }
+
+            const clearDataBtn = document.getElementById('clearDataBtn');
+            if (clearDataBtn) {
+                clearDataBtn.addEventListener('click', () => this.clearAllData());
+            }
+
+            // Search functionality
+            this.setupSearchListeners();
+        }
+
+        setupSearchListeners() {
+            const searchInput = document.getElementById('searchInput');
+            const searchSubmit = document.getElementById('searchSubmit');
+            
+            if (searchInput && searchSubmit) {
+                const performSearch = () => {
+                    const query = searchInput.value.toLowerCase().trim();
+                    if (!query) {
+                        document.getElementById('searchResults').innerHTML = '<p>Enter a search term to find projects, tasks, activities, or events.</p>';
+                        return;
+                    }
+                    
+                    const results = this.searchAll(query);
+                    this.renderSearchResults(results);
+                };
+                
+                searchSubmit.addEventListener('click', performSearch);
+                searchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        performSearch();
+                    }
+                });
+            }
+        }
+
+        showWelcomeModalIfFirstTime() {
+            const hasSeenWelcome = localStorage.getItem('pspf_welcome_seen');
+            if (!hasSeenWelcome) {
+                this.showWelcomeModal();
+            }
+        }
+
+        showWelcomeModal() {
+            const modal = document.getElementById('welcomeModal');
+            modal.classList.add('active');
+        }
+
+        hideWelcomeModal() {
+            const modal = document.getElementById('welcomeModal');
+            modal.classList.remove('active');
+        }
+
+        navigateTo(view) {
+            this.currentView = view;
+            this.render();
+        }
+
+        updateNavButtons(activeId) {
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(activeId).classList.add('active');
+        }
+
+        render() {
+            // Hide all views
+            document.querySelectorAll('.view').forEach(view => {
+                view.classList.remove('active');
+            });
+            
+            // Show current view
+            const currentViewEl = document.getElementById(`${this.currentView}View`);
+            if (currentViewEl) {
+                currentViewEl.classList.add('active');
+            }
+            
+            // Render specific view content
+            switch (this.currentView) {
+                case 'home':
+                    this.renderHome();
+                    break;
+                case 'search':
+                    this.renderSearch();
+                    break;
+                case 'progress':
+                    this.renderProgress();
+                    break;
+                case 'data':
+                    this.renderDataManagement();
+                    break;
+            }
+        }
+
+        renderHome() {
+            this.renderDomainsGrid();
+            this.renderStatsOverview();
+        }
+
+        renderDomainsGrid() {
+            const grid = document.getElementById('domainsGrid');
+            grid.innerHTML = '';
+            
+            this.domains.forEach(domain => {
+                const health = this.calculateDomainHealth(domain.id);
+                const projectCount = this.projects.filter(p => 
+                    domain.requirements.includes(p.requirementId)
+                ).length;
+                
+                const card = document.createElement('div');
+                card.className = 'domain-card';
+                card.title = domain.description;
+                card.innerHTML = `
+                    <div class="domain-card-header">
+                        <div class="pulse-dot domain-pulse ${health}"></div>
+                        <h3 class="domain-title">${domain.title}</h3>
+                    </div>
+                    <div class="domain-stats">
+                        <span class="domain-compliance">${domain.requirements.length} requirements • ${projectCount} projects</span>
+                    </div>
+                `;
+                
+                card.addEventListener('click', () => {
+                    this.showDomainRequirements(domain.id);
+                });
+                
+                grid.appendChild(card);
+            });
+        }
+
+        showDomainRequirements(domainId) {
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) return;
+
+            document.getElementById('selectedDomainTitle').textContent = `${domain.title} Requirements`;
+            document.getElementById('selectedDomainDescription').textContent = domain.description;
+
+            const requirementsSection = document.getElementById('requirementsSection');
+            requirementsSection.classList.remove('hidden');
+
+            this.renderRequirementsGrid(domain);
+            requirementsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        renderRequirementsGrid(domain) {
+            const grid = document.getElementById('requirementsGrid');
+            grid.innerHTML = '';
+
+            domain.requirements.forEach(reqId => {
+                const req = this.requirements[reqId];
+                if (!req) return;
+                
+                const compliance = this.compliance[reqId];
+                const status = compliance?.met ? 'met' : 'not-met';
+                
+                const projects = this.projects.filter(p => p.requirementId === reqId);
+                const allTasks = projects.flatMap(p => this.tasks.filter(t => t.projectId === p.id));
+                const completedTasks = allTasks.filter(t => t.status === 'completed');
+                
+                const card = document.createElement('div');
+                card.className = `requirement-card ${status}`;
+                card.innerHTML = `
+                    <div class="requirement-header">
+                        <h4 class="requirement-title">${req.title}</h4>
+                        <span class="requirement-status ${status}">
+                            ${status === 'met' ? '✓ Met' : '✗ Not Met'}
+                        </span>
+                    </div>
+                    <p class="requirement-description">${req.description}</p>
+                    <div class="requirement-stats">
+                        <div class="stat-item">
+                            <span class="stat-number">${projects.length}</span>
+                            <span class="stat-label">Projects</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number">${completedTasks.length}/${allTasks.length}</span>
+                            <span class="stat-label">Tasks Complete</span>
+                        </div>
+                    </div>
+                    ${!compliance?.met && compliance?.comment ? `
+                        <div class="compliance-comment">
+                            <strong>Note:</strong> ${compliance.comment}
+                        </div>
+                    ` : ''}
+                `;
+                
+                grid.appendChild(card);
+            });
+        }
+
+        renderStatsOverview() {
+            const totalProjects = this.projects.length;
+            const totalTasks = this.tasks.length;
+            const completedTasks = this.tasks.filter(t => t.status === 'completed').length;
+            const overallCompliance = this.calculateOverallCompliance();
+            
+            document.getElementById('totalProjects').textContent = totalProjects;
+            document.getElementById('totalTasks').textContent = totalTasks;
+            document.getElementById('completedTasks').textContent = completedTasks;
+            document.getElementById('overallCompliance').textContent = `${overallCompliance}%`;
+        }
+
+        calculateDomainHealth(domainId) {
+            const domain = this.domains.find(d => d.id === domainId);
+            if (!domain) return 'critical';
+
+            const requirements = domain.requirements;
+            let totalRequirements = requirements.length;
+            let metRequirements = 0;
+            let wellDocumentedNotMet = 0;
+            let poorlyDocumentedNotMet = 0;
+
+            requirements.forEach(reqId => {
+                const compliance = this.compliance[reqId];
+                if (compliance) {
+                    if (compliance.met) {
+                        metRequirements++;
+                    } else {
+                        const comment = compliance.comment || '';
+                        if (comment.length > 50) {
+                            wellDocumentedNotMet++;
+                        } else {
+                            poorlyDocumentedNotMet++;
+                        }
+                    }
+                } else {
+                    poorlyDocumentedNotMet++;
+                }
+            });
+
+            if (metRequirements === totalRequirements) {
+                return 'healthy';
+            } else if (poorlyDocumentedNotMet === 0 && wellDocumentedNotMet > 0) {
+                return 'warning';
+            } else {
+                return 'critical';
+            }
+        }
+
+        calculateOverallCompliance() {
+            let totalRequirements = 0;
+            let metRequirements = 0;
+
+            this.domains.forEach(domain => {
+                domain.requirements.forEach(reqId => {
+                    totalRequirements++;
+                    if (this.compliance[reqId] && this.compliance[reqId].met) {
+                        metRequirements++;
+                    }
+                });
+            });
+
+            return totalRequirements > 0 ? Math.round((metRequirements / totalRequirements) * 100) : 0;
+        }
+
+        renderProgress() {
+            const progressGrid = document.getElementById('progressGrid');
+            if (!progressGrid) return;
+            
+            progressGrid.innerHTML = '';
+            
+            this.domains.forEach((domain) => {
+                const health = this.calculateDomainHealth(domain.id);
+                const requirements = domain.requirements;
+                const completedRequirements = requirements.filter(reqId => 
+                    this.compliance[reqId] && this.compliance[reqId].met
+                ).length;
+                const progressPercentage = Math.round((completedRequirements / requirements.length) * 100);
+                
+                const projects = this.projects.filter(p => domain.requirements.includes(p.requirementId));
+                const completedProjects = projects.filter(p => p.status === 'completed').length;
+                
+                const card = document.createElement('div');
+                card.className = 'progress-card';
+                card.innerHTML = `
+                    <div class="progress-header">
+                        <div class="pulse-dot ${health}"></div>
+                        <h3>${domain.title}</h3>
+                    </div>
+                    <div class="progress-stats">
+                        <div class="stat">
+                            <span class="stat-number">${progressPercentage}%</span>
+                            <span class="stat-label">Requirements Met</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">${completedProjects}/${projects.length}</span>
+                            <span class="stat-label">Projects Complete</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">${completedRequirements}/${requirements.length}</span>
+                            <span class="stat-label">Requirements</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progressPercentage}%"></div>
+                    </div>
+                    <div class="progress-actions">
+                        <button class="btn btn-secondary manage-compliance-btn" data-domain-id="${domain.id}">
+                            Manage Compliance
+                        </button>
+                    </div>
+                `;
+                
+                progressGrid.appendChild(card);
+            });
+            
+            // Add event delegation for manage compliance buttons
+            progressGrid.addEventListener('click', (e) => {
+                if (e.target.classList.contains('manage-compliance-btn')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const domainId = e.target.getAttribute('data-domain-id');
+                    alert(`Compliance management for ${domainId} - this would open a detailed modal in the full version.`);
+                }
+            });
+        }
+
+        renderSearch() {
+            const searchResults = document.getElementById('searchResults');
+            searchResults.innerHTML = '<p>Enter a search term to find projects, tasks, activities, or events.</p>';
+        }
+
+        searchAll(query) {
+            const results = [];
+            
+            // Search domains
+            this.domains.forEach(domain => {
+                if (domain.title.toLowerCase().includes(query) || 
+                    domain.description.toLowerCase().includes(query)) {
+                    results.push({
+                        type: 'domain',
+                        item: domain,
+                        domain: domain
+                    });
+                }
+            });
+            
+            // Search requirements
+            Object.values(this.requirements).forEach(requirement => {
+                if (requirement.title.toLowerCase().includes(query) || 
+                    requirement.description.toLowerCase().includes(query) ||
+                    requirement.guidance.toLowerCase().includes(query)) {
+                    const domain = this.domains.find(d => d.id === requirement.domainId);
+                    results.push({
+                        type: 'requirement',
+                        item: requirement,
+                        domain: domain,
+                        requirement: requirement
+                    });
+                }
+            });
+            
+            return results;
+        }
+
+        renderSearchResults(results) {
+            const searchResults = document.getElementById('searchResults');
+            
+            if (results.length === 0) {
+                searchResults.innerHTML = '<p>No results found. Try a different search term or check your spelling.</p>';
+                return;
+            }
+            
+            searchResults.innerHTML = `<h3>Found ${results.length} result(s)</h3>`;
+            
+            results.forEach(result => {
+                const card = document.createElement('div');
+                card.className = 'search-result-card';
+                card.innerHTML = `
+                    <div class="result-header">
+                        <span class="result-type">${result.type}</span>
+                        <h4>${result.item.name || result.item.title}</h4>
+                    </div>
+                    <p class="result-description">${result.item.description || ''}</p>
+                `;
+                searchResults.appendChild(card);
+            });
+        }
+
+        renderDataManagement() {
+            this.updateDataStats();
+        }
+
+        updateDataStats() {
+            document.getElementById('dataProjectCount').textContent = this.projects.length;
+            document.getElementById('dataTaskCount').textContent = this.tasks.length;
+            document.getElementById('dataRiskCount').textContent = this.risks.length;
+            document.getElementById('dataIncidentCount').textContent = this.incidents.length;
+            
+            const lastModified = localStorage.getItem('pspf_last_modified');
+            if (lastModified) {
+                const date = new Date(lastModified);
+                document.getElementById('dataLastModified').textContent = date.toLocaleString();
+            } else {
+                document.getElementById('dataLastModified').textContent = 'Never';
+            }
+        }
+
+        exportData() {
+            try {
+                const exportData = {
+                    version: '1.0',
+                    exportDate: new Date().toISOString(),
+                    data: {
+                        projects: this.projects,
+                        tasks: this.tasks,
+                        risks: this.risks,
+                        incidents: this.incidents,
+                        compliance: this.compliance
+                    }
+                };
+
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(dataBlob);
+                downloadLink.download = `pspf-explorer-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`;
+                
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                
+                alert('Data exported successfully!');
+                
+            } catch (error) {
+                console.error('Export failed:', error);
+                alert('Export failed. Please try again.');
+            }
+        }
+
+        importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importData = JSON.parse(e.target.result);
+                    
+                    if (!importData.data || !importData.version) {
+                        throw new Error('Invalid backup file format');
+                    }
+
+                    const confirmMessage = `This will replace all current data with imported data.\n\nImported data contains:\n• ${importData.data.projects?.length || 0} projects\n• ${importData.data.tasks?.length || 0} tasks\n• ${importData.data.risks?.length || 0} activities\n• ${importData.data.incidents?.length || 0} events\n\nContinue?`;
+                    
+                    if (!confirm(confirmMessage)) {
+                        return;
+                    }
+
+                    this.projects = importData.data.projects || [];
+                    this.tasks = importData.data.tasks || [];
+                    this.risks = importData.data.risks || [];
+                    this.incidents = importData.data.incidents || [];
+
+                    this.saveData();
+                    
+                    if (importData.data.compliance) {
+                        localStorage.setItem('pspf_compliance', JSON.stringify(importData.data.compliance));
+                        this.compliance = importData.data.compliance;
+                    }
+
+                    this.updateDataStats();
+                    this.renderHome();
+
+                    alert('Data imported successfully!');
+                    
+                } catch (error) {
+                    console.error('Import failed:', error);
+                    alert('Import failed. Please check the file format and try again.');
+                }
+            };
+
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        clearAllData() {
+            const confirmMessage = 'This will permanently delete ALL your data including:\n• All projects\n• All tasks\n• All activities\n• All events\n• All compliance settings\n\nThis action cannot be undone!\n\nAre you sure?';
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            const doubleConfirm = 'Final confirmation: Type "DELETE" to proceed with clearing all data:';
+            const userInput = prompt(doubleConfirm);
+            
+            if (userInput !== 'DELETE') {
+                alert('Data clearing cancelled.');
+                return;
+            }
+
+            try {
+                this.projects = [];
+                this.tasks = [];
+                this.risks = [];
+                this.incidents = [];
+                this.compliance = {};
+
+                localStorage.removeItem('pspf_projects');
+                localStorage.removeItem('pspf_tasks');
+                localStorage.removeItem('pspf_risks');
+                localStorage.removeItem('pspf_incidents');
+                localStorage.removeItem('pspf_compliance');
+                localStorage.removeItem('pspf_last_modified');
+
+                this.updateDataStats();
+                this.renderHome();
+
+                alert('All data has been cleared successfully.');
+                
+            } catch (error) {
+                console.error('Clear data failed:', error);
+                alert('Failed to clear data. Please try again.');
+            }
+        }
+
+        saveData() {
+            localStorage.setItem('pspf_projects', JSON.stringify(this.projects));
+            localStorage.setItem('pspf_tasks', JSON.stringify(this.tasks));
+            localStorage.setItem('pspf_risks', JSON.stringify(this.risks));
+            localStorage.setItem('pspf_incidents', JSON.stringify(this.incidents));
+            localStorage.setItem('pspf_compliance', JSON.stringify(this.compliance));
+            localStorage.setItem('pspf_last_modified', new Date().toISOString());
+        }
+    }
+
+    // Initialize application when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+        window.pspfExplorer = new PSPFExplorer();
+    });
+    </script>
+</body>
+</html>

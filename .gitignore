@@ -1,30 +1,11 @@
-# Development and source files - not needed for deployment
-archive/
-*.csv
-*.XLSX
-*.xlsx
-*.pdf
-*.zip
-*.json
-!package.json
-!package-lock.json
-copilot-instructions.md
-pspf-explorer-design.md
-update_requirements.js
-
-# Test artifacts
-test-results/
-playwright-report/
-
-# Editor and OS files
-.vscode/
-.vscode/.chrome-debug-profile/
-.vscode/launch.json
-.DS_Store
-*.swp
-*.swo
-*~
-
-# Node modules (if any added later)
 node_modules/
-styles/main.legacy.css
+dist/
+coverage/
+playwright-report/
+test-results/
+.vite/
+*.log
+.DS_Store
+sbom.json
+.vscode/
+.idea/

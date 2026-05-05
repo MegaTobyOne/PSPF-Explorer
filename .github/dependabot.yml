@@ -1,0 +1,31 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      lit:
+        patterns:
+          - 'lit'
+          - '@lit/*'
+      vite:
+        patterns:
+          - 'vite'
+          - 'vitest'
+          - '@vitest/*'
+      playwright:
+        patterns:
+          - '@playwright/*'
+          - '@axe-core/playwright'
+      eslint:
+        patterns:
+          - 'eslint'
+          - 'eslint-*'
+          - 'typescript-eslint'
+          - '@typescript-eslint/*'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
