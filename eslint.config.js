@@ -17,6 +17,8 @@ export default tseslint.config(
       '.vscode/**',
       'scripts/**',
       '**/*.config.js',
+      '**/* 2.*',
+      '**/README *.md',
     ],
   },
   js.configs.recommended,

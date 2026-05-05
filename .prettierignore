@@ -7,3 +7,5 @@ node_modules
 package-lock.json
 sbom.json
 .vscode
+*\ 2.*
+README\ 2.*

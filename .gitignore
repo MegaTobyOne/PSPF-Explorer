@@ -9,3 +9,5 @@ test-results/
 sbom.json
 .vscode/
 .idea/
+*\ 2.*
+README\ 2.*
