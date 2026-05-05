@@ -6,6 +6,7 @@ import { appStoreContext } from '../state/contexts.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { summariseAllDomains, type DomainSummary } from '../domain/summary.ts';
+import type { ComplianceEntry, RequirementId } from '../data/types.ts';
 
 @customElement('pspf-home-view')
 export class HomeView extends LitElement {
@@ -87,7 +88,8 @@ export class HomeView extends LitElement {
   #watcher = new SignalWatcher(this, () => (this.store ? [this.store.compliance] : []));
 
   override render() {
-    const compliance = this.store?.compliance.value ?? new Map();
+    const compliance: ReadonlyMap<RequirementId, ComplianceEntry> =
+      this.store?.compliance.value ?? new Map();
     const summaries = summariseAllDomains(compliance);
     return html`
       <article>

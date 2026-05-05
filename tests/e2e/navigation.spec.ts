@@ -32,7 +32,10 @@ test('navigates to a domain page and back to home', async ({ page }) => {
 
   // First requirement link should navigate to a requirement view.
   await page.locator('pspf-domain-view').getByRole('link').first().click();
-  await expect(page.locator('pspf-requirement-view')).toBeVisible();
+  const reqView = page.locator('pspf-requirement-view');
+  await expect(reqView).toBeVisible();
+  // Compliance badge defaults to 'Not set' for an untouched requirement.
+  await expect(reqView.locator('pspf-compliance-badge')).toContainText('Not set');
 });
 
 test('unknown route shows the not-found view', async ({ page }) => {
