@@ -65,6 +65,21 @@ export class DomainView extends LitElement {
         color: var(--colour-fg-muted);
         font-size: var(--text-sm);
       }
+      button.print {
+        margin-bottom: var(--space-3);
+        padding: var(--space-1) var(--space-3);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-sm);
+        background: var(--colour-bg-elevated);
+        color: var(--colour-fg);
+        cursor: pointer;
+        font: inherit;
+      }
+      @media print {
+        button.print {
+          display: none;
+        }
+      }
     `,
   ];
 
@@ -105,6 +120,14 @@ export class DomainView extends LitElement {
           ${reqs.length} requirements · ${summary.byState.yes} compliant · ${summary.byState.no} not
           compliant · ${summary.byState['not-set']} not set
         </p>
+        <button
+          type="button"
+          class="print"
+          data-testid="print-summary"
+          @click=${(): void => window.print()}
+        >
+          Print summary
+        </button>
         <ul class="requirements">
           ${reqs.map((r): TemplateResult => {
             const entry = compliance.get(r.id);

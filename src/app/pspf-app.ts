@@ -6,6 +6,7 @@ import { HashRouter } from './router.ts';
 import { routes, NAV_ROUTES } from './routes.ts';
 import { AppStore } from '../state/app-store.ts';
 import { appStoreContext } from '../state/contexts.ts';
+import '../components/command-palette.ts';
 
 @customElement('pspf-app')
 export class PspfApp extends LitElement {
@@ -92,6 +93,22 @@ export class PspfApp extends LitElement {
         font-size: var(--text-sm);
         color: var(--colour-fg-muted);
       }
+
+      @media print {
+        :host {
+          background: white;
+          color: black;
+        }
+        header,
+        nav,
+        footer,
+        pspf-command-palette {
+          display: none !important;
+        }
+        main {
+          padding: 0;
+        }
+      }
     `,
   ];
 
@@ -145,8 +162,12 @@ export class PspfApp extends LitElement {
       </main>
       <footer>
         <span>v${__APP_VERSION__}</span>
-        <span>Offline-first · No telemetry</span>
+        <span
+          >Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for the command palette · Offline-first · No
+          telemetry</span
+        >
       </footer>
+      <pspf-command-palette></pspf-command-palette>
     `;
   }
 }

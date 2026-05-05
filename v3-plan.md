@@ -407,34 +407,34 @@ Port `archive/v2/scripts/domains/*.js` → `src/pspf/*.ts`.
 
 ## 10. Phase 1 backlog (ordered)
 
-1. 🔲 Repo reorganisation: move v2 → `archive/v2/`. Verify v2 still loads via direct file open from archive.
-2. 🔲 Bootstrap Vite + TS strict + Lit + ESLint + Prettier + Vitest + Playwright. Empty `<pspf-app>` renders "Hello v3".
-3. 🔲 CI workflow green on the empty app.
-4. 🔲 Type definitions in `src/data/types.ts` + JSON Schema for export envelope under `docs/schema/`.
-5. 🔲 PSPF data port + structural test (218 / 6 domains / unique IDs).
-6. 🔲 IndexedDB layer: open, migrate to v1 schema, store CRUD helpers + `runInTx`, fake-db for tests.
-7. 🔲 Signal stores wired through `@lit/context`. Boot loads from idb.
-8. 🔲 Router + view shells (all Phase 1 routes resolve, even if empty).
-9. 🔲 home-view: domain cards with live progress.
-10. 🔲 domain-view + requirement-view: read-only browse + search.
-11. 🔲 Compliance editing on requirement-view (state, evidence, target maturity, reviewer notes).
-12. 🔲 Tags CRUD + tag-based filtering on domain-view.
-13. 🔲 Saved views.
-14. 🔲 Risk register CRUD + linkage to requirements.
-15. 🔲 Action tracker CRUD + linkage to requirements & risks.
-16. 🔲 Posture/threat-level (global + per-domain).
-17. 🔲 Work-tracking notes per requirement.
-18. 🔲 analytics-view: E8 maturity + per-domain gap report.
-19. 🔲 Integrity worker + integrity-view (orphans/duplicates/self-loops).
-20. 🔲 Backup export (JSON envelope, schema-versioned).
-21. 🔲 Restore import with preflight conflict review.
-22. 🔲 Clear-all-data with double-confirm.
-23. 🔲 Help view + threat-model link to SECURITY.md.
-24. 🔲 axe-core sweep — fix all serious/critical.
-25. 🔲 Performance pass against budgets in brief §6.
-26. 🔲 README rewrite for v3 Phase 1.
-27. 🔲 SBOM step in release workflow.
-28. 🔲 Cutover: point Pages at v3 build; archive v2 site notice.
+1. ✅ Repo reorganisation: move v2 → `archive/v2/`. Verify v2 still loads via direct file open from archive.
+2. ✅ Bootstrap Vite + TS strict + Lit + ESLint + Prettier + Vitest + Playwright. Empty `<pspf-app>` renders "Hello v3".
+3. ✅ CI workflow green on the empty app.
+4. ✅ Type definitions in `src/data/types.ts` + JSON Schema for export envelope under `docs/schema/`.
+5. ✅ PSPF data port + structural test (218 / 6 domains / unique IDs).
+6. ✅ IndexedDB layer: open, migrate to v1 schema, store CRUD helpers + `runInTx`, fake-db for tests.
+7. ✅ Signal stores wired through `@lit/context`. Boot loads from idb.
+8. ✅ Router + view shells (all Phase 1 routes resolve, even if empty).
+9. ✅ home-view: domain cards with live progress.
+10. ✅ domain-view + requirement-view: read-only browse + search.
+11. ✅ Compliance editing on requirement-view (state, evidence, target maturity, reviewer notes).
+12. ✅ Tags CRUD + tag-based filtering on domain-view.
+13. ✅ Saved views.
+14. ✅ Risk register CRUD + linkage to requirements.
+15. ✅ Action tracker CRUD + linkage to requirements & risks.
+16. ✅ Posture/threat-level (global + per-domain).
+17. ✅ Work-tracking notes per requirement.
+18. ✅ analytics-view: E8 maturity + per-domain gap report.
+19. ✅ Integrity worker + integrity-view (orphans/duplicates/self-loops). _(completed in Phase 3 polish)_
+20. ✅ Backup export (JSON envelope, schema-versioned).
+21. ✅ Restore import with preflight conflict review.
+22. ✅ Clear-all-data with double-confirm.
+23. ✅ Help view + threat-model link to SECURITY.md.
+24. ✅ axe-core sweep — fix all serious/critical.
+25. ✅ Performance pass against budgets in brief §6.
+26. ✅ README rewrite for v3 Phase 1.
+27. ✅ SBOM step in release workflow.
+28. 🟡 Cutover: point Pages at v3 build; archive v2 site notice. _(deployment task; pending owner action)_
 
 Each step ends with: domain-layer Vitest passing, view changes covered by at least one Playwright assertion, manual smoke at the configured Pages base path.
 
@@ -465,13 +465,22 @@ Against brief §6 budgets:
 
 ---
 
-## 13. Phase 2 / Phase 3 — placeholders only
+## 13. Phase 2 / Phase 3 — status
 
-Captured here for awareness, not actioned in Phase 1.
+**Phase 2** ✅ shipped: Cytoscape lazy chunk (`/map`), relationship store + register view (`/relationships`), coverage matrix (`/coverage`), directions register (`/directions`), share packages with skip-on-conflict merge (`/share`), GRC capture with locked-schema validator (`/grc`). JSON Schema published under `docs/schema/`.
 
-**Phase 2**: Cytoscape lazy chunk, relationship store + view, coverage matrix, directions register, share packages (export targeted subset + import merge review), GRC capture schema. JSON Schema published.
+**Phase 3** — in progress (started after Phase 2):
 
-**Phase 3**: Multiple workspaces (separate idb DB per workspace), undo/redo, diff view for merges, print/PDF, mobile read-only mode (remove desktop-only gates), command palette, pluggable PSPF release year, optional service worker.
+- ✅ Integrity worker + view (orphans / duplicates / self-loops / dangling endpoints) — closes deferred Phase 1 step 19.
+- ✅ Keyboard command palette (Cmd/Ctrl+K) — global navigator over all routes.
+- ✅ Print stylesheet for domain summaries.
+- 🔲 Multiple workspaces (separate idb DB per workspace).
+- 🔲 Undo/redo for destructive operations.
+- 🔲 Diff view for share-package merges.
+- 🔲 PDF export of domain summaries (browser print covers MVP).
+- 🔲 Mobile-friendly read-only mode.
+- 🔲 Pluggable PSPF release year.
+- 🔲 Optional service worker / PWA.
 
 ---
 

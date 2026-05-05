@@ -11,13 +11,8 @@ test('relationship map renders nodes from a direction linked to a requirement', 
   await page.reload();
 
   // Empty state first
-  await page
-    .locator('pspf-app')
-    .getByRole('link', { name: /^Map$/ })
-    .click();
-  await expect(
-    page.locator('pspf-relationship-map-view [data-testid="empty"]'),
-  ).toBeVisible();
+  await page.locator('pspf-app').getByRole('link', { name: /^Map$/ }).click();
+  await expect(page.locator('pspf-relationship-map-view [data-testid="empty"]')).toBeVisible();
 
   // Seed a direction linked to GOV-001
   await page
@@ -32,10 +27,7 @@ test('relationship map renders nodes from a direction linked to a requirement', 
   await dirs.getByRole('button', { name: 'Add direction' }).click();
 
   // Visit the map
-  await page
-    .locator('pspf-app')
-    .getByRole('link', { name: /^Map$/ })
-    .click();
+  await page.locator('pspf-app').getByRole('link', { name: /^Map$/ }).click();
   const view = page.locator('pspf-relationship-map-view');
   await expect(view.getByTestId('counts')).toContainText('2 nodes');
   await expect(view.getByTestId('counts')).toContainText('1 edges');

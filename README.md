@@ -2,7 +2,7 @@
 
 **v3.0 (alpha)** — Offline-first compliance management for the Australian Government [Protective Security Policy Framework (PSPF) 2025](https://www.protectivesecurity.gov.au/pspf-annual-release).
 
-> v3 is under active development. The previous v2 release lives under [archive/v2/](archive/v2/) and remains available at the existing GitHub Pages URL until v3 reaches Phase 1 feature parity. See [purpose.md](purpose.md) for the v3 brief.
+> v3 has shipped Phase 1 and Phase 2 in full, plus the first slice of Phase 3 (integrity worker, command palette, print stylesheet). The previous v2 release lives under [archive/v2/](archive/v2/) and remains available at the existing GitHub Pages URL until cutover. See [purpose.md](purpose.md) for the v3 brief.
 
 ## What it is
 
@@ -21,6 +21,21 @@ A static single-page web application that helps Australian Government security a
 - **Analytics** — KPIs, compliance breakdown by state and by domain, risk band distribution, action statuses, overdue counts.
 - **Backup / restore / clear data** — JSON snapshot of every record, validated on import.
 - **Help** — orientation, keyboard navigation and privacy notes.
+
+## Features (Phase 2)
+
+- **Coverage matrix** — domain × compliance state with totals and percentage compliant.
+- **PSPF Directions register** — capture each direction reference, issue date, description and the requirements it touches.
+- **Relationships register** — typed cross-entity links (requirement↔risk, requirement↔action, risk↔action, requirement↔direction).
+- **Relationship map** — lazy-loaded Cytoscape graph with a keyboard-accessible adjacency-list fallback.
+- **Share packages** — export a JSON subset of risks/actions/tags/views/directions/relationships and merge it back with skip-on-conflict semantics.
+- **GRC capture** — ingest external compliance evidence via a locked-schema JSON envelope; unknown fields are rejected.
+
+## Features (Phase 3 — in progress)
+
+- **Integrity diagnostics** — background-worker scan for orphan refs, duplicate titles, self-loops and dangling relationship endpoints.
+- **Keyboard command palette** — ⌘K / Ctrl+K to filter and jump to any route.
+- **Print stylesheet** — dedicated print layout for domain summaries (header / nav / footer hidden, dark colours flattened).
 
 ## Privacy and data
 
@@ -55,13 +70,13 @@ npm run sbom         # write CycloneDX sbom.json
 - [idb](https://github.com/jakearchibald/idb) for typed IndexedDB access
 - [Vite](https://vitejs.dev/) for the build, [Vitest](https://vitest.dev/) for unit tests, [Playwright](https://playwright.dev/) for E2E, [@axe-core/playwright](https://www.deque.com/axe/) for accessibility checks
 
-### Quality gates (Phase 1)
+### Quality gates
 
 - `npm run typecheck` — zero errors
 - `npm run lint` — zero errors
-- `npm run test:run` — all unit tests green; coverage trending toward 60%+
-- `npm run test:e2e` — all Playwright specs green, including 10 axe sweeps across top-level routes
-- `npm run perf:budget` — total app JS ≤ 80 KB gzipped
+- `npm run test:run` — 74 unit tests across the data, domain and state layers
+- `npm run test:e2e` — 43 Playwright specs, including a 15-route axe-core sweep
+- `npm run perf:budget` — total non-lazy JS ≤ 80 KB gzipped (currently ~72 KB); Cytoscape stays in its own lazy chunk
 
 ### Generating an SBOM
 
