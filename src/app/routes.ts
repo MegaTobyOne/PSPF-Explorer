@@ -45,6 +45,11 @@ export const routes: readonly RouteSpec[] = [
     load: () => import('../views/directions-view.ts'),
   },
   {
+    path: '/relationships',
+    component: 'pspf-relationships-view',
+    load: () => import('../views/relationships-view.ts'),
+  },
+  {
     path: '/backup',
     component: 'pspf-backup-view',
     load: () => import('../views/backup-view.ts'),
@@ -77,6 +82,7 @@ export const NAV_ROUTES: readonly { path: string; label: string }[] = [
   { path: '/analytics', label: 'Analytics' },
   { path: '/coverage', label: 'Coverage' },
   { path: '/directions', label: 'Directions' },
+  { path: '/relationships', label: 'Relationships' },
   { path: '/integrity', label: 'Integrity' },
   { path: '/backup', label: 'Backup' },
   { path: '/restore', label: 'Restore' },

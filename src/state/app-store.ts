@@ -26,6 +26,9 @@ import {
   deleteWorkTracking,
   listActions,
   listDirections,
+  listRelationships,
+  putRelationship,
+  deleteRelationship,
   listRisks,
   listSavedViews,
   listTags,
@@ -40,6 +43,7 @@ import {
 import {
   asActionId,
   asDirectionId,
+  asRelationshipId,
   asRiskId,
   asSavedViewId,
   asTagId,
@@ -50,6 +54,8 @@ import {
   type ComplianceState,
   type Direction,
   type DirectionId,
+  type Relationship,
+  type RelationshipId,
   type EvidenceRef,
   type PostureRecord,
   type RequirementId,
@@ -74,6 +80,7 @@ export class AppStore {
   readonly savedViews: Signal<readonly SavedView[]>;
   readonly workTracking: Signal<readonly WorkTrackingEntry[]>;
   readonly directions: Signal<readonly Direction[]>;
+  readonly relationships: Signal<readonly Relationship[]>;
   readonly posture: Signal<PostureRecord | undefined>;
   readonly ready: Signal<boolean>;
 
@@ -86,6 +93,7 @@ export class AppStore {
     this.savedViews = signal([]);
     this.workTracking = signal([]);
     this.directions = signal([]);
+    this.relationships = signal([]);
     this.posture = signal(undefined);
     this.ready = signal(false);
   }
@@ -98,17 +106,27 @@ export class AppStore {
   }
 
   async loadAll(): Promise<void> {
-    const [compliance, risks, actions, tags, savedViews, workTracking, directions, posture] =
-      await Promise.all([
-        listCompliance(this.db),
-        listRisks(this.db),
-        listActions(this.db),
-        listTags(this.db),
-        listSavedViews(this.db),
-        listWorkTracking(this.db),
-        listDirections(this.db),
-        getPosture(this.db),
-      ]);
+    const [
+      compliance,
+      risks,
+      actions,
+      tags,
+      savedViews,
+      workTracking,
+      directions,
+      relationships,
+      posture,
+    ] = await Promise.all([
+      listCompliance(this.db),
+      listRisks(this.db),
+      listActions(this.db),
+      listTags(this.db),
+      listSavedViews(this.db),
+      listWorkTracking(this.db),
+      listDirections(this.db),
+      listRelationships(this.db),
+      getPosture(this.db),
+    ]);
     this.compliance.value = new Map(compliance.map((e) => [e.requirementId, e]));
     this.risks.value = risks;
     this.actions.value = actions;
@@ -116,6 +134,7 @@ export class AppStore {
     this.savedViews.value = savedViews;
     this.workTracking.value = workTracking;
     this.directions.value = directions;
+    this.relationships.value = relationships;
     this.posture.value = posture;
     this.ready.value = true;
   }
@@ -355,6 +374,31 @@ export class AppStore {
   async removeDirection(id: DirectionId): Promise<void> {
     await deleteDirection(this.db, id);
     this.directions.value = this.directions.value.filter((d) => d.id !== id);
+  }
+
+  // ---------- Relationships ----------
+
+  async createRelationship(
+    input: Omit<Relationship, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Relationship> {
+    const now = new Date().toISOString();
+    const [a, b] = input.endpoints;
+    const endpoints: readonly [string, string] = a <= b ? [a, b] : [b, a];
+    const relationship: Relationship = {
+      ...input,
+      endpoints,
+      id: asRelationshipId(newId()),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await putRelationship(this.db, relationship);
+    this.relationships.value = [...this.relationships.value, relationship];
+    return relationship;
+  }
+
+  async removeRelationship(id: RelationshipId): Promise<void> {
+    await deleteRelationship(this.db, id);
+    this.relationships.value = this.relationships.value.filter((r) => r.id !== id);
   }
 
   // ---------- Meta ----------
