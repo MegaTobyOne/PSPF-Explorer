@@ -1,0 +1,135 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { effect } from '@preact/signals-core';
+import { AppStore } from './app-store.ts';
+import { openPspfDb, type PspfDb } from '../data/db.ts';
+import { asRequirementId } from '../data/types.ts';
+
+let db: PspfDb;
+let dbName: string;
+let store: AppStore;
+
+beforeEach(async () => {
+  dbName = `pspf-store-test-${Math.random().toString(36).slice(2)}`;
+  db = await openPspfDb(dbName);
+  store = new AppStore(db);
+  await store.loadAll();
+});
+
+afterEach(async () => {
+  db.close();
+  await new Promise<void>((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(dbName);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error ?? new Error('delete failed'));
+    req.onblocked = () => resolve();
+  });
+});
+
+describe('AppStore', () => {
+  it('initialises with empty signal values and ready=true after loadAll', () => {
+    expect(store.compliance.value.size).toBe(0);
+    expect(store.risks.value).toEqual([]);
+    expect(store.actions.value).toEqual([]);
+    expect(store.tags.value).toEqual([]);
+    expect(store.savedViews.value).toEqual([]);
+    expect(store.workTracking.value).toEqual([]);
+    expect(store.posture.value).toBeUndefined();
+    expect(store.ready.value).toBe(true);
+  });
+
+  it('setCompliance writes through and notifies subscribers', async () => {
+    const id = asRequirementId('GOV-001');
+    const seen: number[] = [];
+    const dispose = effect(() => {
+      seen.push(store.compliance.value.size);
+    });
+    await store.setCompliance(id, { state: 'yes' });
+    dispose();
+    expect(seen).toEqual([0, 1]);
+    expect(store.compliance.value.get(id)?.state).toBe('yes');
+    expect(await store.complianceCount()).toBe(1);
+  });
+
+  it('setCompliance preserves createdAt across updates', async () => {
+    const id = asRequirementId('GOV-002');
+    const first = await store.setCompliance(id, { state: 'no' });
+    await new Promise((r) => setTimeout(r, 5));
+    const second = await store.setCompliance(id, { state: 'risk-managed' });
+    expect(second.createdAt).toBe(first.createdAt);
+    expect(second.updatedAt >= first.updatedAt).toBe(true);
+  });
+
+  it('addEvidence appends to the list', async () => {
+    const id = asRequirementId('GOV-003');
+    await store.addEvidence(id, { kind: 'note', value: 'first', addedAt: '2025-01-01' });
+    await store.addEvidence(id, { kind: 'url', value: 'https://x', addedAt: '2025-01-02' });
+    const entry = store.compliance.value.get(id);
+    expect(entry?.evidence).toHaveLength(2);
+    expect(entry?.state).toBe('not-set');
+  });
+
+  it('createRisk / updateRisk / removeRisk roundtrip via signal and DB', async () => {
+    const r = await store.createRisk({
+      title: 'Phishing',
+      likelihood: 3,
+      impact: 4,
+      status: 'open',
+      requirementIds: [],
+      actionIds: [],
+    });
+    expect(store.risks.value).toHaveLength(1);
+    await store.updateRisk(r.id, { status: 'monitored' });
+    expect(store.risks.value[0]?.status).toBe('monitored');
+    await store.removeRisk(r.id);
+    expect(store.risks.value).toHaveLength(0);
+  });
+
+  it('createAction / updateAction / removeAction roundtrip', async () => {
+    const a = await store.createAction({
+      title: 'Roll out MFA',
+      type: 'remediation',
+      status: 'todo',
+      requirementIds: [],
+      riskIds: [],
+    });
+    await store.updateAction(a.id, { status: 'in-progress' });
+    expect(store.actions.value[0]?.status).toBe('in-progress');
+    await store.removeAction(a.id);
+    expect(store.actions.value).toHaveLength(0);
+  });
+
+  it('createTag / saved view / work tracking signals update synchronously after await', async () => {
+    const tag = await store.createTag({ label: 'Critical', colour: '#a00', priority: 1 });
+    expect(store.tags.value.map((t) => t.id)).toContain(tag.id);
+
+    const view = await store.createSavedView('Open items', { states: ['no'] });
+    expect(store.savedViews.value).toHaveLength(1);
+    await store.removeSavedView(view.id);
+    expect(store.savedViews.value).toHaveLength(0);
+
+    const note = await store.addWorkTracking(asRequirementId('GOV-001'), 'Drafted policy', '1h');
+    expect(store.workTracking.value).toHaveLength(1);
+    await store.removeWorkTracking(note.id);
+    expect(store.workTracking.value).toHaveLength(0);
+  });
+
+  it('persistence: re-opening DB and re-loading recovers signal state', async () => {
+    const id = asRequirementId('GOV-099');
+    await store.setCompliance(id, { state: 'yes' });
+    db.close();
+
+    const db2 = await openPspfDb(dbName);
+    const store2 = new AppStore(db2);
+    await store2.loadAll();
+    expect(store2.compliance.value.get(id)?.state).toBe('yes');
+    db2.close();
+    db = await openPspfDb(dbName);
+    store = new AppStore(db);
+  });
+
+  it('updateRisk on missing id throws', async () => {
+    await expect(store.updateRisk(asRequirementId('does-not-exist') as never, {})).rejects.toThrow(
+      /not found/,
+    );
+  });
+});
