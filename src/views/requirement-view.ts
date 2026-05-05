@@ -1,15 +1,16 @@
 import { LitElement, css, html } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { designTokens } from '../app/design-tokens.ts';
 import { allDomains, requirementById, essentialEightControls } from '../pspf/index.ts';
-import { asRequirementId, type ComplianceState } from '../data/types.ts';
+import { asRequirementId, type ComplianceState, type Relationship } from '../data/types.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
 import '../components/compliance-badge.ts';
 import '../components/compliance-editor.ts';
 import '../components/work-log.ts';
+import '../components/breadcrumbs.ts';
 
 @customElement('pspf-requirement-view')
 export class RequirementView extends LitElement {
@@ -29,13 +30,6 @@ export class RequirementView extends LitElement {
       h2 {
         margin: 0;
         font-size: var(--text-xl);
-      }
-      .crumb {
-        font-size: var(--text-sm);
-        color: var(--colour-fg-muted);
-      }
-      .crumb a {
-        color: inherit;
       }
       dl {
         display: grid;
@@ -66,6 +60,65 @@ export class RequirementView extends LitElement {
         padding-left: var(--space-4);
         font-size: var(--text-sm);
       }
+      .linker {
+        margin-top: var(--space-3);
+        padding: var(--space-3);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+      }
+      .linker h3 {
+        margin: 0 0 var(--space-2) 0;
+        font-size: var(--text-md);
+      }
+      .linker form {
+        display: grid;
+        grid-template-columns: 12rem 1fr auto;
+        gap: var(--space-2);
+        align-items: end;
+      }
+      .linker label {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: var(--text-xs);
+        color: var(--colour-fg-muted);
+      }
+      .linker input,
+      .linker select,
+      .linker button {
+        font: inherit;
+        color: inherit;
+        background: var(--colour-bg);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-1) var(--space-2);
+      }
+      .linker button {
+        cursor: pointer;
+      }
+      .linker button.primary {
+        background: var(--colour-accent);
+        color: var(--colour-accent-fg);
+        border-color: var(--colour-accent);
+      }
+      ul.linked {
+        list-style: none;
+        margin: var(--space-2) 0 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        font-size: var(--text-sm);
+      }
+      ul.linked a {
+        color: inherit;
+      }
+      @media (max-width: 720px) {
+        .linker form {
+          grid-template-columns: 1fr;
+        }
+      }
     `,
   ];
 
@@ -75,7 +128,20 @@ export class RequirementView extends LitElement {
   private store: AppStore | undefined;
 
   // eslint-disable-next-line no-unused-private-class-members
-  #watcher = new SignalWatcher(this, () => (this.store ? [this.store.compliance] : []));
+  #watcher = new SignalWatcher(this, () =>
+    this.store
+      ? [
+          this.store.compliance,
+          this.store.relationships,
+          this.store.risks,
+          this.store.actions,
+          this.store.directions,
+        ]
+      : [],
+  );
+
+  @state() private accessor linkTargetType: 'risk' | 'action' | 'direction' = 'risk';
+  @state() private accessor linkTargetId = '';
 
   override render() {
     const raw = this.params.id;
@@ -92,12 +158,18 @@ export class RequirementView extends LitElement {
     const e8 = req.essentialEightControl
       ? essentialEightControls.find((c) => c.key === req.essentialEightControl)
       : undefined;
+    const related = (this.store?.relationships.value ?? []).filter((relationship) =>
+      relationship.endpoints.includes(req.id),
+    );
     return html`
       <article>
-        <p class="crumb">
-          <a href="#/">Home</a> ›
-          <a href="#/domain/${req.domain}">${domain?.name ?? req.domain}</a> › ${req.id}
-        </p>
+        <pspf-breadcrumbs
+          .items=${[
+            { label: 'Home', href: '#/' },
+            { label: domain?.name ?? req.domain, href: `#/domain/${req.domain}` },
+            { label: req.id },
+          ]}
+        ></pspf-breadcrumbs>
         <header class="req">
           <h2>${req.id} — ${req.title}</h2>
           <pspf-compliance-badge .state=${state}></pspf-compliance-badge>
@@ -126,9 +198,117 @@ export class RequirementView extends LitElement {
             : ''}
         </dl>
         <pspf-compliance-editor .requirementId=${req.id}></pspf-compliance-editor>
+        <section class="linker">
+          <h3>Link this requirement</h3>
+          <form
+            @submit=${(event: Event): void => {
+              event.preventDefault();
+              void this.#createRelationship(req.id);
+            }}
+          >
+            <label>
+              Target type
+              <select
+                .value=${this.linkTargetType}
+                @change=${(event: Event): void => {
+                  this.linkTargetType = (event.target as HTMLSelectElement).value as
+                    | 'risk'
+                    | 'action'
+                    | 'direction';
+                  this.linkTargetId = '';
+                }}
+              >
+                <option value="risk">Risk</option>
+                <option value="action">Action</option>
+                <option value="direction">Direction</option>
+              </select>
+            </label>
+            <label>
+              Target ID
+              <input
+                type="text"
+                required
+                list="requirement-link-targets"
+                .value=${this.linkTargetId}
+                @input=${(event: Event): void => {
+                  this.linkTargetId = (event.target as HTMLInputElement).value;
+                }}
+              />
+              <datalist id="requirement-link-targets">
+                ${this.#targetOptions().map((id) => html`<option value=${id}></option>`)}
+              </datalist>
+            </label>
+            <button
+              type="submit"
+              class="primary"
+              ?disabled=${!this.#targetOptions().includes(this.linkTargetId.trim())}
+            >
+              Add relationship
+            </button>
+          </form>
+          ${related.length === 0
+            ? html`<p class="placeholder">No relationships for this requirement yet.</p>`
+            : html`
+                <ul class="linked">
+                  ${related.map((relationship) => this.#renderRelated(req.id, relationship))}
+                </ul>
+              `}
+        </section>
         <pspf-work-log .requirementId=${req.id}></pspf-work-log>
       </article>
     `;
+  }
+
+  #targetOptions(): readonly string[] {
+    if (!this.store) return [];
+    switch (this.linkTargetType) {
+      case 'risk':
+        return this.store.risks.value.map((risk) => risk.id);
+      case 'action':
+        return this.store.actions.value.map((action) => action.id);
+      case 'direction':
+        return this.store.directions.value.map((direction) => direction.id);
+    }
+  }
+
+  #renderRelated(requirementId: string, relationship: Relationship) {
+    const target =
+      relationship.endpoints.find((endpoint) => endpoint !== requirementId) ??
+      relationship.endpoints[0];
+    const targetRoute = this.#targetRoute(target);
+    return html`
+      <li>
+        ${relationship.kind} ·
+        ${targetRoute ? html`<a href=${targetRoute}>${target}</a>` : html`<span>${target}</span>`}
+      </li>
+    `;
+  }
+
+  #targetRoute(targetId: string): string | undefined {
+    if (this.store?.risks.value.some((risk) => risk.id === targetId)) return '#/risks';
+    if (this.store?.actions.value.some((action) => action.id === targetId)) return '#/actions';
+    if (this.store?.directions.value.some((direction) => direction.id === targetId)) {
+      return '#/directions';
+    }
+    return undefined;
+  }
+
+  async #createRelationship(requirementId: string): Promise<void> {
+    if (!this.store) return;
+    const targetId = this.linkTargetId.trim();
+    if (!this.#targetOptions().includes(targetId)) return;
+
+    const kind =
+      this.linkTargetType === 'risk'
+        ? 'requirement-risk'
+        : this.linkTargetType === 'action'
+          ? 'requirement-action'
+          : 'requirement-direction';
+    await this.store.createRelationship({
+      kind,
+      endpoints: [requirementId, targetId],
+    });
+    this.linkTargetId = '';
   }
 }
 

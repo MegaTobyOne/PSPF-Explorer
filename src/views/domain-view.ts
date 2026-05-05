@@ -9,6 +9,7 @@ import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
 import { summariseDomain } from '../domain/summary.ts';
 import '../components/compliance-badge.ts';
+import '../components/breadcrumbs.ts';
 
 @customElement('pspf-domain-view')
 export class DomainView extends LitElement {
@@ -114,11 +115,14 @@ export class DomainView extends LitElement {
     const summary = summariseDomain(domain, compliance);
     return html`
       <article>
+        <pspf-breadcrumbs
+          .items=${[{ label: 'Home', href: '#/' }, { label: domain.name }]}
+        ></pspf-breadcrumbs>
         <h2>${domain.name}</h2>
         <p class="description">${domain.description}</p>
         <p class="summary">
-          ${reqs.length} requirements · ${summary.byState.yes} compliant · ${summary.byState.no} not
-          compliant · ${summary.byState['not-set']} not set
+          ${reqs.length} requirements · ${summary.byState.yes} fully implemented ·
+          ${summary.byState.no} not yet implemented · ${summary.byState['not-set']} not set
         </p>
         <button
           type="button"

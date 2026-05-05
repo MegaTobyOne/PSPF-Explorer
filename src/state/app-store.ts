@@ -8,10 +8,13 @@
 
 import { signal, type Signal } from '@preact/signals-core';
 import {
+  complianceEventsForRequirement,
   countCompliance,
   deleteCompliance,
   listCompliance,
+  listComplianceEvents,
   putCompliance,
+  putComplianceEvent,
 } from '../data/compliance-store.ts';
 import { openPspfDb, type PspfDb } from '../data/db.ts';
 import { newId } from '../data/ids.ts';
@@ -51,6 +54,7 @@ import {
   type Action,
   type ActionId,
   type ComplianceEntry,
+  type ComplianceEvent,
   type ComplianceState,
   type Direction,
   type DirectionId,
@@ -74,6 +78,7 @@ export class AppStore {
   readonly db: PspfDb;
 
   readonly compliance: Signal<ReadonlyMap<RequirementId, ComplianceEntry>>;
+  readonly complianceEvents: Signal<readonly ComplianceEvent[]>;
   readonly risks: Signal<readonly Risk[]>;
   readonly actions: Signal<readonly Action[]>;
   readonly tags: Signal<readonly Tag[]>;
@@ -87,6 +92,7 @@ export class AppStore {
   constructor(db: PspfDb) {
     this.db = db;
     this.compliance = signal(new Map());
+    this.complianceEvents = signal([]);
     this.risks = signal([]);
     this.actions = signal([]);
     this.tags = signal([]);
@@ -108,6 +114,7 @@ export class AppStore {
   async loadAll(): Promise<void> {
     const [
       compliance,
+      complianceEvents,
       risks,
       actions,
       tags,
@@ -118,6 +125,7 @@ export class AppStore {
       posture,
     ] = await Promise.all([
       listCompliance(this.db),
+      listComplianceEvents(this.db),
       listRisks(this.db),
       listActions(this.db),
       listTags(this.db),
@@ -128,6 +136,7 @@ export class AppStore {
       getPosture(this.db),
     ]);
     this.compliance.value = new Map(compliance.map((e) => [e.requirementId, e]));
+    this.complianceEvents.value = complianceEvents;
     this.risks.value = risks;
     this.actions.value = actions;
     this.tags.value = tags;
@@ -149,6 +158,12 @@ export class AppStore {
   ): Promise<ComplianceEntry> {
     const existing = this.compliance.value.get(requirementId);
     const now = new Date().toISOString();
+    const nextNotes =
+      patch.notes === undefined
+        ? existing?.notes
+        : patch.notes.trim() === ''
+          ? undefined
+          : patch.notes.trim();
     const entry: ComplianceEntry = {
       requirementId,
       state: patch.state,
@@ -156,11 +171,27 @@ export class AppStore {
       ...(patch.targetMaturity !== undefined ? { targetMaturity: patch.targetMaturity } : {}),
       ...(patch.reviewedAt !== undefined ? { reviewedAt: patch.reviewedAt } : {}),
       ...(patch.reviewer !== undefined ? { reviewer: patch.reviewer } : {}),
-      ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+      ...(nextNotes !== undefined ? { notes: nextNotes } : {}),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
     await putCompliance(this.db, entry);
+
+    const fromState: ComplianceState = existing?.state ?? 'not-set';
+    if (fromState !== entry.state) {
+      const event: ComplianceEvent = {
+        id: newId(),
+        requirementId,
+        fromState,
+        toState: entry.state,
+        ...(entry.notes !== undefined ? { noteSnapshot: entry.notes } : {}),
+        createdAt: now,
+        updatedAt: now,
+      };
+      await putComplianceEvent(this.db, event);
+      this.complianceEvents.value = [...this.complianceEvents.value, event];
+    }
+
     const next = new Map(this.compliance.value);
     next.set(requirementId, entry);
     this.compliance.value = next;
@@ -212,6 +243,10 @@ export class AppStore {
 
   async complianceCount(): Promise<number> {
     return countCompliance(this.db);
+  }
+
+  async complianceHistory(requirementId: RequirementId): Promise<readonly ComplianceEvent[]> {
+    return complianceEventsForRequirement(this.db, requirementId);
   }
 
   // ---------- Risks ----------

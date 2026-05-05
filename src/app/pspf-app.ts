@@ -52,6 +52,23 @@ export class PspfApp extends LitElement {
         border-radius: var(--radius-sm);
       }
 
+      .header-labels {
+        display: flex;
+        gap: var(--space-2);
+        align-items: center;
+      }
+
+      .tlp {
+        font-size: var(--text-xs);
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #111827;
+        background: #f59e0b;
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-sm);
+      }
+
       nav {
         display: flex;
         flex-wrap: wrap;
@@ -145,9 +162,12 @@ export class PspfApp extends LitElement {
     return html`
       <header>
         <h1><a href="#/">PSPF Explorer</a></h1>
-        <span class="classification" aria-label="Information classification"
-          >OFFICIAL: Sensitive</span
-        >
+        <div class="header-labels">
+          <span class="classification" aria-label="Information classification"
+            >OFFICIAL: Sensitive</span
+          >
+          <span class="tlp" aria-label="Traffic Light Protocol marking">TLP:AMBER+STRICT</span>
+        </div>
       </header>
       <nav aria-label="Primary">
         ${NAV_ROUTES.map((r) => html`<a href="#${r.path}">${r.label}</a>`)}

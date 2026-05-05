@@ -102,11 +102,11 @@ export class CoverageView extends LitElement {
       <article>
         <h2>Coverage matrix</h2>
         <p>
-          Per-domain compliance state breakdown. The Compliant % column is the share of requirements
-          with state &ldquo;Yes&rdquo;.
+          Per-domain compliance state breakdown. The Fully implemented % column is the share of
+          requirements marked fully implemented for that domain.
         </p>
-        <div class="panel">
-          <table aria-label="Compliance coverage by domain and state">
+        <div class="panel" data-testid="coverage-matrix">
+          <table aria-label="Coverage matrix by domain and state">
             <thead>
               <tr>
                 <th scope="col">Domain</th>
@@ -121,7 +121,7 @@ export class CoverageView extends LitElement {
                     </th>`,
                 )}
                 <th class="numeric" scope="col">Total</th>
-                <th class="numeric" scope="col">Compliant&nbsp;%</th>
+                <th class="numeric" scope="col">Fully implemented&nbsp;%</th>
               </tr>
             </thead>
             <tbody>

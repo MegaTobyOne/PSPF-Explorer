@@ -20,11 +20,14 @@ import {
   type WorkTrackingEntry,
 } from './types.ts';
 import {
+  complianceEventsForRequirement,
   countCompliance,
   deleteCompliance,
   getCompliance,
   listCompliance,
+  listComplianceEvents,
   putCompliance,
+  putComplianceEvent,
 } from './compliance-store.ts';
 import {
   deleteAction,
@@ -72,12 +75,13 @@ afterEach(async () => {
 
 describe('IndexedDB layer', () => {
   it('opens at version 1 with all expected stores', () => {
-    expect(db.version).toBe(1);
+    expect(db.version).toBe(2);
     const names = [...db.objectStoreNames].sort();
     expect(names).toEqual(
       [
         'actions',
         'compliance',
+        'complianceEvents',
         'directions',
         'meta',
         'posture',
@@ -105,6 +109,23 @@ describe('IndexedDB layer', () => {
     expect(await listCompliance(db)).toHaveLength(1);
     await deleteCompliance(db, id);
     expect(await getCompliance(db, id)).toBeUndefined();
+  });
+
+  it('compliance events: append and query by requirement', async () => {
+    const requirementId = asRequirementId('GOV-001');
+    await putComplianceEvent(db, {
+      id: 'evt-1',
+      requirementId,
+      fromState: 'not-set',
+      toState: 'no',
+      noteSnapshot: 'Gap identified',
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    expect(await listComplianceEvents(db)).toHaveLength(1);
+    expect(await complianceEventsForRequirement(db, requirementId)).toHaveLength(1);
+    expect(await complianceEventsForRequirement(db, asRequirementId('GOV-002'))).toEqual([]);
   });
 
   it('risks / actions / tags: CRUD via generic store helpers', async () => {

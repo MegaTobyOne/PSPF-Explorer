@@ -127,7 +127,7 @@ export class AnalyticsView extends LitElement {
           <div class="kpi-grid">
             <div class="kpi">
               <div class="value" data-kpi="compliant-pct">${breakdown.compliantPct}%</div>
-              <div class="label">Compliant (excl. n/a)</div>
+              <div class="label">Fully implemented (excl. n/a)</div>
             </div>
             <div class="kpi">
               <div class="value" data-kpi="not-set">${breakdown.byState['not-set']}</div>
@@ -152,7 +152,7 @@ export class AnalyticsView extends LitElement {
             <thead>
               <tr>
                 <th>Domain</th>
-                <th>Compliant %</th>
+                <th>Fully implemented %</th>
                 <th aria-label="Bar"></th>
                 <th>Total</th>
               </tr>

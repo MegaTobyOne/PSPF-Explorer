@@ -7,6 +7,7 @@ import { SignalWatcher } from '../state/signal-watcher.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { summariseAllDomains, type DomainSummary } from '../domain/summary.ts';
 import type { ComplianceEntry, RequirementId } from '../data/types.ts';
+import '../components/breadcrumbs.ts';
 
 @customElement('pspf-home-view')
 export class HomeView extends LitElement {
@@ -93,6 +94,7 @@ export class HomeView extends LitElement {
     const summaries = summariseAllDomains(compliance);
     return html`
       <article>
+        <pspf-breadcrumbs .items=${[{ label: 'Home' }]}></pspf-breadcrumbs>
         <h2>PSPF domains</h2>
         <p class="lede">
           Welcome to PSPF Explorer v3. Select a domain to start working through its requirements.
@@ -113,7 +115,7 @@ export class HomeView extends LitElement {
           <h3>${s.domain.name}</h3>
           <p>${s.domain.description}</p>
           <div class="meter">
-            <div>${s.byState.yes} of ${s.total} compliant · ${pct}%</div>
+            <div>${s.byState.yes} of ${s.total} fully implemented · ${pct}%</div>
             <div
               class="bar"
               role="progressbar"

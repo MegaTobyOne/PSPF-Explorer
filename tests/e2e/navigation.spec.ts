@@ -7,6 +7,9 @@ test('home view renders all six domains and links to domain pages', async ({ pag
 
   // Wait for store boot + router mount.
   await expect(app.getByRole('heading', { name: 'PSPF domains' })).toBeVisible();
+  await expect(app).toContainText('OFFICIAL: Sensitive');
+  await expect(app).toContainText('TLP:AMBER+STRICT');
+  await expect(page.locator('pspf-home-view pspf-breadcrumbs')).toContainText('Home');
 
   for (const name of ['Governance', 'Information', 'Personnel', 'Physical', 'Risk', 'Technology']) {
     await expect(app.getByRole('link', { name: new RegExp(name) }).first()).toBeVisible();
@@ -29,11 +32,14 @@ test('navigates to a domain page and back to home', async ({ page }) => {
 
   await expect(page.locator('pspf-domain-view')).toBeVisible();
   await expect(page.locator('pspf-domain-view').getByRole('heading')).toHaveText(/Governance/);
+  await expect(page.locator('pspf-domain-view pspf-breadcrumbs')).toContainText('Home');
+  await expect(page.locator('pspf-domain-view pspf-breadcrumbs')).toContainText('Governance');
 
   // First requirement link should navigate to a requirement view.
   await page.locator('pspf-domain-view').getByRole('link').first().click();
   const reqView = page.locator('pspf-requirement-view');
   await expect(reqView).toBeVisible();
+  await expect(reqView.locator('pspf-breadcrumbs')).toContainText('Home');
   // Compliance badge defaults to 'Not set' for an untouched requirement.
   await expect(reqView.locator('pspf-compliance-badge')).toContainText('Not set');
 });

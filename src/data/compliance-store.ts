@@ -3,7 +3,7 @@
  */
 
 import type { PspfDb } from './db.ts';
-import type { ComplianceEntry, RequirementId } from './types.ts';
+import type { ComplianceEntry, ComplianceEvent, RequirementId } from './types.ts';
 
 export async function getCompliance(
   db: PspfDb,
@@ -26,4 +26,19 @@ export async function deleteCompliance(db: PspfDb, id: RequirementId): Promise<v
 
 export async function countCompliance(db: PspfDb): Promise<number> {
   return db.count('compliance');
+}
+
+export async function listComplianceEvents(db: PspfDb): Promise<ComplianceEvent[]> {
+  return db.getAll('complianceEvents');
+}
+
+export async function putComplianceEvent(db: PspfDb, event: ComplianceEvent): Promise<void> {
+  await db.put('complianceEvents', event);
+}
+
+export async function complianceEventsForRequirement(
+  db: PspfDb,
+  requirementId: RequirementId,
+): Promise<ComplianceEvent[]> {
+  return db.getAllFromIndex('complianceEvents', 'by-requirementId', requirementId);
 }

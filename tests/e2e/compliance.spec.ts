@@ -22,19 +22,28 @@ test('user can set compliance state and add evidence', async ({ page }) => {
   const editor = reqView.locator('pspf-compliance-editor');
   await expect(editor.getByRole('heading', { name: 'Update compliance' })).toBeVisible();
 
-  // Pick "Compliant".
-  await editor.getByRole('radio', { name: 'Compliant', exact: true }).check();
+  // Pick "Fully implemented".
+  await editor.getByRole('radio', { name: 'Fully implemented', exact: true }).check();
 
-  // Header badge should now read "Compliant".
-  await expect(reqView.locator('header pspf-compliance-badge')).toContainText('Compliant');
+  // Save a note and ensure it persists across status changes.
+  await editor.locator('textarea').fill('Initial implementation evidence captured');
+  await editor.getByRole('button', { name: 'Save notes' }).click();
+  await editor.getByRole('radio', { name: 'Risk-managed', exact: true }).check();
+  await expect(editor.locator('textarea')).toHaveValue('Initial implementation evidence captured');
+
+  // Header badge should now reflect the current state.
+  await expect(reqView.locator('header pspf-compliance-badge')).toContainText('Risk-managed');
+
+  // History should include the transition from fully implemented to risk-managed.
+  await expect(editor).toContainText('Fully implemented → Risk-managed');
 
   // Domain summary line should reflect the change after going back.
   await page.goBack();
-  await expect(page.locator('pspf-domain-view')).toContainText('1 compliant');
+  await expect(page.locator('pspf-domain-view')).toContainText('0 fully implemented');
 
   // Add an evidence URL.
   await page.locator('pspf-domain-view').getByRole('link').first().click();
   await editor.getByLabel('Evidence value').fill('https://example.gov.au/policy');
   await editor.getByRole('button', { name: 'Add' }).click();
-  await expect(editor.locator('ul li')).toContainText('https://example.gov.au/policy');
+  await expect(editor.locator('ul.evidence li')).toContainText('https://example.gov.au/policy');
 });

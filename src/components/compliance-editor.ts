@@ -5,6 +5,7 @@ import { designTokens } from '../app/design-tokens.ts';
 import {
   COMPLIANCE_STATES,
   type ComplianceEntry,
+  type ComplianceEvent,
   type ComplianceState,
   type EvidenceRef,
   type RequirementId,
@@ -139,6 +140,25 @@ export class ComplianceEditor extends LitElement {
         gap: var(--space-2);
         margin-top: var(--space-3);
       }
+      ul.history {
+        list-style: none;
+        margin: var(--space-2) 0 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+      ul.history li {
+        font-size: var(--text-sm);
+        padding: var(--space-1) var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-sm);
+        background: var(--colour-bg);
+      }
+      .history-meta {
+        color: var(--colour-fg-muted);
+        font-size: var(--text-xs);
+      }
     `,
   ];
 
@@ -148,7 +168,9 @@ export class ComplianceEditor extends LitElement {
   private store: AppStore | undefined;
 
   // eslint-disable-next-line no-unused-private-class-members
-  #watcher = new SignalWatcher(this, () => (this.store ? [this.store.compliance] : []));
+  #watcher = new SignalWatcher(this, () =>
+    this.store ? [this.store.compliance, this.store.complianceEvents] : [],
+  );
 
   @state() private evidenceKind: EvidenceRef['kind'] = 'url';
   @state() private evidenceValue = '';
@@ -160,6 +182,14 @@ export class ComplianceEditor extends LitElement {
 
   private get notes(): string {
     return this.notesDraft ?? this.entry?.notes ?? '';
+  }
+
+  private get history(): readonly ComplianceEvent[] {
+    const events = this.store?.complianceEvents.value ?? [];
+    return events
+      .filter((event) => event.requirementId === this.requirementId)
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   override render(): TemplateResult {
@@ -283,6 +313,30 @@ export class ComplianceEditor extends LitElement {
             </div>
           `
         : ''}
+
+      <fieldset>
+        <legend>Status history</legend>
+        ${this.history.length === 0
+          ? html`<p class="empty">No status changes recorded yet.</p>`
+          : html`
+              <ul class="history">
+                ${this.history.map(
+                  (event) => html`
+                    <li>
+                      <div>
+                        ${complianceLabel(event.fromState)} → ${complianceLabel(event.toState)}
+                      </div>
+                      <div class="history-meta">
+                        ${event.createdAt}${event.noteSnapshot
+                          ? html` · note: ${event.noteSnapshot}`
+                          : ''}
+                      </div>
+                    </li>
+                  `,
+                )}
+              </ul>
+            `}
+      </fieldset>
     `;
   }
 
@@ -297,7 +351,7 @@ export class ComplianceEditor extends LitElement {
     const trimmed = (this.notesDraft ?? '').trim();
     await this.store.setCompliance(this.requirementId, {
       state: entry?.state ?? 'not-set',
-      ...(trimmed === '' ? {} : { notes: trimmed }),
+      notes: trimmed,
     });
     this.notesDraft = undefined;
   }

@@ -59,6 +59,27 @@ describe('AppStore', () => {
     expect(second.updatedAt >= first.updatedAt).toBe(true);
   });
 
+  it('setCompliance preserves notes when changing only status', async () => {
+    const id = asRequirementId('GOV-006');
+    await store.setCompliance(id, { state: 'no', notes: 'Initial gap note' });
+    await store.setCompliance(id, { state: 'risk-managed' });
+    expect(store.compliance.value.get(id)?.notes).toBe('Initial gap note');
+  });
+
+  it('setCompliance writes compliance events when status changes', async () => {
+    const id = asRequirementId('GOV-007');
+    await store.setCompliance(id, { state: 'not-set' });
+    await store.setCompliance(id, { state: 'no', notes: 'Control not implemented yet' });
+    await store.setCompliance(id, { state: 'yes' });
+
+    const history = await store.complianceHistory(id);
+    expect(history).toHaveLength(2);
+    expect(history[0]?.fromState).toBe('not-set');
+    expect(history[0]?.toState).toBe('no');
+    expect(history[1]?.fromState).toBe('no');
+    expect(history[1]?.toState).toBe('yes');
+  });
+
   it('addEvidence appends to the list', async () => {
     const id = asRequirementId('GOV-003');
     await store.addEvidence(id, { kind: 'note', value: 'first', addedAt: '2025-01-01' });

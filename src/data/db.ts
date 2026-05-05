@@ -9,6 +9,7 @@ import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction } from '
 import type {
   Action,
   ComplianceEntry,
+  ComplianceEvent,
   Direction,
   PostureRecord,
   Relationship,
@@ -19,7 +20,7 @@ import type {
 } from './types.ts';
 
 export const DB_NAME = 'pspf-explorer.v3';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export const POSTURE_KEY = '__posture__' as const;
 
@@ -34,6 +35,11 @@ export interface PspfDbSchema extends DBSchema {
     key: string;
     value: ComplianceEntry;
     indexes: { 'by-state': string; 'by-updatedAt': string };
+  };
+  complianceEvents: {
+    key: string;
+    value: ComplianceEvent;
+    indexes: { 'by-requirementId': string; 'by-createdAt': string };
   };
   risks: {
     key: string;
@@ -80,6 +86,7 @@ export interface PspfDbSchema extends DBSchema {
 export type PspfDb = IDBPDatabase<PspfDbSchema>;
 export type PspfStoreNames =
   | 'compliance'
+  | 'complianceEvents'
   | 'risks'
   | 'actions'
   | 'tags'
@@ -122,6 +129,12 @@ const migrations: ((db: PspfDb) => void)[] = [
     relationships.createIndex('by-kind', 'kind');
 
     db.createObjectStore('meta', { keyPath: 'key' });
+  },
+  // Migration to v2.
+  (db) => {
+    const complianceEvents = db.createObjectStore('complianceEvents', { keyPath: 'id' });
+    complianceEvents.createIndex('by-requirementId', 'requirementId');
+    complianceEvents.createIndex('by-createdAt', 'createdAt');
   },
 ];
 

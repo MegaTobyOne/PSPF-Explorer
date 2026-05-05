@@ -128,6 +128,14 @@ export interface ComplianceEntry extends BaseRecord {
   notes?: string;
 }
 
+export interface ComplianceEvent extends BaseRecord {
+  id: string;
+  requirementId: RequirementId;
+  fromState: ComplianceState;
+  toState: ComplianceState;
+  noteSnapshot?: string;
+}
+
 // ---------- Risk ----------
 
 export const RISK_STATUSES = ['open', 'monitored', 'closed'] as const;

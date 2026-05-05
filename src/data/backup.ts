@@ -16,6 +16,7 @@ const BACKUP_FORMAT = 'v1' as const;
 
 const STORE_NAMES = [
   'compliance',
+  'complianceEvents',
   'risks',
   'actions',
   'tags',

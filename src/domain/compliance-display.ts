@@ -8,9 +8,9 @@ import type { ComplianceState } from '../data/types.ts';
 export function complianceLabel(state: ComplianceState): string {
   switch (state) {
     case 'yes':
-      return 'Compliant';
+      return 'Fully implemented';
     case 'no':
-      return 'Not compliant';
+      return 'Not yet implemented';
     case 'risk-managed':
       return 'Risk-managed';
     case 'not-applicable':

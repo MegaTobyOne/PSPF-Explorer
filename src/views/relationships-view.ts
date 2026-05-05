@@ -6,6 +6,7 @@ import type { Relationship, RelationshipKind } from '../data/types.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
+import { allRequirements } from '../pspf/index.ts';
 
 const KINDS: readonly {
   value: RelationshipKind;
@@ -151,10 +152,14 @@ export class RelationshipsView extends LitElement {
   @state() private accessor right = '';
   @state() private accessor filterKind: RelationshipKind | 'all' = 'all';
 
+  #requirementIds = new Set(allRequirements.map((req) => req.id));
+
   override render(): TemplateResult {
     const all = this.store?.relationships.value ?? [];
     const visible = this.filterKind === 'all' ? all : all.filter((r) => r.kind === this.filterKind);
     const meta = KINDS.find((k) => k.value === this.kind) ?? KINDS[0]!;
+    const leftOptions = this.#endpointOptions(this.kind, 'left');
+    const rightOptions = this.#endpointOptions(this.kind, 'right');
 
     return html`
       <article>
@@ -192,22 +197,30 @@ export class RelationshipsView extends LitElement {
             <input
               type="text"
               required
+              list="left-endpoint-options"
               .value=${this.left}
               @input=${(e: Event): void => {
                 this.left = (e.target as HTMLInputElement).value;
               }}
             />
+            <datalist id="left-endpoint-options">
+              ${leftOptions.map((id) => html`<option value=${id}></option>`)}
+            </datalist>
           </label>
           <label class="field">
             ${meta.right}
             <input
               type="text"
               required
+              list="right-endpoint-options"
               .value=${this.right}
               @input=${(e: Event): void => {
                 this.right = (e.target as HTMLInputElement).value;
               }}
             />
+            <datalist id="right-endpoint-options">
+              ${rightOptions.map((id) => html`<option value=${id}></option>`)}
+            </datalist>
           </label>
           <button class="primary" type="submit" ?disabled=${!this.#canCreate()}>Add link</button>
         </form>
@@ -268,7 +281,13 @@ export class RelationshipsView extends LitElement {
   }
 
   #canCreate(): boolean {
-    return this.left.trim().length > 0 && this.right.trim().length > 0;
+    const left = this.left.trim();
+    const right = this.right.trim();
+    if (left.length === 0 || right.length === 0) return false;
+    return (
+      this.#isValidEndpoint(this.kind, 'left', left) &&
+      this.#isValidEndpoint(this.kind, 'right', right)
+    );
   }
 
   async #create(): Promise<void> {
@@ -279,6 +298,29 @@ export class RelationshipsView extends LitElement {
     });
     this.left = '';
     this.right = '';
+  }
+
+  #endpointOptions(kind: RelationshipKind, side: 'left' | 'right'): readonly string[] {
+    const risks = this.store?.risks.value.map((risk) => risk.id) ?? [];
+    const actions = this.store?.actions.value.map((action) => action.id) ?? [];
+    const directions = this.store?.directions.value.map((direction) => direction.id) ?? [];
+    switch (kind) {
+      case 'requirement-risk':
+        return side === 'left' ? [...this.#requirementIds] : risks;
+      case 'requirement-action':
+        return side === 'left' ? [...this.#requirementIds] : actions;
+      case 'risk-action':
+        return side === 'left' ? risks : actions;
+      case 'requirement-direction':
+        return side === 'left' ? [...this.#requirementIds] : directions;
+    }
+  }
+
+  #isValidEndpoint(kind: RelationshipKind, side: 'left' | 'right', id: string): boolean {
+    const value = id.trim();
+    if (value.length === 0) return false;
+    const options = this.#endpointOptions(kind, side);
+    return options.includes(value);
   }
 
   async #remove(r: Relationship): Promise<void> {
