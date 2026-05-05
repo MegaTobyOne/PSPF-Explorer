@@ -11,6 +11,12 @@ test('home view renders all six domains and links to domain pages', async ({ pag
   for (const name of ['Governance', 'Information', 'Personnel', 'Physical', 'Risk', 'Technology']) {
     await expect(app.getByRole('link', { name: new RegExp(name) }).first()).toBeVisible();
   }
+
+  // Each domain card has a progress meter starting at 0%.
+  await expect(app.getByRole('progressbar')).toHaveCount(6);
+  for (const bar of await app.getByRole('progressbar').all()) {
+    await expect(bar).toHaveAttribute('aria-valuenow', '0');
+  }
 });
 
 test('navigates to a domain page and back to home', async ({ page }) => {
