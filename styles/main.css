@@ -72,6 +72,7 @@
     --chip-br-warning: rgba(245, 158, 11, 0.35);
     --chip-bg-danger: rgba(239, 68, 68, 0.15);
     --chip-br-danger: rgba(239, 68, 68, 0.35);
+    --chip-bg-danger-hover: rgba(239, 68, 68, 0.25);
     --chip-bg-orange: rgba(249, 115, 22, 0.15);
     --chip-br-orange: rgba(249, 115, 22, 0.35);
 }
@@ -6776,9 +6777,9 @@ select:focus-visible {
 
 /* Posture control card */
 .posture-control-card {
-    background: var(--card-background, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
-    border-radius: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
     padding: 1.25rem 1.5rem;
     margin-bottom: 1.5rem;
 }
@@ -6833,7 +6834,7 @@ select:focus-visible {
 
 .posture-level-btn {
     padding: 0.35rem 0.8rem;
-    border: 1.5px solid var(--border-color, #e5e7eb);
+    border: 1.5px solid var(--border-light);
     border-radius: 99px;
     font-size: 0.82rem;
     font-weight: 500;
@@ -6844,7 +6845,7 @@ select:focus-visible {
 }
 
 .posture-level-btn:hover {
-    background: var(--bg-hover, #f3f4f6);
+    background: var(--bg-elevated);
 }
 
 .posture-level-btn.active {
@@ -6855,9 +6856,9 @@ select:focus-visible {
 }
 
 .posture-level-btn.posture-active {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #1d4ed8;
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
 }
 
 /* Threat + posture badges */
@@ -6882,7 +6883,7 @@ select:focus-visible {
 
 /* Per-domain overrides */
 .posture-domain-overrides {
-    border-top: 1px solid var(--border-color, #e5e7eb);
+    border-top: 1px solid var(--border-light);
     padding-top: 0.75rem;
     margin-top: 0.25rem;
 }
@@ -6912,7 +6913,7 @@ select:focus-visible {
     letter-spacing: 0.04em;
     color: var(--text-secondary, #6b7280);
     padding: 0.3rem 0.6rem;
-    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    border-bottom: 1px solid var(--border-light);
 }
 
 .posture-domain-table td {
@@ -6928,16 +6929,17 @@ select:focus-visible {
 .posture-domain-select {
     font-size: 0.78rem;
     padding: 0.2rem 0.4rem;
-    border: 1px solid var(--border-color, #e5e7eb);
-    border-radius: 6px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
     background: var(--bg-secondary, #f9fafb);
+    color: var(--text-primary);
 }
 
 /* Target maturity control */
 .target-maturity-control {
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--border-color, #e5e7eb);
+    border-top: 1px solid var(--border-light);
 }
 
 .target-maturity-control h5 {
@@ -6953,7 +6955,7 @@ select:focus-visible {
 
 .maturity-btn {
     padding: 0.3rem 0.75rem;
-    border: 1.5px solid var(--border-color, #e5e7eb);
+    border: 1.5px solid var(--border-light);
     border-radius: 8px;
     font-size: 0.8rem;
     font-weight: 500;
@@ -6964,13 +6966,13 @@ select:focus-visible {
 }
 
 .maturity-btn:hover {
-    background: var(--bg-hover, #f3f4f6);
+    background: var(--bg-elevated);
 }
 
 .maturity-btn.active {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #1d4ed8;
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
     font-weight: 600;
 }
 
@@ -6989,7 +6991,7 @@ select:focus-visible {
 .map-tab-bar {
     display: flex;
     gap: 0;
-    border-bottom: 2px solid var(--border-color, #e5e7eb);
+    border-bottom: 2px solid var(--border-light);
     margin-bottom: 1rem;
 }
 
@@ -7017,13 +7019,13 @@ select:focus-visible {
 }
 
 .map-focus-mode-btn {
-    color: #dc2626;
-    border-color: #fca5a5;
-    background: #fff5f5;
+    color: var(--danger-color);
+    border-color: var(--chip-br-danger);
+    background: var(--chip-bg-danger);
 }
 
 .map-focus-mode-btn:hover {
-    background: #fee2e2;
+    background: var(--chip-bg-danger-hover);
 }
 
 /* Coverage matrix */
@@ -7056,7 +7058,7 @@ select:focus-visible {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     background: var(--bg-secondary, #f9fafb);
-    border-bottom: 2px solid var(--border-color, #e5e7eb);
+    border-bottom: 2px solid var(--border-light);
     position: sticky;
     top: 0;
     z-index: 2;
@@ -7069,7 +7071,7 @@ select:focus-visible {
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.35rem 0.6rem;
-    border-top: 1px solid var(--border-color, #e5e7eb);
+    border-top: 1px solid var(--border-light);
     position: static;
 }
 
