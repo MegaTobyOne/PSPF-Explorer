@@ -167,6 +167,21 @@ export class AppStore {
     this.compliance.value = next;
   }
 
+  async removeEvidence(requirementId: RequirementId, index: number): Promise<void> {
+    const existing = this.compliance.value.get(requirementId);
+    if (!existing) return;
+    if (index < 0 || index >= existing.evidence.length) return;
+    const evidence = existing.evidence.filter((_, i) => i !== index);
+    await this.setCompliance(requirementId, {
+      state: existing.state,
+      evidence,
+      ...(existing.targetMaturity !== undefined ? { targetMaturity: existing.targetMaturity } : {}),
+      ...(existing.reviewedAt !== undefined ? { reviewedAt: existing.reviewedAt } : {}),
+      ...(existing.reviewer !== undefined ? { reviewer: existing.reviewer } : {}),
+      ...(existing.notes !== undefined ? { notes: existing.notes } : {}),
+    });
+  }
+
   async complianceCount(): Promise<number> {
     return countCompliance(this.db);
   }

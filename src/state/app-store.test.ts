@@ -68,6 +68,29 @@ describe('AppStore', () => {
     expect(entry?.state).toBe('not-set');
   });
 
+  it('removeEvidence drops the entry at the given index and is a no-op for invalid input', async () => {
+    const id = asRequirementId('GOV-004');
+    await store.addEvidence(id, { kind: 'note', value: 'a', addedAt: '2025-01-01' });
+    await store.addEvidence(id, { kind: 'note', value: 'b', addedAt: '2025-01-02' });
+    await store.addEvidence(id, { kind: 'note', value: 'c', addedAt: '2025-01-03' });
+    await store.removeEvidence(id, 1);
+    const entry = store.compliance.value.get(id);
+    expect(entry?.evidence.map((e) => e.value)).toEqual(['a', 'c']);
+    // Out-of-range index is a safe no-op.
+    await store.removeEvidence(id, 99);
+    expect(store.compliance.value.get(id)?.evidence).toHaveLength(2);
+    // Unknown requirement is a safe no-op.
+    await store.removeEvidence(asRequirementId('GOV-999'), 0);
+  });
+
+  it('clearCompliance removes both DB row and signal entry', async () => {
+    const id = asRequirementId('GOV-005');
+    await store.setCompliance(id, { state: 'yes', notes: 'done' });
+    expect(store.compliance.value.has(id)).toBe(true);
+    await store.clearCompliance(id);
+    expect(store.compliance.value.has(id)).toBe(false);
+  });
+
   it('createRisk / updateRisk / removeRisk roundtrip via signal and DB', async () => {
     const r = await store.createRisk({
       title: 'Phishing',
