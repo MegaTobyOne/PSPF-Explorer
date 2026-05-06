@@ -150,8 +150,14 @@ export async function openPspfDb(name: string = DB_NAME): Promise<PspfDb> {
     blocked() {
       console.warn('[pspf-db] open blocked by another tab.');
     },
-    blocking() {
-      console.warn('[pspf-db] this tab is blocking a newer version.');
+    blocking(_currentVersion, blockedVersion) {
+      // Only reload to release the lock when a newer app version needs to
+      // upgrade. Do not reload on database deletion (blockedVersion === null),
+      // which would abort in-progress teardown (e.g. test cleanup).
+      if (blockedVersion !== null) {
+        console.warn('[pspf-db] this tab is blocking a newer version — reloading to release.');
+        window.location.reload();
+      }
     },
     terminated() {
       console.error('[pspf-db] connection terminated unexpectedly.');
