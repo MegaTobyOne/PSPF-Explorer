@@ -75,7 +75,7 @@ afterEach(async () => {
 
 describe('IndexedDB layer', () => {
   it('opens at version 1 with all expected stores', () => {
-    expect(db.version).toBe(2);
+    expect(db.version).toBe(3);
     const names = [...db.objectStoreNames].sort();
     expect(names).toEqual(
       [
@@ -224,6 +224,8 @@ describe('IndexedDB layer', () => {
       title: 'Foreign interference',
       issuedAt: NOW,
       requirementIds: [],
+      responseState: 'not-set',
+      evidence: [],
       createdAt: NOW,
       updatedAt: NOW,
     };

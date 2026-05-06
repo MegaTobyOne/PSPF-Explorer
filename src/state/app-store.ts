@@ -58,6 +58,7 @@ import {
   type ComplianceState,
   type Direction,
   type DirectionId,
+  type DirectionResponseState,
   type Relationship,
   type RelationshipId,
   type EvidenceRef,
@@ -73,6 +74,25 @@ import {
   type WorkTrackingEntry,
   type WorkTrackingId,
 } from '../data/types.ts';
+
+type DirectionInput = Omit<
+  Direction,
+  'id' | 'createdAt' | 'updatedAt' | 'responseState' | 'evidence'
+> &
+  Partial<Pick<Direction, 'responseState' | 'evidence'>>;
+
+type DirectionPatch = Partial<Omit<Direction, 'description' | 'responseNotes'>> & {
+  description?: string | undefined;
+  responseNotes?: string | undefined;
+};
+
+function normaliseDirection(direction: Direction): Direction {
+  return {
+    ...direction,
+    responseState: direction.responseState ?? ('not-set' satisfies DirectionResponseState),
+    evidence: direction.evidence ?? [],
+  };
+}
 
 export class AppStore {
   readonly db: PspfDb;
@@ -142,7 +162,7 @@ export class AppStore {
     this.tags.value = tags;
     this.savedViews.value = savedViews;
     this.workTracking.value = workTracking;
-    this.directions.value = directions;
+    this.directions.value = directions.map(normaliseDirection);
     this.relationships.value = relationships;
     this.posture.value = posture;
     this.ready.value = true;
@@ -377,12 +397,12 @@ export class AppStore {
 
   // ---------- Directions ----------
 
-  async createDirection(
-    input: Omit<Direction, 'id' | 'createdAt' | 'updatedAt'>,
-  ): Promise<Direction> {
+  async createDirection(input: DirectionInput): Promise<Direction> {
     const now = new Date().toISOString();
     const direction: Direction = {
       ...input,
+      responseState: input.responseState ?? 'not-set',
+      evidence: input.evidence ?? [],
       id: asDirectionId(newId()),
       createdAt: now,
       updatedAt: now,
@@ -392,15 +412,22 @@ export class AppStore {
     return direction;
   }
 
-  async updateDirection(id: DirectionId, patch: Partial<Direction>): Promise<Direction> {
+  async updateDirection(id: DirectionId, patch: DirectionPatch): Promise<Direction> {
     const existing = this.directions.value.find((d) => d.id === id);
     if (!existing) throw new Error(`Direction ${id} not found`);
-    const updated: Direction = {
+    const merged = {
       ...existing,
       ...patch,
       id,
       updatedAt: new Date().toISOString(),
-    };
+    } as Direction & { description?: string | undefined; responseNotes?: string | undefined };
+    if (Object.hasOwn(patch, 'description') && patch.description === undefined) {
+      delete merged.description;
+    }
+    if (Object.hasOwn(patch, 'responseNotes') && patch.responseNotes === undefined) {
+      delete merged.responseNotes;
+    }
+    const updated: Direction = normaliseDirection(merged);
     await putDirection(this.db, updated);
     this.directions.value = this.directions.value.map((d) => (d.id === id ? updated : d));
     return updated;

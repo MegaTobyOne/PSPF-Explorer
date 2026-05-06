@@ -3,14 +3,26 @@
  *
  * Directions are ad-hoc supplementary instructions issued by Home Affairs
  * (or sector-specific authorities) that bind to one or more PSPF
- * requirements. This view supports CRUD over the `directions` store.
+ * requirements. This view supports CRUD plus response tracking.
  */
 
 import { LitElement, css, html, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { designTokens } from '../app/design-tokens.ts';
-import { asRequirementId, type Direction, type DirectionId } from '../data/types.ts';
+import {
+  DIRECTION_RESPONSE_STATES,
+  asRequirementId,
+  type Direction,
+  type DirectionId,
+  type DirectionResponseState,
+  type EvidenceRef,
+} from '../data/types.ts';
+import {
+  directionResponseLabel,
+  directionSummary,
+  directionsRegisterSummary,
+} from '../domain/reporting.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
@@ -23,6 +35,12 @@ function parseRequirementIds(raw: string): readonly ReturnType<typeof asRequirem
     .map(asRequirementId);
 }
 
+function evidence(kind: EvidenceRef['kind'], value: string): EvidenceRef | undefined {
+  const clean = value.trim();
+  if (!clean) return undefined;
+  return { kind, value: clean, addedAt: new Date().toISOString() };
+}
+
 @customElement('pspf-directions-view')
 export class DirectionsView extends LitElement {
   static override styles = [
@@ -32,25 +50,68 @@ export class DirectionsView extends LitElement {
         display: block;
       }
       h2 {
-        margin: 0 0 var(--space-3) 0;
+        margin: 0 0 var(--space-2) 0;
         font-size: var(--text-xl);
       }
-      form.create {
+      .intro {
+        margin: 0 0 var(--space-3) 0;
+        color: var(--colour-fg-muted);
+      }
+      .summary {
         display: grid;
-        grid-template-columns: 8rem 1fr 10rem auto;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
+      }
+      .metric {
+        padding: var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+      }
+      .metric strong {
+        display: block;
+        font-size: var(--text-lg);
+      }
+      .metric span {
+        color: var(--colour-fg-muted);
+        font-size: var(--text-xs);
+      }
+      form.create,
+      form.edit {
+        display: grid;
+        grid-template-columns: 8rem 1fr 10rem 12rem auto;
         gap: var(--space-2);
         align-items: end;
         padding: var(--space-3);
         border: 1px solid var(--colour-border);
         border-radius: var(--radius-md);
         margin-bottom: var(--space-3);
+        background: var(--colour-bg-elevated);
       }
-      form.create .full {
+      form.create .full,
+      form.edit .full {
         grid-column: 1 / -1;
       }
-      @media (max-width: 800px) {
-        form.create {
-          grid-template-columns: 1fr 1fr;
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-2);
+        align-items: center;
+        margin-bottom: var(--space-3);
+        flex-wrap: wrap;
+      }
+      .filters {
+        display: flex;
+        gap: var(--space-2);
+        align-items: end;
+        flex-wrap: wrap;
+      }
+      @media (max-width: 900px) {
+        .summary,
+        form.create,
+        form.edit {
+          grid-template-columns: 1fr;
         }
       }
       label.field {
@@ -61,7 +122,8 @@ export class DirectionsView extends LitElement {
         color: var(--colour-fg-muted);
       }
       input,
-      textarea {
+      textarea,
+      select {
         font: inherit;
         color: inherit;
         background: var(--colour-bg);
@@ -107,18 +169,42 @@ export class DirectionsView extends LitElement {
         border-radius: var(--radius-md);
         background: var(--colour-bg-elevated);
       }
+      .item-head {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-2);
+        align-items: flex-start;
+      }
+      .response-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-sm);
+        background: var(--colour-bg);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        white-space: nowrap;
+      }
       .ref {
-        font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+        font-family: var(--font-family-mono);
         font-size: var(--text-sm);
         color: var(--colour-fg-muted);
       }
-      .meta {
+      .meta,
+      .evidence-list {
         display: flex;
         gap: var(--space-3);
         font-size: var(--text-xs);
         color: var(--colour-fg-muted);
         margin-top: var(--space-1);
         flex-wrap: wrap;
+      }
+      .response-notes {
+        padding: var(--space-2);
+        border-left: 3px solid var(--colour-accent);
+        background: var(--colour-bg);
+        margin: var(--space-2) 0 0;
       }
       .req-list {
         display: flex;
@@ -127,7 +213,7 @@ export class DirectionsView extends LitElement {
         margin-top: var(--space-1);
       }
       .req-list a {
-        font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+        font-family: var(--font-family-mono);
         font-size: var(--text-xs);
         background: var(--colour-bg);
         border: 1px solid var(--colour-border);
@@ -140,8 +226,10 @@ export class DirectionsView extends LitElement {
         display: flex;
         gap: var(--space-1);
         margin-top: var(--space-2);
+        flex-wrap: wrap;
       }
-      .empty {
+      .empty,
+      .copy-status {
         color: var(--colour-fg-muted);
         font-size: var(--text-sm);
       }
@@ -159,100 +247,197 @@ export class DirectionsView extends LitElement {
   @state() private accessor issuedAt = '';
   @state() private accessor description = '';
   @state() private accessor reqRefs = '';
+  @state() private accessor responseState: DirectionResponseState = 'not-set';
+  @state() private accessor responseNotes = '';
+  @state() private accessor evidenceKind: EvidenceRef['kind'] = 'note';
+  @state() private accessor evidenceValue = '';
 
+  @state() private accessor filterState: DirectionResponseState | 'all' = 'all';
   @state() private accessor editingId: DirectionId | null = null;
   @state() private accessor editReference = '';
   @state() private accessor editTitle = '';
   @state() private accessor editIssuedAt = '';
   @state() private accessor editDescription = '';
   @state() private accessor editReqRefs = '';
+  @state() private accessor editResponseState: DirectionResponseState = 'not-set';
+  @state() private accessor editResponseNotes = '';
+  @state() private accessor editEvidenceKind: EvidenceRef['kind'] = 'note';
+  @state() private accessor editEvidenceValue = '';
+  @state() private accessor copyStatus = '';
 
   override render(): TemplateResult {
     const directions = this.store?.directions.value ?? [];
+    const filtered =
+      this.filterState === 'all'
+        ? directions
+        : directions.filter((d) => d.responseState === this.filterState);
     return html`
       <article>
         <h2>Directions register</h2>
-        <p>
-          Track PSPF Directions issued by Home Affairs and other authorities. Link each Direction to
-          the requirements it modifies or supplements.
+        <p class="intro">
+          Track PSPF Directions, record whether each one has been dealt with, and copy a summary for
+          Teams, email, or briefing packs.
         </p>
-
-        <form
-          class="create"
-          @submit=${(e: Event): void => {
-            e.preventDefault();
-            void this.#create();
-          }}
-          aria-label="Add direction"
-        >
-          <label class="field">
-            Reference
-            <input
-              type="text"
-              required
-              placeholder="e.g. PSPF Direction 001-2025"
-              .value=${this.reference}
-              @input=${(e: Event): void => {
-                this.reference = (e.target as HTMLInputElement).value;
-              }}
-            />
-          </label>
-          <label class="field">
-            Title
-            <input
-              type="text"
-              required
-              .value=${this.newTitle}
-              @input=${(e: Event): void => {
-                this.newTitle = (e.target as HTMLInputElement).value;
-              }}
-            />
-          </label>
-          <label class="field">
-            Issued
-            <input
-              type="date"
-              required
-              .value=${this.issuedAt}
-              @input=${(e: Event): void => {
-                this.issuedAt = (e.target as HTMLInputElement).value;
-              }}
-            />
-          </label>
-          <button class="primary" type="submit" ?disabled=${!this.#canCreate()}>
-            Add direction
+        ${this.#summary(directions)} ${this.#createForm()}
+        <div class="toolbar">
+          <div class="filters">
+            <label class="field">
+              Show
+              <select
+                .value=${this.filterState}
+                @change=${(e: Event): void => {
+                  this.filterState = (e.target as HTMLSelectElement).value as
+                    | DirectionResponseState
+                    | 'all';
+                }}
+              >
+                <option value="all">All Directions</option>
+                ${DIRECTION_RESPONSE_STATES.map(
+                  (state) => html`<option value=${state}>${directionResponseLabel(state)}</option>`,
+                )}
+              </select>
+            </label>
+          </div>
+          <button
+            type="button"
+            @click=${(): void => void this.#copyText(directionsRegisterSummary(filtered))}
+          >
+            Copy register summary
           </button>
-          <label class="field full">
-            Description
-            <textarea
-              .value=${this.description}
-              @input=${(e: Event): void => {
-                this.description = (e.target as HTMLTextAreaElement).value;
-              }}
-            ></textarea>
-          </label>
-          <label class="field full">
-            Linked requirement IDs (comma or space separated, e.g. GOV-1 INF-3)
-            <input
-              type="text"
-              .value=${this.reqRefs}
-              @input=${(e: Event): void => {
-                this.reqRefs = (e.target as HTMLInputElement).value;
-              }}
-            />
-          </label>
-        </form>
-
-        ${directions.length === 0
-          ? html`<p class="empty" data-testid="empty">
-              No directions recorded yet. Add the first one above.
-            </p>`
-          : html`
-              <ul class="list">
-                ${directions.map((d) => this.#renderItem(d))}
-              </ul>
-            `}
+          ${this.copyStatus
+            ? html`<span class="copy-status" role="status">${this.copyStatus}</span>`
+            : ''}
+        </div>
+        ${filtered.length === 0
+          ? html`<p class="empty" data-testid="empty">No Directions match the current view.</p>`
+          : html`<ul class="list">
+              ${filtered.map((d) => this.#renderItem(d))}
+            </ul>`}
       </article>
+    `;
+  }
+
+  #summary(directions: readonly Direction[]): TemplateResult {
+    const count = (state: DirectionResponseState): number =>
+      directions.filter((direction) => direction.responseState === state).length;
+    return html`
+      <section class="summary" aria-label="Direction response summary">
+        <div class="metric"><strong>${count('yes')}</strong><span>Dealt with</span></div>
+        <div class="metric"><strong>${count('no')}</strong><span>Not dealt with</span></div>
+        <div class="metric"><strong>${count('risk-managed')}</strong><span>Risk-managed</span></div>
+        <div class="metric"><strong>${count('not-set')}</strong><span>Needs response</span></div>
+      </section>
+    `;
+  }
+
+  #createForm(): TemplateResult {
+    return html`
+      <form
+        class="create"
+        @submit=${(e: Event): void => {
+          e.preventDefault();
+          void this.#create();
+        }}
+        aria-label="Add direction"
+      >
+        <label class="field"
+          >Reference<input
+            type="text"
+            required
+            placeholder="e.g. PSPF Direction 001-2025"
+            .value=${this.reference}
+            @input=${(e: Event): void => {
+              this.reference = (e.target as HTMLInputElement).value;
+            }}
+        /></label>
+        <label class="field"
+          >Title<input
+            type="text"
+            required
+            .value=${this.newTitle}
+            @input=${(e: Event): void => {
+              this.newTitle = (e.target as HTMLInputElement).value;
+            }}
+        /></label>
+        <label class="field"
+          >Issued<input
+            type="date"
+            required
+            .value=${this.issuedAt}
+            @input=${(e: Event): void => {
+              this.issuedAt = (e.target as HTMLInputElement).value;
+            }}
+        /></label>
+        <label class="field"
+          >Response${this.#stateSelect(this.responseState, (value) => {
+            this.responseState = value;
+          })}</label
+        >
+        <button class="primary" type="submit" ?disabled=${!this.#canCreate()}>Add direction</button>
+        <label class="field full"
+          >Description<textarea
+            .value=${this.description}
+            @input=${(e: Event): void => {
+              this.description = (e.target as HTMLTextAreaElement).value;
+            }}
+          ></textarea>
+        </label>
+        <label class="field full"
+          >Linked requirement IDs (comma or space separated, e.g. GOV-1 INF-3)<input
+            type="text"
+            .value=${this.reqRefs}
+            @input=${(e: Event): void => {
+              this.reqRefs = (e.target as HTMLInputElement).value;
+            }}
+        /></label>
+        <label class="field full"
+          >Response notes<textarea
+            .value=${this.responseNotes}
+            @input=${(e: Event): void => {
+              this.responseNotes = (e.target as HTMLTextAreaElement).value;
+            }}
+          ></textarea>
+        </label>
+        <label class="field"
+          >Evidence type<select
+            .value=${this.evidenceKind}
+            @change=${(e: Event): void => {
+              this.evidenceKind = (e.target as HTMLSelectElement).value as EvidenceRef['kind'];
+            }}
+          >
+            <option value="note">Note</option>
+            <option value="url">URL</option>
+          </select></label
+        >
+        <label class="field full"
+          >Evidence<input
+            type="text"
+            .value=${this.evidenceValue}
+            @input=${(e: Event): void => {
+              this.evidenceValue = (e.target as HTMLInputElement).value;
+            }}
+        /></label>
+      </form>
+    `;
+  }
+
+  #stateSelect(
+    value: DirectionResponseState,
+    onChange: (value: DirectionResponseState) => void,
+  ): TemplateResult {
+    return html`
+      <select
+        .value=${value}
+        @change=${(e: Event): void =>
+          onChange((e.target as HTMLSelectElement).value as DirectionResponseState)}
+      >
+        ${DIRECTION_RESPONSE_STATES.map(
+          (state) =>
+            html`<option value=${state} ?selected=${state === value}>
+              ${directionResponseLabel(state)}
+            </option>`,
+        )}
+      </select>
     `;
   }
 
@@ -260,21 +445,33 @@ export class DirectionsView extends LitElement {
     if (this.editingId === d.id) return this.#renderEdit(d);
     return html`
       <li class="direction" data-id=${d.id}>
-        <div>
-          <strong>${d.title}</strong>
-          <div class="ref">${d.reference}</div>
+        <div class="item-head">
+          <div>
+            <strong>${d.title}</strong>
+            <div class="ref">${d.reference}</div>
+          </div>
+          <span class="response-badge" data-state=${d.responseState}>
+            ${directionResponseLabel(d.responseState)}
+          </span>
         </div>
         ${d.description ? html`<p>${d.description}</p>` : ''}
         <div class="meta"><span>Issued: ${d.issuedAt}</span></div>
+        ${d.responseNotes ? html`<p class="response-notes">${d.responseNotes}</p>` : ''}
+        ${d.evidence.length > 0
+          ? html`<div class="evidence-list" aria-label="Evidence">
+              ${d.evidence.map((entry) => html`<span>${entry.kind}: ${entry.value}</span>`)}
+            </div>`
+          : ''}
         ${d.requirementIds.length > 0
-          ? html`
-              <div class="req-list" aria-label="Linked requirements">
-                ${d.requirementIds.map((id) => html`<a href="#/requirement/${id}">${id}</a>`)}
-              </div>
-            `
+          ? html`<div class="req-list" aria-label="Linked requirements">
+              ${d.requirementIds.map((id) => html`<a href="#/requirement/${id}">${id}</a>`)}
+            </div>`
           : ''}
         <div class="actions">
           <button @click=${(): void => this.#startEdit(d)}>Edit</button>
+          <button @click=${(): void => void this.#copyText(directionSummary(d))}>
+            Copy summary
+          </button>
           <button @click=${(): void => void this.#remove(d)}>Delete</button>
         </div>
       </li>
@@ -285,67 +482,92 @@ export class DirectionsView extends LitElement {
     return html`
       <li class="direction" data-id=${d.id}>
         <form
+          class="edit"
           @submit=${(e: Event): void => {
             e.preventDefault();
             void this.#saveEdit(d);
           }}
         >
-          <label class="field">
-            Reference
-            <input
+          <label class="field"
+            >Reference<input
               type="text"
               required
               .value=${this.editReference}
               @input=${(e: Event): void => {
                 this.editReference = (e.target as HTMLInputElement).value;
               }}
-            />
-          </label>
-          <label class="field">
-            Title
-            <input
+          /></label>
+          <label class="field"
+            >Title<input
               type="text"
               required
               .value=${this.editTitle}
               @input=${(e: Event): void => {
                 this.editTitle = (e.target as HTMLInputElement).value;
               }}
-            />
-          </label>
-          <label class="field">
-            Issued
-            <input
+          /></label>
+          <label class="field"
+            >Issued<input
               type="date"
               required
               .value=${this.editIssuedAt}
               @input=${(e: Event): void => {
                 this.editIssuedAt = (e.target as HTMLInputElement).value;
               }}
-            />
-          </label>
-          <label class="field">
-            Description
-            <textarea
+          /></label>
+          <label class="field"
+            >Response${this.#stateSelect(this.editResponseState, (value) => {
+              this.editResponseState = value;
+            })}</label
+          >
+          <div class="actions">
+            <button class="primary" type="submit">Save</button
+            ><button type="button" @click=${(): void => this.#cancelEdit()}>Cancel</button>
+          </div>
+          <label class="field full"
+            >Description<textarea
               .value=${this.editDescription}
               @input=${(e: Event): void => {
                 this.editDescription = (e.target as HTMLTextAreaElement).value;
               }}
             ></textarea>
           </label>
-          <label class="field">
-            Linked requirement IDs
-            <input
+          <label class="field full"
+            >Linked requirement IDs<input
               type="text"
               .value=${this.editReqRefs}
               @input=${(e: Event): void => {
                 this.editReqRefs = (e.target as HTMLInputElement).value;
               }}
-            />
+          /></label>
+          <label class="field full"
+            >Response notes<textarea
+              .value=${this.editResponseNotes}
+              @input=${(e: Event): void => {
+                this.editResponseNotes = (e.target as HTMLTextAreaElement).value;
+              }}
+            ></textarea>
           </label>
-          <div class="actions">
-            <button class="primary" type="submit">Save</button>
-            <button type="button" @click=${(): void => this.#cancelEdit()}>Cancel</button>
-          </div>
+          <label class="field"
+            >Evidence type<select
+              .value=${this.editEvidenceKind}
+              @change=${(e: Event): void => {
+                this.editEvidenceKind = (e.target as HTMLSelectElement)
+                  .value as EvidenceRef['kind'];
+              }}
+            >
+              <option value="note">Note</option>
+              <option value="url">URL</option>
+            </select></label
+          >
+          <label class="field full"
+            >Add evidence<input
+              type="text"
+              .value=${this.editEvidenceValue}
+              @input=${(e: Event): void => {
+                this.editEvidenceValue = (e.target as HTMLInputElement).value;
+              }}
+          /></label>
         </form>
       </li>
     `;
@@ -361,11 +583,15 @@ export class DirectionsView extends LitElement {
 
   async #create(): Promise<void> {
     if (!this.store || !this.#canCreate()) return;
+    const entry = evidence(this.evidenceKind, this.evidenceValue);
     await this.store.createDirection({
       reference: this.reference.trim(),
       title: this.newTitle.trim(),
       issuedAt: this.issuedAt,
+      responseState: this.responseState,
+      evidence: entry ? [entry] : [],
       ...(this.description.trim() ? { description: this.description.trim() } : {}),
+      ...(this.responseNotes.trim() ? { responseNotes: this.responseNotes.trim() } : {}),
       requirementIds: parseRequirementIds(this.reqRefs),
     });
     this.reference = '';
@@ -373,6 +599,9 @@ export class DirectionsView extends LitElement {
     this.issuedAt = '';
     this.description = '';
     this.reqRefs = '';
+    this.responseState = 'not-set';
+    this.responseNotes = '';
+    this.evidenceValue = '';
   }
 
   #startEdit(d: Direction): void {
@@ -382,6 +611,9 @@ export class DirectionsView extends LitElement {
     this.editIssuedAt = d.issuedAt;
     this.editDescription = d.description ?? '';
     this.editReqRefs = d.requirementIds.join(', ');
+    this.editResponseState = d.responseState;
+    this.editResponseNotes = d.responseNotes ?? '';
+    this.editEvidenceValue = '';
   }
 
   #cancelEdit(): void {
@@ -391,14 +623,28 @@ export class DirectionsView extends LitElement {
   async #saveEdit(d: Direction): Promise<void> {
     if (!this.store) return;
     const desc = this.editDescription.trim();
+    const notes = this.editResponseNotes.trim();
+    const entry = evidence(this.editEvidenceKind, this.editEvidenceValue);
     await this.store.updateDirection(d.id, {
       reference: this.editReference.trim(),
       title: this.editTitle.trim(),
       issuedAt: this.editIssuedAt,
-      ...(desc ? { description: desc } : {}),
+      responseState: this.editResponseState,
+      evidence: entry ? [...d.evidence, entry] : d.evidence,
+      ...(desc ? { description: desc } : { description: undefined }),
+      ...(notes ? { responseNotes: notes } : { responseNotes: undefined }),
       requirementIds: parseRequirementIds(this.editReqRefs),
     });
     this.editingId = null;
+  }
+
+  async #copyText(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      this.copyStatus = 'Copied summary.';
+    } catch {
+      this.copyStatus = 'Copy failed.';
+    }
   }
 
   async #remove(d: Direction): Promise<void> {

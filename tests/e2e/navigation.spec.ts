@@ -49,6 +49,22 @@ test('unknown route shows the not-found view', async ({ page }) => {
   await expect(page.locator('pspf-not-found-view')).toBeVisible();
 });
 
+test('top bar search opens matching PSPF requirements', async ({ page }) => {
+  await page.goto('./');
+  const app = page.locator('pspf-app');
+  await expect(app.getByRole('heading', { name: 'PSPF domains' })).toBeVisible();
+
+  await app.getByPlaceholder('Search PSPF...').fill('GOV-001');
+  await expect(app.getByRole('listbox', { name: 'Search results' })).toContainText('GOV-001');
+  await app
+    .getByRole('link', { name: /GOV-001/ })
+    .first()
+    .click();
+
+  await expect(page).toHaveURL(/#\/requirement\/GOV-001$/);
+  await expect(page.locator('pspf-requirement-view')).toContainText('GOV-001');
+});
+
 test('requirement view supports previous and next navigation', async ({ page }) => {
   await page.goto('./#/requirement/GOV-001');
   const reqView = page.locator('pspf-requirement-view');

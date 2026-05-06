@@ -20,7 +20,7 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "perf:budget": "node scripts/perf-budget.mjs",
-    "sbom": "cyclonedx-npm --output-file sbom.json --omit dev"
+    "sbom": "cyclonedx-npm --package-lock-only --output-file sbom.json --omit dev"
   },
   "dependencies": {
     "@lit/context": "1.1.6",

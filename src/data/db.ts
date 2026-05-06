@@ -20,7 +20,7 @@ import type {
 } from './types.ts';
 
 export const DB_NAME = 'pspf-explorer.v3';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const POSTURE_KEY = '__posture__' as const;
 
@@ -101,7 +101,10 @@ export type PspfStoreNames =
  * Forward-only migrations. Add a new migration at the next index when bumping
  * DB_VERSION. NEVER edit a previous migration.
  */
-const migrations: ((db: PspfDb) => void)[] = [
+const migrations: ((
+  db: PspfDb,
+  tx: IDBPTransaction<PspfDbSchema, PspfStoreNames[], 'versionchange'>,
+) => void)[] = [
   // Migration to v1.
   (db) => {
     const compliance = db.createObjectStore('compliance', { keyPath: 'requirementId' });
@@ -136,15 +139,31 @@ const migrations: ((db: PspfDb) => void)[] = [
     complianceEvents.createIndex('by-requirementId', 'requirementId');
     complianceEvents.createIndex('by-createdAt', 'createdAt');
   },
+  // Migration to v3.
+  (_db, tx) => {
+    const directions = tx.objectStore('directions');
+    void (async (): Promise<void> => {
+      let cursor = await directions.openCursor();
+      while (cursor) {
+        const value = cursor.value as Partial<Direction>;
+        await cursor.update({
+          ...value,
+          responseState: value.responseState ?? 'not-set',
+          evidence: value.evidence ?? [],
+        } as Direction);
+        cursor = await cursor.continue();
+      }
+    })();
+  },
 ];
 
 export async function openPspfDb(name: string = DB_NAME): Promise<PspfDb> {
   return openDB<PspfDbSchema>(name, DB_VERSION, {
-    upgrade(db, oldVersion) {
+    upgrade(db, oldVersion, _newVersion, transaction) {
       for (let v = oldVersion; v < DB_VERSION; v += 1) {
         const migrate = migrations[v];
         if (!migrate) throw new Error(`Missing migration for version ${v + 1}`);
-        migrate(db);
+        migrate(db, transaction);
       }
     },
     blocked() {

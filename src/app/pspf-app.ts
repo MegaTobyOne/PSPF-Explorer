@@ -2,8 +2,8 @@ import { LitElement, css, html, type PropertyValues } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { provide } from '@lit/context';
 import { designTokens } from './design-tokens.ts';
-import { HashRouter } from './router.ts';
-import { routes, NAV_ROUTES } from './routes.ts';
+import { HashRouter, type RouteMatch } from './router.ts';
+import { routes, NAV_GROUPS, NAV_ROUTES, type NavGroupKey } from './routes.ts';
 import { AppStore } from '../state/app-store.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import '../components/command-palette.ts';
@@ -23,11 +23,13 @@ export class PspfApp extends LitElement {
       }
 
       header {
-        display: flex;
+        display: grid;
+        grid-template-columns: auto minmax(16rem, 34rem) auto;
+        gap: var(--space-3);
         align-items: center;
-        justify-content: space-between;
-        padding: var(--space-3) var(--space-4);
+        padding: var(--space-3) var(--space-4) var(--space-2);
         border-bottom: 1px solid var(--colour-border);
+        background: var(--colour-bg-elevated);
       }
 
       h1 {
@@ -39,6 +41,12 @@ export class PspfApp extends LitElement {
       h1 a {
         color: inherit;
         text-decoration: none;
+      }
+
+      .brand {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
       }
 
       .classification {
@@ -70,13 +78,32 @@ export class PspfApp extends LitElement {
       }
 
       nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-2);
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-3);
         padding: var(--space-2) var(--space-4);
         border-bottom: 1px solid var(--colour-border);
-        background: var(--colour-bg-elevated);
+        background: var(--colour-bg);
         font-size: var(--text-sm);
+      }
+
+      .nav-group {
+        min-width: 0;
+      }
+
+      .nav-group-title {
+        margin: 0 0 var(--space-1) 0;
+        color: var(--colour-fg-muted);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
       }
 
       nav a {
@@ -84,12 +111,34 @@ export class PspfApp extends LitElement {
         text-decoration: none;
         padding: var(--space-1) var(--space-2);
         border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        white-space: nowrap;
       }
 
       nav a:hover,
-      nav a:focus-visible {
+      nav a:focus-visible,
+      nav a[aria-current='page'] {
         color: var(--colour-fg);
-        background: var(--colour-border);
+        background: var(--colour-bg-elevated);
+        border-color: var(--colour-border);
+      }
+
+      .mobile-nav {
+        display: none;
+        padding: var(--space-2) var(--space-4);
+        border-bottom: 1px solid var(--colour-border);
+        background: var(--colour-bg);
+      }
+
+      .mobile-nav summary {
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .mobile-nav nav {
+        display: block;
+        padding: var(--space-2) 0 0;
+        border: 0;
       }
 
       main {
@@ -118,6 +167,7 @@ export class PspfApp extends LitElement {
         }
         header,
         nav,
+        .mobile-nav,
         footer,
         pspf-command-palette {
           display: none !important;
@@ -126,17 +176,36 @@ export class PspfApp extends LitElement {
           padding: 0;
         }
       }
+
+      @media (max-width: 980px) {
+        header {
+          grid-template-columns: 1fr;
+          align-items: stretch;
+        }
+        .header-labels {
+          justify-content: flex-start;
+          flex-wrap: wrap;
+        }
+        nav.primary {
+          display: none;
+        }
+        .mobile-nav {
+          display: block;
+        }
+      }
     `,
   ];
 
   @state() private store: AppStore | undefined;
   @state() private bootError: string | undefined;
+  @state() private activePath = '/';
 
   @provide({ context: appStoreContext })
   private storeContext!: AppStore;
 
   override connectedCallback(): void {
     super.connectedCallback();
+    void import('../components/global-search.ts');
     void this.boot();
   }
 
@@ -154,14 +223,44 @@ export class PspfApp extends LitElement {
   override firstUpdated(_changed: PropertyValues): void {
     const outlet = this.renderRoot.querySelector<HTMLElement>('#outlet');
     if (!outlet) return;
+    outlet.addEventListener('route-change', (event: Event) => {
+      const detail = (event as CustomEvent<RouteMatch>).detail;
+      this.activePath = detail.pathname;
+    });
     const router = new HashRouter(outlet, routes);
     router.start();
+  }
+
+  private routesForGroup(group: NavGroupKey) {
+    return NAV_ROUTES.filter((route) => route.group === group);
+  }
+
+  private isActive(path: string): boolean {
+    if (path === '/') return this.activePath === '/';
+    return this.activePath === path || this.activePath.startsWith(`${path}/`);
+  }
+
+  private renderNavLinks(group: NavGroupKey) {
+    return html`
+      <div class="nav-links">
+        ${this.routesForGroup(group).map(
+          (route) => html`
+            <a href="#${route.path}" aria-current=${this.isActive(route.path) ? 'page' : 'false'}>
+              ${route.label}
+            </a>
+          `,
+        )}
+      </div>
+    `;
   }
 
   override render() {
     return html`
       <header>
-        <h1><a href="#/">PSPF Explorer</a></h1>
+        <div class="brand">
+          <h1><a href="#/">PSPF Explorer</a></h1>
+        </div>
+        <pspf-global-search></pspf-global-search>
         <div class="header-labels">
           <span class="classification" aria-label="Information classification"
             >OFFICIAL: Sensitive</span
@@ -169,9 +268,29 @@ export class PspfApp extends LitElement {
           <span class="tlp" aria-label="Traffic Light Protocol marking">TLP:AMBER+STRICT</span>
         </div>
       </header>
-      <nav aria-label="Primary">
-        ${NAV_ROUTES.map((r) => html`<a href="#${r.path}">${r.label}</a>`)}
+      <nav class="primary" aria-label="Primary">
+        ${NAV_GROUPS.map(
+          (group) => html`
+            <section class="nav-group" aria-label=${group.label}>
+              <p class="nav-group-title">${group.label}</p>
+              ${this.renderNavLinks(group.key)}
+            </section>
+          `,
+        )}
       </nav>
+      <details class="mobile-nav">
+        <summary>Navigation</summary>
+        <nav aria-label="Primary mobile">
+          ${NAV_GROUPS.map(
+            (group) => html`
+              <section class="nav-group" aria-label=${group.label}>
+                <p class="nav-group-title">${group.label}</p>
+                ${this.renderNavLinks(group.key)}
+              </section>
+            `,
+          )}
+        </nav>
+      </details>
       <main>
         ${this.bootError
           ? html`<p role="alert">Startup failed: ${this.bootError}</p>`

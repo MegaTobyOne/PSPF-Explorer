@@ -113,6 +113,9 @@ export interface EvidenceRef {
   addedAt: string; // ISO 8601
 }
 
+export const DIRECTION_RESPONSE_STATES = ['yes', 'no', 'risk-managed', 'not-set'] as const;
+export type DirectionResponseState = (typeof DIRECTION_RESPONSE_STATES)[number];
+
 export interface BaseRecord {
   createdAt: string;
   updatedAt: string;
@@ -239,6 +242,9 @@ export interface Direction extends BaseRecord {
   issuedAt: string;
   description?: string;
   requirementIds: readonly RequirementId[];
+  responseState: DirectionResponseState;
+  evidence: readonly EvidenceRef[];
+  responseNotes?: string;
 }
 
 export type RelationshipKind =

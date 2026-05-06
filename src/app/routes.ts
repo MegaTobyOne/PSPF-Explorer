@@ -1,5 +1,20 @@
 import type { RouteSpec } from './router.ts';
 
+export type NavGroupKey = 'work' | 'analyse' | 'organise' | 'share';
+
+export interface NavRoute {
+  path: string;
+  label: string;
+  group: NavGroupKey;
+}
+
+export const NAV_GROUPS: readonly { key: NavGroupKey; label: string }[] = [
+  { key: 'work', label: 'Work' },
+  { key: 'analyse', label: 'Analyse' },
+  { key: 'organise', label: 'Organise' },
+  { key: 'share', label: 'Share/Data' },
+];
+
 export const routes: readonly RouteSpec[] = [
   { path: '/', component: 'pspf-home-view', load: () => import('../views/home-view.ts') },
   {
@@ -87,22 +102,22 @@ export const routes: readonly RouteSpec[] = [
   },
 ];
 
-export const NAV_ROUTES: readonly { path: string; label: string }[] = [
-  { path: '/', label: 'Home' },
-  { path: '/risks', label: 'Risks' },
-  { path: '/actions', label: 'Actions' },
-  { path: '/tags', label: 'Tags' },
-  { path: '/views', label: 'Saved views' },
-  { path: '/posture', label: 'Posture' },
-  { path: '/analytics', label: 'Analytics' },
-  { path: '/coverage', label: 'Coverage' },
-  { path: '/directions', label: 'Directions' },
-  { path: '/relationships', label: 'Relationships' },
-  { path: '/map', label: 'Map' },
-  { path: '/share', label: 'Share' },
-  { path: '/grc', label: 'GRC capture' },
-  { path: '/integrity', label: 'Integrity' },
-  { path: '/backup', label: 'Backup' },
-  { path: '/restore', label: 'Restore' },
-  { path: '/help', label: 'Help' },
+export const NAV_ROUTES: readonly NavRoute[] = [
+  { path: '/', label: 'Home', group: 'work' },
+  { path: '/directions', label: 'Directions', group: 'work' },
+  { path: '/risks', label: 'Risks', group: 'work' },
+  { path: '/actions', label: 'Actions', group: 'work' },
+  { path: '/relationships', label: 'Relationships', group: 'work' },
+  { path: '/analytics', label: 'Analytics', group: 'analyse' },
+  { path: '/coverage', label: 'Coverage', group: 'analyse' },
+  { path: '/map', label: 'Map', group: 'analyse' },
+  { path: '/integrity', label: 'Integrity', group: 'analyse' },
+  { path: '/tags', label: 'Tags', group: 'organise' },
+  { path: '/views', label: 'Saved views', group: 'organise' },
+  { path: '/posture', label: 'Posture', group: 'organise' },
+  { path: '/share', label: 'Share', group: 'share' },
+  { path: '/backup', label: 'Backup', group: 'share' },
+  { path: '/restore', label: 'Restore', group: 'share' },
+  { path: '/grc', label: 'GRC capture', group: 'share' },
+  { path: '/help', label: 'Help', group: 'share' },
 ];
