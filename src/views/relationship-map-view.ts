@@ -15,6 +15,7 @@ import type { Core, EventObjectNode } from 'cytoscape';
 import { designTokens } from '../app/design-tokens.ts';
 import {
   buildRelationshipMapGraph,
+  formatRelationshipMapSummary,
   type MapNode,
   type RelationshipMapGraph,
 } from '../domain/relationship-map.ts';
@@ -93,6 +94,39 @@ export class RelationshipMapView extends LitElement {
         align-items: center;
         flex-wrap: wrap;
         margin-bottom: var(--space-2);
+      }
+      .copy-status {
+        color: var(--colour-fg-muted);
+        font-size: var(--text-sm);
+      }
+      .legend {
+        display: flex;
+        gap: var(--space-2);
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: var(--space-2);
+        padding: var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+        font-size: var(--text-sm);
+      }
+      .legend strong {
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--colour-fg-muted);
+      }
+      .legend-item {
+        display: inline-flex;
+        gap: var(--space-1);
+        align-items: center;
+      }
+      .swatch {
+        width: 1.8rem;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--swatch-colour);
       }
       .map-layout {
         display: grid;
@@ -233,15 +267,19 @@ export class RelationshipMapView extends LitElement {
   @state() private accessor showRisks = true;
   @state() private accessor showActions = true;
   @state() private accessor showDirections = true;
+  @state() private accessor unlinkedGapsOnly = false;
   @state() private accessor selectedNodeId = '';
+  @state() private accessor copyStatus = '';
 
   #cy: Core | null = null;
   #canvas: HTMLDivElement | null = null;
+  #graphSignature = '';
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#cy?.destroy();
     this.#cy = null;
+    this.#graphSignature = '';
   }
 
   override render(): TemplateResult {
@@ -319,6 +357,28 @@ export class RelationshipMapView extends LitElement {
             />
             Directions
           </label>
+          <label class="row">
+            <input
+              data-testid="unlinked-gaps-only"
+              type="checkbox"
+              ?checked=${this.unlinkedGapsOnly}
+              @change=${(e: Event): void => {
+                this.unlinkedGapsOnly = (e.target as HTMLInputElement).checked;
+                this.selectedNodeId = '';
+              }}
+            />
+            Unlinked gaps only
+          </label>
+          <button
+            type="button"
+            data-testid="copy-map-summary"
+            @click=${(): void => void this.#copyText(formatRelationshipMapSummary(graph))}
+          >
+            Copy map summary
+          </button>
+          ${this.copyStatus
+            ? html`<span class="copy-status" role="status">${this.copyStatus}</span>`
+            : ''}
           <span
             data-testid="counts"
             style="margin-left:auto; color: var(--colour-fg-muted); font-size: var(--text-sm);"
@@ -326,6 +386,8 @@ export class RelationshipMapView extends LitElement {
             ${nodes.length} nodes · ${edges.length} edges
           </span>
         </div>
+
+        ${this.#renderLegend()}
 
         <div class="map-layout">
           <div class="stage">
@@ -377,15 +439,22 @@ export class RelationshipMapView extends LitElement {
   async #renderCytoscape(): Promise<void> {
     if (!this.#canvas) return;
     const { nodes, edges } = this.#graph();
+    const signature = this.#cytoscapeSignature({ nodes, edges });
     if (nodes.length === 0) {
       this.#cy?.destroy();
       this.#cy = null;
+      this.#graphSignature = '';
+      return;
+    }
+    if (this.#cy && signature === this.#graphSignature) {
+      this.#applySelectionHighlight();
       return;
     }
 
     const cytoscapeModule = await import('cytoscape');
     const cytoscape = cytoscapeModule.default;
     this.#cy?.destroy();
+    this.#graphSignature = signature;
 
     const elements = [
       ...nodes.map((n) => ({
@@ -487,6 +556,38 @@ export class RelationshipMapView extends LitElement {
           },
         },
         {
+          selector: 'edge[kind = "requirement-risk"]',
+          style: { 'line-color': '#b34a00' },
+        },
+        {
+          selector: 'edge[kind = "requirement-action"]',
+          style: { 'line-color': '#059669' },
+        },
+        {
+          selector: 'edge[kind = "risk-action"]',
+          style: { 'line-color': '#2563eb' },
+        },
+        {
+          selector: 'edge[kind = "requirement-direction"]',
+          style: { 'line-color': '#7c3aed' },
+        },
+        {
+          selector: '.dimmed',
+          style: { opacity: 0.14, 'text-opacity': 0.14 },
+        },
+        {
+          selector: 'edge.dimmed',
+          style: { opacity: 0.08 },
+        },
+        {
+          selector: 'node.highlighted',
+          style: { 'border-width': 4, 'border-color': '#0f172a' },
+        },
+        {
+          selector: 'edge.highlighted',
+          style: { width: 3, opacity: 0.95 },
+        },
+        {
           selector: 'node:selected',
           style: { 'border-width': 5, 'border-color': '#0f172a' },
         },
@@ -497,10 +598,12 @@ export class RelationshipMapView extends LitElement {
     this.#cy.on('tap', 'node', (event: EventObjectNode): void => {
       this.selectedNodeId = event.target.id();
     });
+    this.#applySelectionHighlight();
   }
 
   override updated(): void {
     void this.#renderCytoscape();
+    this.#applySelectionHighlight();
   }
 
   #graph(): RelationshipMapGraph {
@@ -531,8 +634,69 @@ export class RelationshipMapView extends LitElement {
         risks: this.showRisks,
         actions: this.showActions,
         directions: this.showDirections,
+        unlinkedGapsOnly: this.unlinkedGapsOnly,
       },
     });
+  }
+
+  #renderLegend(): TemplateResult {
+    const items = [
+      ['#b34a00', 'Risk affects requirement'],
+      ['#059669', 'Action remediates requirement'],
+      ['#2563eb', 'Action treats risk'],
+      ['#7c3aed', 'Direction modifies requirement'],
+    ] as const;
+    return html`<div class="legend" aria-label="Connection legend" data-testid="map-legend">
+      <strong>Connections</strong>
+      ${items.map(
+        ([colour, label]) =>
+          html`<span class="legend-item">
+            <span class="swatch" style=${`--swatch-colour: ${colour}`}></span>${label}
+          </span>`,
+      )}
+    </div>`;
+  }
+
+  #applySelectionHighlight(): void {
+    const cy = this.#cy;
+    if (!cy) return;
+    cy.elements().removeClass('highlighted dimmed');
+    if (!this.selectedNodeId) return;
+    const selected = cy.getElementById(this.selectedNodeId);
+    if (selected.empty()) return;
+    const connected = selected.closedNeighborhood();
+    cy.elements().not(connected).addClass('dimmed');
+    connected.addClass('highlighted');
+  }
+
+  #cytoscapeSignature(graph: Pick<RelationshipMapGraph, 'nodes' | 'edges'>): string {
+    const nodes = graph.nodes
+      .map((node) =>
+        [
+          node.id,
+          node.kind,
+          node.label,
+          node.complianceState ?? '',
+          node.riskBand ?? '',
+          node.actionStatus ?? '',
+          node.actionOverdue ? 'overdue' : '',
+          node.directionResponseState ?? '',
+        ].join(':'),
+      )
+      .join('|');
+    const edges = graph.edges
+      .map((edge) => [edge.id, edge.source, edge.target, edge.kind].join(':'))
+      .join('|');
+    return `${nodes}#${edges}`;
+  }
+
+  async #copyText(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      this.copyStatus = 'Copied map summary.';
+    } catch {
+      this.copyStatus = 'Copy failed.';
+    }
   }
 
   #renderInspector(node: MapNode | undefined): TemplateResult {

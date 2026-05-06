@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRelationshipMapGraph } from './relationship-map.ts';
+import { buildRelationshipMapGraph, formatRelationshipMapSummary } from './relationship-map.ts';
 import {
   asActionId,
   asDirectionId,
@@ -185,5 +185,62 @@ describe('buildRelationshipMapGraph', () => {
       complianceGapsWithWork: 0,
       complianceGapsWithoutWork: 1,
     });
+  });
+
+  it('filters to unlinked compliance gaps only', () => {
+    const linkedRequirementId = asRequirementId('GOV-002');
+    const risk = baseRisk({ requirementIds: [linkedRequirementId] });
+
+    const graph = buildRelationshipMapGraph({
+      compliance: new Map([
+        [requirementId, compliance(requirementId, 'no')],
+        [linkedRequirementId, compliance(linkedRequirementId, 'risk-managed')],
+      ]),
+      risks: [risk],
+      actions: [],
+      directions: [],
+      relationships: [],
+      workTracking: [],
+      visibility: {
+        requirements: true,
+        risks: true,
+        actions: true,
+        directions: true,
+        unlinkedGapsOnly: true,
+      },
+    });
+
+    expect(graph.nodes).toHaveLength(1);
+    expect(graph.nodes[0]).toMatchObject({ id: requirementId, kind: 'requirement' });
+    expect(graph.edges).toHaveLength(0);
+    expect(graph.summary).toMatchObject({
+      complianceGapsWithWork: 0,
+      complianceGapsWithoutWork: 1,
+    });
+  });
+
+  it('formats visible assurance paths for copying', () => {
+    const risk = baseRisk({ requirementIds: [requirementId] });
+    const action = baseAction({ requirementIds: [requirementId], riskIds: [risk.id] });
+    const direction = baseDirection({ requirementIds: [requirementId] });
+
+    const graph = buildRelationshipMapGraph({
+      compliance: new Map([[requirementId, compliance(requirementId, 'no')]]),
+      risks: [risk],
+      actions: [action],
+      directions: [direction],
+      relationships: [],
+      workTracking: [],
+      visibility: { requirements: true, risks: true, actions: true, directions: true },
+    });
+
+    const text = formatRelationshipMapSummary(graph);
+
+    expect(text).toContain('Relationship map summary');
+    expect(text).toContain('Gaps with work: 1');
+    expect(text).toContain('GOV-001:');
+    expect(text).toContain('Risks: Unowned privileged access (extreme, open)');
+    expect(text).toContain('Actions: Review admin accounts (in-progress)');
+    expect(text).toContain('Directions: PSPF Direction 001-2026 (not-set)');
   });
 });

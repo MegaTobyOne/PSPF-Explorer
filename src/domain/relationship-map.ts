@@ -29,6 +29,7 @@ export interface MapVisibility {
   risks: boolean;
   actions: boolean;
   directions: boolean;
+  unlinkedGapsOnly?: boolean;
 }
 
 export interface RequirementWorkSummary {
@@ -97,6 +98,7 @@ const DEFAULT_VISIBILITY: MapVisibility = {
   risks: true,
   actions: true,
   directions: true,
+  unlinkedGapsOnly: false,
 };
 
 function isRequirementId(id: string): id is RequirementId {
@@ -236,8 +238,15 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
   const addNode = (node: MapNode): void => {
     if (!nodeMap.has(node.id)) nodeMap.set(node.id, node);
   };
+  const visibleRequirement = (requirementId: string): boolean => {
+    if (!visibility.requirements) return false;
+    const state = input.compliance.get(requirementId as RequirementId)?.state ?? 'not-set';
+    const work = requirementWorkSummary(requirementId);
+    if (visibility.unlinkedGapsOnly) return complianceGap(state) && !work.hasWork;
+    return true;
+  };
   const addRequirementNode = (requirementId: string): void => {
-    if (!visibility.requirements) return;
+    if (!visibleRequirement(requirementId)) return;
     const requirement = requirementById.get(requirementId as RequirementId);
     const state = input.compliance.get(requirementId as RequirementId)?.state ?? 'not-set';
     const work = requirementWorkSummary(requirementId);
@@ -252,7 +261,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     });
   };
 
-  if (visibility.risks) {
+  if (visibility.risks && !visibility.unlinkedGapsOnly) {
     for (const risk of input.risks) {
       addNode({
         id: risk.id,
@@ -265,7 +274,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
       });
     }
   }
-  if (visibility.actions) {
+  if (visibility.actions && !visibility.unlinkedGapsOnly) {
     for (const action of input.actions) {
       const actionOverdue = isActionOverdue(action, now);
       addNode({
@@ -279,7 +288,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
       });
     }
   }
-  if (visibility.directions) {
+  if (visibility.directions && !visibility.unlinkedGapsOnly) {
     for (const direction of input.directions) {
       addNode({
         id: direction.id,
@@ -310,7 +319,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     edgeMap.set(id, { id, source, target, kind, label: edgeLabel(kind) });
   };
 
-  if (visibility.risks) {
+  if (visibility.risks && !visibility.unlinkedGapsOnly) {
     for (const risk of input.risks) {
       if (visibility.requirements) {
         for (const requirementId of risk.requirementIds) {
@@ -323,7 +332,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
       }
     }
   }
-  if (visibility.actions) {
+  if (visibility.actions && !visibility.unlinkedGapsOnly) {
     for (const action of input.actions) {
       if (visibility.requirements) {
         for (const requirementId of action.requirementIds) {
@@ -336,7 +345,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
       }
     }
   }
-  if (visibility.directions && visibility.requirements) {
+  if (visibility.directions && visibility.requirements && !visibility.unlinkedGapsOnly) {
     for (const direction of input.directions) {
       for (const requirementId of direction.requirementIds) {
         addRequirementNode(requirementId);
@@ -345,11 +354,13 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     }
   }
 
-  for (const relationship of input.relationships) {
-    const [first, second] = relationship.endpoints;
-    if (isRequirementId(first)) addRequirementNode(first);
-    if (isRequirementId(second)) addRequirementNode(second);
-    addEdge(first, second, relationship.kind);
+  if (!visibility.unlinkedGapsOnly) {
+    for (const relationship of input.relationships) {
+      const [first, second] = relationship.endpoints;
+      if (isRequirementId(first)) addRequirementNode(first);
+      if (isRequirementId(second)) addRequirementNode(second);
+      addEdge(first, second, relationship.kind);
+    }
   }
 
   const visibleRequirements = [...nodeMap.values()].filter((node) => node.kind === 'requirement');
@@ -370,4 +381,58 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
   };
 
   return { nodes: [...nodeMap.values()], edges: [...edgeMap.values()], summary };
+}
+
+export function formatRelationshipMapSummary(graph: RelationshipMapGraph): string {
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const requirementNodes = graph.nodes
+    .filter((node) => node.kind === 'requirement')
+    .sort((left, right) => {
+      const leftGap = complianceGap(left.complianceState ?? 'not-set') ? 0 : 1;
+      const rightGap = complianceGap(right.complianceState ?? 'not-set') ? 0 : 1;
+      return leftGap - rightGap || left.id.localeCompare(right.id);
+    });
+
+  if (requirementNodes.length === 0) {
+    return 'Relationship map summary\n\nNo visible requirements in the current map view.';
+  }
+
+  const lines = [
+    'Relationship map summary',
+    '',
+    `Requirements: ${graph.summary.requirements}`,
+    `Gaps with work: ${graph.summary.complianceGapsWithWork}`,
+    `Gaps without work: ${graph.summary.complianceGapsWithoutWork}`,
+    `Blocked/overdue actions: ${graph.summary.blockedOrOverdueActions}`,
+    `Directions needing response: ${graph.summary.directionsNeedingResponse}`,
+    '',
+  ];
+
+  for (const requirement of requirementNodes) {
+    const connected = graph.edges
+      .filter((edge) => edge.source === requirement.id || edge.target === requirement.id)
+      .map((edge) => nodesById.get(edge.source === requirement.id ? edge.target : edge.source))
+      .filter((node): node is MapNode => Boolean(node));
+    const risks = connected.filter((node) => node.kind === 'risk');
+    const actions = connected.filter((node) => node.kind === 'action');
+    const directions = connected.filter((node) => node.kind === 'direction');
+    const work = requirement.work;
+
+    lines.push(`${requirement.label}: ${requirement.detail}`);
+    lines.push(`Compliance: ${requirement.complianceState ?? 'not-set'}`);
+    lines.push(
+      `Risks: ${risks.length > 0 ? risks.map((node) => `${node.label} (${node.riskBand ?? 'unknown'}, ${node.riskStatus ?? 'unknown'})`).join('; ') : 'None visible'}`,
+    );
+    lines.push(
+      `Actions: ${actions.length > 0 ? actions.map((node) => `${node.label} (${node.actionStatus ?? 'unknown'}${node.actionOverdue ? ', overdue' : ''})`).join('; ') : 'None visible'}`,
+    );
+    lines.push(
+      `Directions: ${directions.length > 0 ? directions.map((node) => `${node.label} (${node.directionResponseState ?? 'unknown'})`).join('; ') : 'None visible'}`,
+    );
+    lines.push(`Work log: ${work?.workLogCount ?? 0} entries`);
+    lines.push(`Evidence: ${work?.evidenceCount ?? 0} items`);
+    lines.push('');
+  }
+
+  return lines.join('\n').trimEnd();
 }

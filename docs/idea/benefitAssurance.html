@@ -1,0 +1,1472 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';"
+    />
+    <title>Benefit Assurance</title>
+    <style>
+      :root {
+        --ba-tone-benefit: var(--at-status-success-fg);
+        --ba-tone-benefit-soft: var(--at-status-success-bg);
+        --ba-tone-outcome: var(--at-status-info-fg);
+        --ba-tone-outcome-soft: var(--at-status-info-bg);
+        --ba-tone-risk: var(--at-status-warning-fg);
+        --ba-tone-risk-soft: var(--at-status-warning-bg);
+        --ba-tone-action: var(--at-status-info-fg);
+        --ba-tone-action-soft: var(--at-status-info-bg);
+        --ba-tone-danger: var(--at-status-danger-fg);
+        --ba-tone-danger-soft: var(--at-status-danger-bg);
+        --ba-tone-neutral: var(--at-status-neutral-fg);
+        --ba-tone-neutral-soft: var(--at-status-neutral-bg);
+      }
+
+      /* ── Reset & Base ──────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: var(--vscode-font-family, 'Segoe UI', system-ui, sans-serif);
+        color: var(--vscode-foreground);
+        background: var(--vscode-editor-background);
+        overflow-x: auto;
+        min-height: 100vh;
+      }
+
+      /* ── Header ────────────────────────────────────────── */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 28px 16px;
+        border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+      }
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .header h1 {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+      }
+      .header .subtitle {
+        font-size: 12px;
+        opacity: 0.65;
+        margin-top: 2px;
+      }
+      .header-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 12px;
+        background: var(--vscode-badge-background);
+        color: var(--vscode-badge-foreground);
+      }
+      .header-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .header-actions button {
+        background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.2));
+        color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+        border: none;
+        padding: 5px 12px;
+        border-radius: var(--at-radius-control, 8px);
+        font-size: 12px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .header-actions button:hover {
+        background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.35));
+      }
+      .header-actions button.primary {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+      }
+      .header-actions button.primary:hover {
+        background: var(--vscode-button-hoverBackground);
+      }
+
+      @media print {
+        body {
+          background: #fff;
+          color: #111;
+        }
+
+        .header,
+        .filter-bar,
+        .summary-strip,
+        .legend {
+          border: none;
+        }
+
+        .header-actions,
+        #resetBtn,
+        #toggleLinesBtn,
+        #refreshBtn,
+        #exportPdfBtn {
+          display: none !important;
+        }
+
+        .board-container {
+          min-height: auto;
+          page-break-inside: avoid;
+        }
+
+        .column {
+          break-inside: avoid;
+        }
+
+        .card {
+          break-inside: avoid;
+          box-shadow: none;
+        }
+
+        .connection-line {
+          opacity: 0.9;
+        }
+      }
+
+      /* ── Legend ─────────────────────────────────────────── */
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 10px 28px;
+        font-size: 11px;
+        opacity: 0.7;
+        border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.15));
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+
+      /* ── Board Container ───────────────────────────────── */
+      .board-container {
+        position: relative;
+        display: flex;
+        min-height: calc(100vh - 120px);
+      }
+
+      /* SVG layer for connection lines */
+      .connections-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      /* ── Columns ───────────────────────────────────────── */
+      .column {
+        flex: 1;
+        min-width: 280px;
+        max-width: 440px;
+        display: flex;
+        flex-direction: column;
+        padding: 20px 16px;
+        position: relative;
+        z-index: 2;
+      }
+      .column-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid;
+      }
+      .column-header .col-icon {
+        font-size: 18px;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+      }
+      .column-header h2 {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+      }
+      .column-header .col-count {
+        margin-left: auto;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: var(--at-radius-pill, 999px);
+        font-weight: 600;
+      }
+
+      /* Column colour themes */
+      .column.benefits .column-header {
+        border-color: var(--ba-tone-benefit);
+      }
+      .column.benefits .col-icon {
+        background: var(--ba-tone-benefit-soft);
+        color: var(--ba-tone-benefit);
+      }
+      .column.benefits .col-count {
+        background: var(--ba-tone-benefit-soft);
+        color: var(--ba-tone-benefit);
+      }
+
+      .column.outcomes .column-header {
+        border-color: var(--ba-tone-outcome);
+      }
+      .column.outcomes .col-icon {
+        background: var(--ba-tone-outcome-soft);
+        color: var(--ba-tone-outcome);
+      }
+      .column.outcomes .col-count {
+        background: var(--ba-tone-outcome-soft);
+        color: var(--ba-tone-outcome);
+      }
+
+      .column.risks .column-header {
+        border-color: var(--ba-tone-risk);
+      }
+      .column.risks .col-icon {
+        background: var(--ba-tone-risk-soft);
+        color: var(--ba-tone-risk);
+      }
+      .column.risks .col-count {
+        background: var(--ba-tone-risk-soft);
+        color: var(--ba-tone-risk);
+      }
+
+      .column.actions .column-header {
+        border-color: var(--ba-tone-action);
+      }
+      .column.actions .col-icon {
+        background: var(--ba-tone-action-soft);
+        color: var(--ba-tone-action);
+      }
+      .column.actions .col-count {
+        background: var(--ba-tone-action-soft);
+        color: var(--ba-tone-action);
+      }
+
+      /* ── Cards ──────────────────────────────────────────── */
+      .card {
+        background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+        border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.2));
+        border-radius: var(--at-radius-card, 12px);
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+      .card:hover {
+        border-color: var(--vscode-focusBorder);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+      .card.highlighted {
+        border-color: var(--vscode-focusBorder);
+        box-shadow:
+          0 0 0 2px var(--vscode-focusBorder),
+          0 4px 16px rgba(0, 0, 0, 0.2);
+      }
+      .card.dimmed {
+        opacity: 0.3;
+        transition: opacity 0.3s;
+      }
+
+      /* Card left accent stripe */
+      .card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 3px;
+        border-radius: 3px;
+      }
+      .column.benefits .card::before {
+        background: var(--ba-tone-benefit);
+      }
+      .column.outcomes .card::before {
+        background: var(--ba-tone-outcome);
+      }
+      .column.risks .card::before {
+        background: var(--ba-tone-risk);
+      }
+      .column.actions .card::before {
+        background: var(--ba-tone-action);
+      }
+
+      .card-title {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+        padding-left: 8px;
+        line-height: 1.35;
+      }
+      .card-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-left: 8px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: var(--at-radius-control, 8px);
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      /* Status badges */
+      .badge.stage-realised,
+      .badge.risk-low,
+      .badge.status-completed,
+      .badge.risk-status-closed {
+        background: var(--at-status-success-bg, rgba(76, 175, 80, 0.18));
+        color: var(--at-status-success-fg, var(--ba-tone-benefit));
+      }
+
+      .badge.stage-in-progress,
+      .badge.status-open,
+      .badge.risk-status-assessing {
+        background: var(--at-status-info-bg, rgba(33, 150, 243, 0.18));
+        color: var(--at-status-info-fg, var(--ba-tone-action));
+      }
+
+      .badge.stage-at-risk,
+      .badge.risk-critical,
+      .badge.status-blocked {
+        background: var(--at-status-danger-bg, rgba(244, 67, 54, 0.18));
+        color: var(--at-status-danger-fg, var(--ba-tone-danger));
+      }
+
+      .badge.stage-planned,
+      .badge.risk-high,
+      .badge.status-in-progress,
+      .badge.risk-status-mitigating,
+      .badge.risk-status-monitoring,
+      .badge.risk-medium {
+        background: var(--at-status-warning-bg, rgba(255, 152, 0, 0.18));
+        color: var(--at-status-warning-fg, var(--ba-tone-risk));
+      }
+
+      .badge.stage-idea,
+      .badge.stage-deferred,
+      .badge.risk-status-identified {
+        background: var(--at-status-neutral-bg, rgba(158, 158, 158, 0.18));
+        color: var(--at-status-neutral-fg, var(--ba-tone-neutral));
+      }
+
+      .badge.owner {
+        background: rgba(128, 128, 128, 0.12);
+        color: var(--vscode-foreground);
+        opacity: 0.75;
+      }
+      .badge.priority {
+        background: rgba(128, 128, 128, 0.12);
+        color: var(--vscode-foreground);
+        opacity: 0.75;
+      }
+      .badge.links-count {
+        background: rgba(128, 128, 128, 0.1);
+        color: var(--vscode-foreground);
+        opacity: 0.6;
+        font-size: 9px;
+      }
+
+      /* Card progress bar (benefits) */
+      .progress-bar {
+        margin-top: 8px;
+        margin-left: 8px;
+        height: 4px;
+        background: rgba(128, 128, 128, 0.15);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .progress-bar .fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.4s ease;
+      }
+
+      /* ── Connection lines ──────────────────────────────── */
+      .connection-line {
+        fill: none;
+        stroke-width: 1.5;
+        opacity: 0.25;
+        transition:
+          opacity 0.3s,
+          stroke-width 0.3s;
+      }
+      .connection-line.benefit-outcome {
+        stroke: var(--ba-tone-outcome);
+      }
+      .connection-line.outcome-risk {
+        stroke: var(--ba-tone-risk);
+      }
+      .connection-line.risk-action {
+        stroke: var(--ba-tone-action);
+      }
+      .connection-line.highlighted {
+        opacity: 0.85;
+        stroke-width: 2.5;
+      }
+      .connection-line.dimmed {
+        opacity: 0.06;
+      }
+
+      /* ── Empty state ───────────────────────────────────── */
+      .empty-state {
+        text-align: center;
+        padding: 60px 24px;
+        opacity: 0.5;
+      }
+      .empty-state .icon {
+        font-size: 48px;
+        margin-bottom: 12px;
+      }
+      .empty-state h2 {
+        font-size: 16px;
+        margin-bottom: 8px;
+      }
+      .empty-state p {
+        font-size: 12px;
+        max-width: 360px;
+        margin: 0 auto;
+        line-height: 1.5;
+      }
+
+      /* ── Filter bar ────────────────────────────────────── */
+      .filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 28px;
+        border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.15));
+        flex-wrap: wrap;
+      }
+      .filter-bar label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        opacity: 0.6;
+      }
+      .filter-bar select {
+        background: var(--vscode-dropdown-background);
+        color: var(--vscode-dropdown-foreground);
+        border: 1px solid var(--vscode-dropdown-border, rgba(128, 128, 128, 0.3));
+        padding: 3px 8px;
+        border-radius: var(--at-radius-control, 8px);
+        font-size: 11px;
+        font-family: inherit;
+      }
+      .filter-bar .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      /* ── Summary strip ─────────────────────────────────── */
+      .summary-strip {
+        display: flex;
+        gap: 16px;
+        padding: 12px 28px;
+        border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.15));
+        flex-wrap: wrap;
+      }
+      .summary-stat {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .summary-stat .stat-value {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .summary-stat .stat-value.tone-success {
+        color: var(--at-status-success-fg, var(--ba-tone-benefit));
+      }
+      .summary-stat .stat-value.tone-warning {
+        color: var(--at-status-warning-fg, var(--ba-tone-risk));
+      }
+      .summary-stat .stat-value.tone-danger {
+        color: var(--at-status-danger-fg, var(--ba-tone-danger));
+      }
+      .summary-stat .stat-value.tone-info {
+        color: var(--at-status-info-fg, var(--ba-tone-action));
+      }
+      .summary-stat .stat-label {
+        font-size: 11px;
+        opacity: 0.6;
+        line-height: 1.3;
+      }
+      .stat-divider {
+        width: 1px;
+        height: 28px;
+        background: var(--vscode-panel-border, rgba(128, 128, 128, 0.2));
+      }
+      .summary-hint {
+        font-size: 11px;
+        opacity: 0.7;
+        align-self: center;
+        margin-left: auto;
+        white-space: nowrap;
+      }
+
+      /* ── Responsive ────────────────────────────────────── */
+      @media (max-width: 900px) {
+        .board-container {
+          flex-direction: column;
+        }
+        .column {
+          max-width: none;
+        }
+        .connections-layer {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="header-left">
+        <div>
+          <h1>🛡️ Benefit Assurance</h1>
+          <div class="subtitle">How actions mitigate risks to protect strategic benefits</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="resetBtn">Reset Filters</button>
+        <button id="toggleLinesBtn">Hide Lines</button>
+        <button id="exportPdfBtn">Export PDF</button>
+        <button class="primary" id="refreshBtn">⟳ Refresh</button>
+      </div>
+    </div>
+
+    <div class="filter-bar" id="filterBar">
+      <div class="filter-group">
+        <label>Benefit Stage</label>
+        <select id="filterBenefitStage">
+          <option value="">All</option>
+          <option value="idea">Idea</option>
+          <option value="planned">Planned</option>
+          <option value="in-progress">In Progress</option>
+          <option value="realised">Realised</option>
+          <option value="at-risk">At Risk</option>
+          <option value="deferred">Deferred</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Risk Level</label>
+        <select id="filterRiskLevel">
+          <option value="">All</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Action Status</label>
+        <select id="filterActionStatus">
+          <option value="">All</option>
+          <option value="open">Open</option>
+          <option value="in-progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="blocked">Blocked</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="filterShowCompleted">Show completed</label>
+        <input type="checkbox" id="filterShowCompleted" />
+      </div>
+      <div class="filter-group">
+        <label>Show only linked</label>
+        <select id="filterLinkedOnly">
+          <option value="">All Items</option>
+          <option value="linked">Linked Only</option>
+          <option value="unlinked">Unlinked Only</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="summary-strip" id="summaryStrip"></div>
+
+    <div class="legend">
+      <span style="font-weight: 600">Connections:</span>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background: var(--ba-tone-outcome)"></div>
+        <span>Benefit ↔ Outcome</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background: var(--ba-tone-risk)"></div>
+        <span>Outcome ↔ Risk</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background: var(--ba-tone-action)"></div>
+        <span>Risk ↔ Action</span>
+      </div>
+      <span style="margin-left: 12px; font-style: italic"
+        >Click to highlight paths · Cmd/Ctrl+Click for multi-select · Lines show only when both
+        linked cards are highlighted · Double-click to open details</span
+      >
+    </div>
+
+    <div class="board-container" id="boardContainer">
+      <svg class="connections-layer" id="connectionsLayer"></svg>
+
+      <div class="column benefits" id="benefitsColumn">
+        <div class="column-header">
+          <div class="col-icon">★</div>
+          <h2>Benefits</h2>
+          <span class="col-count" id="benefitCount">0</span>
+        </div>
+        <div class="card-list" id="benefitsList"></div>
+      </div>
+
+      <div class="column outcomes" id="outcomesColumn">
+        <div class="column-header">
+          <div class="col-icon">◎</div>
+          <h2>Business Plan Objectives</h2>
+          <span class="col-count" id="outcomeCount">0</span>
+        </div>
+        <div class="card-list" id="outcomesList"></div>
+      </div>
+
+      <div class="column risks" id="risksColumn">
+        <div class="column-header">
+          <div class="col-icon">⚠</div>
+          <h2>Risks</h2>
+          <span class="col-count" id="riskCount">0</span>
+        </div>
+        <div class="card-list" id="risksList"></div>
+      </div>
+
+      <div class="column actions" id="actionsColumn">
+        <div class="column-header">
+          <div class="col-icon">⚡</div>
+          <h2>Actions</h2>
+          <span class="col-count" id="actionCount">0</span>
+        </div>
+        <div class="card-list" id="actionsList"></div>
+      </div>
+    </div>
+
+    <script nonce="${nonce}">
+      const vscode = acquireVsCodeApi();
+
+      /* ── State ──────────────────────────────────────── */
+      let allBenefits = [];
+      let allOutcomes = [];
+      let allRisks = [];
+      let allActions = [];
+      let filteredBenefits = [];
+      let filteredOutcomes = [];
+      let filteredRisks = [];
+      let filteredActions = [];
+      let selectedCards = []; // [{ type: 'benefit'|'outcome'|'risk'|'action', id: string }]
+      let highlightedCardSets = createEmptyHighlightSets();
+      let showCompletedActions = false;
+      let linesVisible = true;
+
+      /* ── Init ───────────────────────────────────────── */
+      vscode.postMessage({ command: 'getInitialData' });
+
+      window.addEventListener('message', (event) => {
+        const msg = event.data;
+        if (msg.command === 'updateData') {
+          allBenefits = msg.data.benefits || [];
+          allOutcomes = msg.data.outcomes || [];
+          allRisks = msg.data.risks || [];
+          allActions = msg.data.actions || [];
+          applyFilters();
+        }
+      });
+
+      /* ── Filters ────────────────────────────────────── */
+      function applyFilters() {
+        const stageFilter = document.getElementById('filterBenefitStage').value;
+        const riskFilter = document.getElementById('filterRiskLevel').value;
+        const statusFilter = document.getElementById('filterActionStatus').value;
+        const linkedFilter = document.getElementById('filterLinkedOnly').value;
+
+        // Build the set of IDs that are linked
+        const linkedBenefitIds = new Set();
+        const linkedOutcomeIds = new Set();
+        const linkedRiskIds = new Set();
+        const linkedActionIds = new Set();
+
+        allBenefits.forEach((b) => {
+          (b.relatedOutcomes || []).forEach((oid) => {
+            linkedBenefitIds.add(b.id);
+            linkedOutcomeIds.add(oid);
+          });
+          (b.relatedActions || []).forEach((aid) => {
+            linkedBenefitIds.add(b.id);
+            linkedActionIds.add(aid);
+          });
+        });
+
+        allOutcomes.forEach((o) => {
+          (o.relatedBenefits || []).forEach((bid) => {
+            linkedOutcomeIds.add(o.id);
+            linkedBenefitIds.add(bid);
+          });
+          (o.relatedRisks || []).forEach((rid) => {
+            linkedOutcomeIds.add(o.id);
+            linkedRiskIds.add(rid);
+          });
+        });
+
+        allRisks.forEach((r) => {
+          (r.relatedActions || []).forEach((aid) => {
+            linkedRiskIds.add(r.id);
+            linkedActionIds.add(aid);
+          });
+        });
+
+        filteredBenefits = allBenefits.filter((b) => {
+          if (stageFilter && b.stage !== stageFilter) return false;
+          if (linkedFilter === 'linked' && !linkedBenefitIds.has(b.id)) return false;
+          if (linkedFilter === 'unlinked' && linkedBenefitIds.has(b.id)) return false;
+          return true;
+        });
+
+        filteredRisks = allRisks.filter((r) => {
+          if (riskFilter && r.riskLevel !== riskFilter) return false;
+          if (linkedFilter === 'linked' && !linkedRiskIds.has(r.id)) return false;
+          if (linkedFilter === 'unlinked' && linkedRiskIds.has(r.id)) return false;
+          return true;
+        });
+
+        filteredOutcomes = allOutcomes.filter((o) => {
+          if (linkedFilter === 'linked' && !linkedOutcomeIds.has(o.id)) return false;
+          if (linkedFilter === 'unlinked' && linkedOutcomeIds.has(o.id)) return false;
+          return true;
+        });
+
+        filteredActions = allActions.filter((a) => {
+          if (!showCompletedActions && a.status === 'completed' && statusFilter !== 'completed')
+            return false;
+          if (statusFilter && a.status !== statusFilter) return false;
+          if (linkedFilter === 'linked' && !linkedActionIds.has(a.id)) return false;
+          if (linkedFilter === 'unlinked' && linkedActionIds.has(a.id)) return false;
+          return true;
+        });
+
+        render();
+      }
+
+      function resetFilters() {
+        document.getElementById('filterBenefitStage').value = '';
+        document.getElementById('filterRiskLevel').value = '';
+        document.getElementById('filterActionStatus').value = '';
+        document.getElementById('filterLinkedOnly').value = '';
+        const showCompletedEl = document.getElementById('filterShowCompleted');
+        showCompletedActions = false;
+        if (showCompletedEl) showCompletedEl.checked = false;
+        selectedCards = [];
+        applyFilters();
+      }
+
+      function refreshData() {
+        vscode.postMessage({ command: 'getInitialData' });
+      }
+
+      function exportToPdf() {
+        requestAnimationFrame(() => {
+          drawConnections();
+          vscode.postMessage({ command: 'exportPdf' });
+        });
+      }
+
+      /* ── Render ─────────────────────────────────────── */
+      function render() {
+        highlightedCardSets = buildHighlightedCardSets();
+
+        renderSummary();
+        renderColumn('benefitsList', filteredBenefits, 'benefit');
+        renderColumn('outcomesList', filteredOutcomes, 'outcome');
+        renderColumn('risksList', filteredRisks, 'risk');
+        renderColumn('actionsList', filteredActions, 'action');
+
+        document.getElementById('benefitCount').textContent = filteredBenefits.length;
+        document.getElementById('outcomeCount').textContent = filteredOutcomes.length;
+        document.getElementById('riskCount').textContent = filteredRisks.length;
+        document.getElementById('actionCount').textContent = filteredActions.length;
+
+        // Draw connections after DOM is updated
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => drawConnections());
+        });
+      }
+
+      function renderSummary() {
+        const atRisk = allBenefits.filter((b) => b.stage === 'at-risk').length;
+        const criticalRisks = allRisks.filter(
+          (r) => r.riskLevel === 'critical' || r.riskLevel === 'high',
+        ).length;
+        const openActions = allActions.filter(
+          (a) => a.status === 'open' || a.status === 'in-progress',
+        ).length;
+        const completedActions = allActions.filter((a) => a.status === 'completed').length;
+        const actionStatusFilter = document.getElementById('filterActionStatus')?.value || '';
+        const hiddenCompletedCount =
+          !showCompletedActions && actionStatusFilter !== 'completed' ? completedActions : 0;
+
+        // Calculate coverage: benefits that have at least one linked action (via risks)
+        const coveredBenefits = allBenefits.filter((b) => {
+          const risksForBenefit = b.relatedRisks || [];
+          return (
+            risksForBenefit.some((rid) => {
+              const risk = allRisks.find((r) => r.id === rid);
+              return risk && (risk.relatedActions || []).length > 0;
+            }) || (b.relatedActions || []).length > 0
+          );
+        }).length;
+        const coverage =
+          allBenefits.length > 0 ? Math.round((coveredBenefits / allBenefits.length) * 100) : 0;
+
+        const strip = document.getElementById('summaryStrip');
+        strip.innerHTML = `
+        <div class="summary-stat">
+          <span class="stat-value tone-success">${allBenefits.length}</span>
+          <span class="stat-label">Total<br>Benefits</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="summary-stat">
+          <span class="stat-value ${atRisk > 0 ? 'tone-danger' : 'tone-success'}">${atRisk}</span>
+          <span class="stat-label">Benefits<br>At Risk</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="summary-stat">
+          <span class="stat-value tone-warning">${criticalRisks}</span>
+          <span class="stat-label">High/Critical<br>Risks</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="summary-stat">
+          <span class="stat-value tone-info">${openActions}</span>
+          <span class="stat-label">Active<br>Actions</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="summary-stat">
+          <span class="stat-value tone-success">${completedActions}</span>
+          <span class="stat-label">Completed<br>Actions</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="summary-stat">
+          <span class="stat-value ${coverage === 100 ? 'tone-success' : coverage >= 60 ? 'tone-warning' : 'tone-danger'}">${coverage}%</span>
+          <span class="stat-label">Benefit<br>Coverage</span>
+        </div>
+        ${hiddenCompletedCount > 0 ? `<div class="summary-hint">${hiddenCompletedCount} completed hidden</div>` : ''}
+      `;
+      }
+
+      function renderColumn(containerId, items, type) {
+        const container = document.getElementById(containerId);
+        if (items.length === 0) {
+          container.innerHTML = `
+          <div style="text-align:center; padding:30px; opacity:0.4; font-size:12px;">
+            No ${type}s to display
+          </div>`;
+          return;
+        }
+
+        container.innerHTML = items.map((item) => createCard(item, type)).join('');
+
+        // Attach click handlers (single = select, double = open detail)
+        container.querySelectorAll('.card').forEach((cardEl) => {
+          cardEl.addEventListener('click', (event) => {
+            const cardId = cardEl.dataset.id;
+            const cardType = cardEl.dataset.type;
+            const additive = event.metaKey || event.ctrlKey;
+            handleCardSelect(cardType, cardId, additive);
+          });
+          cardEl.addEventListener('dblclick', () => {
+            const cardId = cardEl.dataset.id;
+            const cardType = cardEl.dataset.type;
+            handleCardOpen(cardType, cardId);
+          });
+        });
+      }
+
+      function createCard(item, type) {
+        const isSelected = isCardSelected(type, item.id);
+        const relatedIds = getRelatedIds(type, item);
+        const isHighlighted = hasSelection() && isCardHighlighted(type, item.id);
+        const isDimmed = hasSelection() && !isHighlighted;
+
+        let badges = '';
+        let progressBar = '';
+
+        if (type === 'benefit') {
+          badges += `<span class="badge stage-${item.stage}">${formatStage(item.stage)}</span>`;
+          if (item.category) {
+            badges += `<span class="badge priority">${item.category}</span>`;
+          }
+          if (item.owner) {
+            badges += `<span class="badge owner">👤 ${item.owner}</span>`;
+          }
+          const outcomeCount = allOutcomes.filter((o) =>
+            (o.relatedBenefits || []).includes(item.id),
+          ).length;
+          if (outcomeCount > 0) {
+            badges += `<span class="badge links-count">↔ ${outcomeCount} outcome${outcomeCount > 1 ? 's' : ''}</span>`;
+          }
+          // Progress bar
+          if (
+            typeof item.currentValue === 'number' &&
+            typeof item.targetValue === 'number' &&
+            item.targetValue > 0
+          ) {
+            const pct = Math.min(100, Math.round((item.currentValue / item.targetValue) * 100));
+            const pctColor =
+              pct >= 80
+                ? 'var(--at-status-success-fg, var(--ba-tone-benefit))'
+                : pct >= 50
+                  ? 'var(--at-status-warning-fg, var(--ba-tone-risk))'
+                  : 'var(--at-status-danger-fg, var(--ba-tone-danger))';
+            progressBar = `
+            <div class="progress-bar">
+              <div class="fill" style="width:${pct}%; background:${pctColor};"></div>
+            </div>`;
+          }
+        } else if (type === 'outcome') {
+          const sourceLabel = String(item.source || 'other').replace(/-/g, ' ');
+          badges += `<span class="badge priority">${sourceLabel}</span>`;
+          if (item.status) {
+            badges += `<span class="badge status-${item.status}">${item.status}</span>`;
+          }
+          if (item.owner) {
+            badges += `<span class="badge owner">👤 ${item.owner}</span>`;
+          }
+          const benefitCount = (item.relatedBenefits || []).filter((id) =>
+            filteredBenefits.some((b) => b.id === id),
+          ).length;
+          const riskCount = (item.relatedRisks || []).filter((id) =>
+            filteredRisks.some((r) => r.id === id),
+          ).length;
+          if (benefitCount > 0) {
+            badges += `<span class="badge links-count">← ${benefitCount} benefit${benefitCount > 1 ? 's' : ''}</span>`;
+          }
+          if (riskCount > 0) {
+            badges += `<span class="badge links-count">→ ${riskCount} risk${riskCount > 1 ? 's' : ''}</span>`;
+          }
+        } else if (type === 'risk') {
+          badges += `<span class="badge risk-${item.riskLevel}">${item.riskLevel}</span>`;
+          badges += `<span class="badge risk-status-${item.status}">${item.status}</span>`;
+          if (item.owner) {
+            badges += `<span class="badge owner">👤 ${item.owner}</span>`;
+          }
+          const actionCount = (item.relatedActions || []).filter((id) =>
+            filteredActions.some((a) => a.id === id),
+          ).length;
+          const outcomeCount = filteredOutcomes.filter((o) =>
+            (o.relatedRisks || []).includes(item.id),
+          ).length;
+          if (outcomeCount > 0) {
+            badges += `<span class="badge links-count">← ${outcomeCount} outcome${outcomeCount > 1 ? 's' : ''}</span>`;
+          }
+          if (actionCount > 0) {
+            badges += `<span class="badge links-count">→ ${actionCount} action${actionCount > 1 ? 's' : ''}</span>`;
+          }
+        } else if (type === 'action') {
+          badges += `<span class="badge status-${item.status}">${item.status}</span>`;
+          if (item.priority) {
+            badges += `<span class="badge priority">${item.priority}</span>`;
+          }
+          if (item.assignee) {
+            badges += `<span class="badge owner">👤 ${item.assignee}</span>`;
+          }
+          if (item.dueDate) {
+            const due = new Date(item.dueDate);
+            const now = new Date();
+            const isOverdue = due < now && item.status !== 'completed';
+            badges += `<span class="badge ${isOverdue ? 'risk-high' : 'priority'}">📅 ${item.dueDate}</span>`;
+          }
+          const riskCount = filteredRisks.filter((r) =>
+            (r.relatedActions || []).includes(item.id),
+          ).length;
+          if (riskCount > 0) {
+            badges += `<span class="badge links-count">← ${riskCount} risk${riskCount > 1 ? 's' : ''}</span>`;
+          }
+        }
+
+        const classes = ['card'];
+        if (isHighlighted) classes.push('highlighted');
+        if (isDimmed) classes.push('dimmed');
+
+        return `
+        <div class="${classes.join(' ')}" data-id="${item.id}" data-type="${type}">
+          <div class="card-title">${escapeHtml(item.title || item.summary || 'Untitled')}</div>
+          <div class="card-meta">${badges}</div>
+          ${progressBar}
+        </div>`;
+      }
+
+      /* ── Card interaction ───────────────────────────── */
+      function hasSelection() {
+        return selectedCards.length > 0;
+      }
+
+      function isCardSelected(type, id) {
+        return selectedCards.some((sel) => sel.type === type && sel.id === id);
+      }
+
+      function handleCardSelect(type, id, additive = false) {
+        const selectedIndex = selectedCards.findIndex((sel) => sel.type === type && sel.id === id);
+
+        if (additive) {
+          if (selectedIndex >= 0) {
+            selectedCards.splice(selectedIndex, 1);
+          } else {
+            selectedCards.push({ type, id });
+          }
+        } else {
+          if (selectedCards.length === 1 && selectedIndex === 0) {
+            selectedCards = []; // Deselect
+          } else {
+            selectedCards = [{ type, id }];
+          }
+        }
+        render();
+      }
+
+      function handleCardOpen(type, id) {
+        vscode.postMessage({ command: 'openDetail', entity: type, id: id });
+      }
+
+      function isRelatedToSelected(type, id) {
+        if (!hasSelection()) return false;
+
+        return selectedCards.some((selected) => {
+          if (selected.type === 'benefit') {
+            const benefit = allBenefits.find((b) => b.id === selected.id);
+            if (!benefit) return false;
+            if (type === 'outcome') {
+              return allOutcomes.some(
+                (o) => o.id === id && (o.relatedBenefits || []).includes(selected.id),
+              );
+            }
+            if (type === 'risk') {
+              return allOutcomes.some(
+                (o) =>
+                  (o.relatedBenefits || []).includes(selected.id) &&
+                  (o.relatedRisks || []).includes(id),
+              );
+            }
+            if (type === 'action') {
+              return (
+                allOutcomes.some(
+                  (o) =>
+                    (o.relatedBenefits || []).includes(selected.id) &&
+                    (o.relatedRisks || []).some((rid) => {
+                      const risk = allRisks.find((r) => r.id === rid);
+                      return risk && (risk.relatedActions || []).includes(id);
+                    }),
+                ) || (benefit.relatedActions || []).includes(id)
+              );
+            }
+          }
+
+          if (selected.type === 'outcome') {
+            const outcome = allOutcomes.find((o) => o.id === selected.id);
+            if (!outcome) return false;
+            if (type === 'benefit') return (outcome.relatedBenefits || []).includes(id);
+            if (type === 'risk') return (outcome.relatedRisks || []).includes(id);
+            if (type === 'action') {
+              return (outcome.relatedRisks || []).some((rid) => {
+                const risk = allRisks.find((r) => r.id === rid);
+                return risk && (risk.relatedActions || []).includes(id);
+              });
+            }
+          }
+
+          if (selected.type === 'risk') {
+            const risk = allRisks.find((r) => r.id === selected.id);
+            if (!risk) return false;
+            if (type === 'outcome')
+              return allOutcomes.some(
+                (o) => o.id === id && (o.relatedRisks || []).includes(selected.id),
+              );
+            if (type === 'benefit') {
+              return allBenefits.some(
+                (b) =>
+                  b.id === id &&
+                  allOutcomes.some(
+                    (o) =>
+                      (o.relatedBenefits || []).includes(b.id) &&
+                      (o.relatedRisks || []).includes(selected.id),
+                  ),
+              );
+            }
+            if (type === 'action') return (risk.relatedActions || []).includes(id);
+          }
+
+          if (selected.type === 'action') {
+            const actionId = selected.id;
+            if (type === 'risk') {
+              const risk = allRisks.find((r) => r.id === id);
+              return risk && (risk.relatedActions || []).includes(actionId);
+            }
+            if (type === 'benefit') {
+              return allBenefits.some((b) => {
+                if (b.id !== id) return false;
+                return (
+                  (b.relatedActions || []).includes(actionId) ||
+                  allOutcomes.some(
+                    (o) =>
+                      (o.relatedBenefits || []).includes(b.id) &&
+                      (o.relatedRisks || []).some((rid) => {
+                        const risk = allRisks.find((r) => r.id === rid);
+                        return risk && (risk.relatedActions || []).includes(actionId);
+                      }),
+                  )
+                );
+              });
+            }
+            if (type === 'outcome') {
+              return allOutcomes.some((o) => {
+                if (o.id !== id) return false;
+                return (o.relatedRisks || []).some((rid) => {
+                  const risk = allRisks.find((r) => r.id === rid);
+                  return risk && (risk.relatedActions || []).includes(actionId);
+                });
+              });
+            }
+          }
+
+          return false;
+        });
+      }
+
+      function getRelatedIds(type, item) {
+        const ids = { benefits: [], outcomes: [], risks: [], actions: [] };
+        if (type === 'benefit') {
+          ids.outcomes = item.relatedOutcomes || [];
+          ids.actions = item.relatedActions || [];
+        } else if (type === 'outcome') {
+          ids.benefits = item.relatedBenefits || [];
+          ids.risks = item.relatedRisks || [];
+        } else if (type === 'risk') {
+          ids.actions = item.relatedActions || [];
+        }
+        return ids;
+      }
+
+      function createEmptyHighlightSets() {
+        return {
+          benefits: new Set(),
+          outcomes: new Set(),
+          risks: new Set(),
+          actions: new Set(),
+        };
+      }
+
+      function isCardHighlighted(type, id) {
+        if (type === 'benefit') return highlightedCardSets.benefits.has(id);
+        if (type === 'outcome') return highlightedCardSets.outcomes.has(id);
+        if (type === 'risk') return highlightedCardSets.risks.has(id);
+        if (type === 'action') return highlightedCardSets.actions.has(id);
+        return false;
+      }
+
+      function buildHighlightedCardSets() {
+        const sets = createEmptyHighlightSets();
+        if (!hasSelection()) {
+          return sets;
+        }
+
+        const benefitsById = new Map(allBenefits.map((benefit) => [benefit.id, benefit]));
+        const outcomesById = new Map(allOutcomes.map((outcome) => [outcome.id, outcome]));
+        const risksById = new Map(allRisks.map((risk) => [risk.id, risk]));
+
+        const addBenefit = (benefitId) => sets.benefits.add(benefitId);
+        const addOutcome = (outcomeId) => sets.outcomes.add(outcomeId);
+        const addRisk = (riskId) => sets.risks.add(riskId);
+        const addAction = (actionId) => sets.actions.add(actionId);
+
+        selectedCards.forEach((selected) => {
+          if (selected.type === 'benefit') {
+            addBenefit(selected.id);
+
+            const benefit = benefitsById.get(selected.id);
+            if (!benefit) return;
+
+            allOutcomes
+              .filter((outcome) => (outcome.relatedBenefits || []).includes(selected.id))
+              .forEach((outcome) => {
+                addOutcome(outcome.id);
+                (outcome.relatedRisks || []).forEach((riskId) => {
+                  addRisk(riskId);
+                  const risk = risksById.get(riskId);
+                  if (risk) {
+                    (risk.relatedActions || []).forEach((actionId) => addAction(actionId));
+                  }
+                });
+              });
+
+            (benefit.relatedRisks || []).forEach((riskId) => {
+              addRisk(riskId);
+              const risk = risksById.get(riskId);
+              if (risk) {
+                (risk.relatedActions || []).forEach((actionId) => addAction(actionId));
+              }
+            });
+
+            (benefit.relatedActions || []).forEach((actionId) => addAction(actionId));
+            return;
+          }
+
+          if (selected.type === 'outcome') {
+            addOutcome(selected.id);
+            const outcome = outcomesById.get(selected.id);
+            if (outcome) {
+              (outcome.relatedBenefits || []).forEach((benefitId) => addBenefit(benefitId));
+              (outcome.relatedRisks || []).forEach((riskId) => {
+                addRisk(riskId);
+                const risk = risksById.get(riskId);
+                if (risk) {
+                  (risk.relatedActions || []).forEach((actionId) => addAction(actionId));
+                }
+              });
+            }
+            return;
+          }
+
+          if (selected.type === 'risk') {
+            addRisk(selected.id);
+            allOutcomes
+              .filter((outcome) => (outcome.relatedRisks || []).includes(selected.id))
+              .forEach((outcome) => {
+                addOutcome(outcome.id);
+                (outcome.relatedBenefits || []).forEach((benefitId) => addBenefit(benefitId));
+              });
+            const risk = risksById.get(selected.id);
+            if (risk) {
+              (risk.relatedActions || []).forEach((actionId) => addAction(actionId));
+            }
+            return;
+          }
+
+          if (selected.type === 'action') {
+            addAction(selected.id);
+            allRisks
+              .filter((risk) => (risk.relatedActions || []).includes(selected.id))
+              .forEach((risk) => {
+                addRisk(risk.id);
+                allOutcomes
+                  .filter((outcome) => (outcome.relatedRisks || []).includes(risk.id))
+                  .forEach((outcome) => {
+                    addOutcome(outcome.id);
+                    (outcome.relatedBenefits || []).forEach((benefitId) => addBenefit(benefitId));
+                  });
+              });
+          }
+        });
+
+        return sets;
+      }
+
+      /* ── SVG Connections ────────────────────────────── */
+      function drawConnections() {
+        const svg = document.getElementById('connectionsLayer');
+        const container = document.getElementById('boardContainer');
+        if (!svg || !container) return;
+
+        // Size SVG to cover the board
+        const rect = container.getBoundingClientRect();
+        svg.setAttribute('width', rect.width);
+        svg.setAttribute('height', rect.height);
+        svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+
+        let paths = '';
+        if (!linesVisible) {
+          svg.innerHTML = paths;
+          return;
+        }
+
+        const containerRect = container.getBoundingClientRect();
+
+        // Benefit → Outcome connections
+        filteredBenefits.forEach((benefit) => {
+          const benefitEl = document.querySelector(
+            `.card[data-id="${benefit.id}"][data-type="benefit"]`,
+          );
+          if (!benefitEl) return;
+
+          filteredOutcomes
+            .filter((outcome) => (outcome.relatedBenefits || []).includes(benefit.id))
+            .forEach((outcome) => {
+              const outcomeEl = document.querySelector(
+                `.card[data-id="${outcome.id}"][data-type="outcome"]`,
+              );
+              if (!outcomeEl) return;
+
+              const isConnectedToHighlightedCards =
+                isCardHighlighted('benefit', benefit.id) &&
+                isCardHighlighted('outcome', outcome.id);
+              if (hasSelection() && !isConnectedToHighlightedCards) return;
+
+              paths += createCurvedPath(
+                benefitEl,
+                outcomeEl,
+                containerRect,
+                'benefit-outcome' + (hasSelection() ? ' highlighted' : ''),
+              );
+            });
+        });
+
+        // Outcome → Risk connections
+        filteredOutcomes.forEach((outcome) => {
+          const outcomeEl = document.querySelector(
+            `.card[data-id="${outcome.id}"][data-type="outcome"]`,
+          );
+          if (!outcomeEl) return;
+
+          (outcome.relatedRisks || []).forEach((riskId) => {
+            const riskEl = document.querySelector(`.card[data-id="${riskId}"][data-type="risk"]`);
+            if (!riskEl) return;
+
+            const isConnectedToHighlightedCards =
+              isCardHighlighted('outcome', outcome.id) && isCardHighlighted('risk', riskId);
+            if (hasSelection() && !isConnectedToHighlightedCards) return;
+
+            paths += createCurvedPath(
+              outcomeEl,
+              riskEl,
+              containerRect,
+              'outcome-risk' + (hasSelection() ? ' highlighted' : ''),
+            );
+          });
+        });
+
+        // Risk → Action connections
+        filteredRisks.forEach((risk) => {
+          const riskEl = document.querySelector(`.card[data-id="${risk.id}"][data-type="risk"]`);
+          if (!riskEl) return;
+
+          (risk.relatedActions || []).forEach((actionId) => {
+            const actionEl = document.querySelector(
+              `.card[data-id="${actionId}"][data-type="action"]`,
+            );
+            if (!actionEl) return;
+
+            const isConnectedToHighlightedCards =
+              isCardHighlighted('risk', risk.id) && isCardHighlighted('action', actionId);
+            if (hasSelection() && !isConnectedToHighlightedCards) return;
+
+            paths += createCurvedPath(
+              riskEl,
+              actionEl,
+              containerRect,
+              'risk-action' + (hasSelection() ? ' highlighted' : ''),
+            );
+          });
+        });
+
+        svg.innerHTML = paths;
+      }
+
+      function createCurvedPath(fromEl, toEl, containerRect, className) {
+        const from = fromEl.getBoundingClientRect();
+        const to = toEl.getBoundingClientRect();
+
+        // Start at right edge of "from", end at left edge of "to"
+        const x1 = from.right - containerRect.left;
+        const y1 = from.top + from.height / 2 - containerRect.top;
+        const x2 = to.left - containerRect.left;
+        const y2 = to.top + to.height / 2 - containerRect.top;
+
+        // Nice cubic bezier curve
+        const dx = Math.abs(x2 - x1);
+        const cp1x = x1 + dx * 0.4;
+        const cp2x = x2 - dx * 0.4;
+
+        return `<path class="connection-line ${className}" d="M${x1},${y1} C${cp1x},${y1} ${cp2x},${y2} ${x2},${y2}" />`;
+      }
+
+      function toggleAllConnections() {
+        linesVisible = !linesVisible;
+        document.getElementById('toggleLinesBtn').textContent = linesVisible
+          ? 'Hide Lines'
+          : 'Show Lines';
+        drawConnections();
+      }
+
+      /* ── Helpers ─────────────────────────────────────── */
+      function formatStage(stage) {
+        return stage
+          .split('-')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+      }
+
+      function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      /* ── Resize handler ─────────────────────────────── */
+      let resizeTimer;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => drawConnections(), 100);
+      });
+
+      // Redraw on scroll inside container
+      document.getElementById('boardContainer')?.addEventListener('scroll', () => {
+        requestAnimationFrame(() => drawConnections());
+      });
+
+      /* ── Wire up header buttons & filter selects ───── */
+      document.getElementById('resetBtn')?.addEventListener('click', () => resetFilters());
+      document
+        .getElementById('toggleLinesBtn')
+        ?.addEventListener('click', () => toggleAllConnections());
+      document.getElementById('exportPdfBtn')?.addEventListener('click', () => exportToPdf());
+      document.getElementById('refreshBtn')?.addEventListener('click', () => refreshData());
+
+      document
+        .getElementById('filterBenefitStage')
+        ?.addEventListener('change', () => applyFilters());
+      document.getElementById('filterRiskLevel')?.addEventListener('change', () => applyFilters());
+      document
+        .getElementById('filterActionStatus')
+        ?.addEventListener('change', () => applyFilters());
+      document.getElementById('filterShowCompleted')?.addEventListener('change', (event) => {
+        showCompletedActions = Boolean(event.target.checked);
+        applyFilters();
+      });
+      document.getElementById('filterLinkedOnly')?.addEventListener('change', () => applyFilters());
+    </script>
+  </body>
+</html>

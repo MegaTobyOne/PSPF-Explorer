@@ -16,6 +16,7 @@ export default tseslint.config(
       'node_modules/**',
       '.vscode/**',
       'scripts/**',
+      'docs/idea/**/*.ts',
       '**/*.config.js',
       '**/* 2.*',
       '**/README *.md',
