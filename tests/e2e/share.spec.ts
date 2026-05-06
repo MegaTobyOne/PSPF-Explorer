@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('user can export a share package and merge it back, skipping duplicates', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
@@ -37,7 +37,7 @@ test('user can export a share package and merge it back, skipping duplicates', a
 });
 
 test('share view rejects malformed JSON', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);

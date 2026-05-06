@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const port = process.env.PSPF_E2E_PORT ?? '4173';
+const host = `http://127.0.0.1:${port}`;
+const rawBasePath = process.env.PSPF_BASE ?? '/';
+const basePath = rawBasePath.endsWith('/') ? rawBasePath : `${rawBasePath}/`;
+const baseURL = new URL(basePath, host).toString();
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -7,14 +13,14 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'PSPF_BASE=/ npm run build && PSPF_BASE=/ npm run preview',
-    url: 'http://127.0.0.1:4173',
+    command: `PSPF_BASE=${basePath} npm run build && PSPF_BASE=${basePath} npm run preview`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },

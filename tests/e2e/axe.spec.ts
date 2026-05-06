@@ -1,31 +1,30 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import AxeBuilder from '@axe-core/playwright';
 
 const ROUTES = [
-  '/',
-  '/risks',
-  '/actions',
-  '/tags',
-  '/views',
-  '/posture',
-  '/analytics',
-  '/coverage',
-  '/directions',
-  '/relationships',
-  '/map',
-  '/share',
-  '/grc',
-  '/backup',
-  '/restore',
-  '/help',
+  { route: '/', selector: 'pspf-home-view' },
+  { route: '/risks', selector: 'pspf-risks-view' },
+  { route: '/actions', selector: 'pspf-actions-view' },
+  { route: '/tags', selector: 'pspf-tags-view' },
+  { route: '/views', selector: 'pspf-saved-views-view' },
+  { route: '/posture', selector: 'pspf-posture-view' },
+  { route: '/analytics', selector: 'pspf-analytics-view' },
+  { route: '/coverage', selector: 'pspf-coverage-view' },
+  { route: '/directions', selector: 'pspf-directions-view' },
+  { route: '/relationships', selector: 'pspf-relationships-view' },
+  { route: '/map', selector: 'pspf-relationship-map-view' },
+  { route: '/share', selector: 'pspf-share-view' },
+  { route: '/grc', selector: 'pspf-grc-view' },
+  { route: '/backup', selector: 'pspf-backup-view' },
+  { route: '/restore', selector: 'pspf-restore-view' },
+  { route: '/help', selector: 'pspf-help-view' },
 ];
 
-for (const route of ROUTES) {
+for (const { route, selector } of ROUTES) {
   test(`axe: ${route} has no detectable WCAG 2.1 A/AA violations`, async ({ page }) => {
-    await page.goto(`/#${route}`);
-    // Wait until the app shell has rendered an outlet child for this route
+    await page.goto(`./#${route}`);
     await page.locator('pspf-app').waitFor();
-    // Give the lazy-loaded view a tick to mount
+    await expect(page.locator(selector)).toBeVisible();
     await page.waitForLoadState('networkidle');
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

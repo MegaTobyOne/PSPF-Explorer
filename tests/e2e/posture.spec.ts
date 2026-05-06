@@ -1,9 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('user can set global posture and per-domain overrides, persisting across reload', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);

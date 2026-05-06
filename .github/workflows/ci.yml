@@ -29,10 +29,10 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Build for testing
         env:
-          PSPF_BASE: /
+          PSPF_BASE: /PSPF-Explorer/
         run: npm run build
       - run: npm run perf:budget
-      - run: npm run test:e2e
+      - run: npm run test:e2e:pages
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

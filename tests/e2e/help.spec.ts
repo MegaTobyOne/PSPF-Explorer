@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('help view shows orientation content and links to all main areas', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page
     .locator('pspf-app')
     .getByRole('link', { name: /^Help$/ })

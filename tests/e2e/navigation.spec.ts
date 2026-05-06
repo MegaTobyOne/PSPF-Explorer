@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('home view renders all six domains and links to domain pages', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   const app = page.locator('pspf-app');
   await expect(app).toBeVisible();
 
@@ -23,7 +23,7 @@ test('home view renders all six domains and links to domain pages', async ({ pag
 });
 
 test('navigates to a domain page and back to home', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page
     .locator('pspf-app')
     .getByRole('link', { name: /Governance/ })
@@ -45,12 +45,12 @@ test('navigates to a domain page and back to home', async ({ page }) => {
 });
 
 test('unknown route shows the not-found view', async ({ page }) => {
-  await page.goto('/#/no-such-route');
+  await page.goto('./#/no-such-route');
   await expect(page.locator('pspf-not-found-view')).toBeVisible();
 });
 
 test('requirement view supports previous and next navigation', async ({ page }) => {
-  await page.goto('/#/requirement/GOV-001');
+  await page.goto('./#/requirement/GOV-001');
   const reqView = page.locator('pspf-requirement-view');
   await expect(reqView).toContainText('GOV-001');
   await expect(reqView.getByTestId('prev-requirement-disabled')).toBeVisible();

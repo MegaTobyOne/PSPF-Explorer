@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('integrity scan reports a clean dataset', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
@@ -19,7 +19,7 @@ test('integrity scan reports a clean dataset', async ({ page }) => {
 });
 
 test('integrity scan flags an orphan compliance entry', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);

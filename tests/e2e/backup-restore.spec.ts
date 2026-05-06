@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 
 test('backup downloads JSON, restore replaces store contents', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
@@ -71,7 +71,7 @@ test('backup downloads JSON, restore replaces store contents', async ({ page }) 
 });
 
 test('restore rejects invalid JSON', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page
     .locator('pspf-app')
     .getByRole('link', { name: /^Restore$/ })

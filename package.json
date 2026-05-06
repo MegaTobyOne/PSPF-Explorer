@@ -15,6 +15,7 @@
     "test": "vitest",
     "test:run": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:pages": "PSPF_BASE=/PSPF-Explorer/ playwright test",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 const PAYLOAD = {
   pspfGrcCapture: 'v1',
@@ -19,7 +19,7 @@ const PAYLOAD = {
 };
 
 test('GRC capture applies valid entries and surfaces rejected ones', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
@@ -44,12 +44,12 @@ test('GRC capture applies valid entries and surfaces rejected ones', async ({ pa
   await expect(summary).toContainText('NOT-REAL');
 
   // Confirm GOV-1 reflects the captured state
-  await page.goto('/#/requirement/GOV-001');
+  await page.goto('./#/requirement/GOV-001');
   await expect(page.locator('pspf-requirement-view')).toContainText('GOV-001');
 });
 
 test('GRC capture rejects payloads with unknown fields', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.evaluate(async () => {
     const dbs = await indexedDB.databases?.();
     for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);

@@ -24,10 +24,19 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
-      - name: Build
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:run
+      - run: npx playwright install --with-deps chromium
+      - name: Build deploy artifact
         env:
           PSPF_BASE: /PSPF-Explorer/
         run: npm run build
+      - run: npm run perf:budget
+      - name: Browser smoke test deploy artifact
+        env:
+          PSPF_BASE: /PSPF-Explorer/
+        run: npm run test:e2e -- --project=chromium tests/e2e/smoke.spec.ts tests/e2e/navigation.spec.ts
       - name: Generate SBOM
         run: npm run sbom
       - name: Stage SBOM into dist

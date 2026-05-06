@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('command palette opens with Cmd/Ctrl+K and navigates to Risks', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   // Wait for app shell
   await expect(page.locator('pspf-app')).toBeVisible();
 
@@ -19,7 +19,7 @@ test('command palette opens with Cmd/Ctrl+K and navigates to Risks', async ({ pa
 });
 
 test('command palette closes on Escape', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.keyboard.press('ControlOrMeta+K');
   const palette = page.locator('pspf-command-palette');
   await expect(palette).toHaveAttribute('open', '');
