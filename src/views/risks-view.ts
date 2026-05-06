@@ -196,8 +196,8 @@ export class RisksView extends LitElement {
       <article>
         <h2>Risk register</h2>
         <p>
-          Capture risks against the security programme. Score = likelihood × impact (1–25). Link to
-          requirements and actions in a future iteration.
+          Capture risks against the security programme. Score = likelihood × impact (1–25). Link
+          risks to requirements and actions so gaps show up in the relationship map.
         </p>
         ${this.#createForm()}
         ${risks.length === 0

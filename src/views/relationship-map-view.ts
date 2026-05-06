@@ -11,24 +11,44 @@ import { LitElement, css, html, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { ref } from 'lit/directives/ref.js';
 import { consume } from '@lit/context';
+import type { Core, EventObjectNode } from 'cytoscape';
 import { designTokens } from '../app/design-tokens.ts';
+import {
+  buildRelationshipMapGraph,
+  type MapNode,
+  type RelationshipMapGraph,
+} from '../domain/relationship-map.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
+import type { ComplianceState, DirectionResponseState } from '../data/types.ts';
 
-type NodeKind = 'requirement' | 'risk' | 'action' | 'direction';
-
-interface GraphNode {
-  id: string;
-  label: string;
-  kind: NodeKind;
+function mapComplianceLabel(state: ComplianceState): string {
+  switch (state) {
+    case 'yes':
+      return 'Fully implemented';
+    case 'no':
+      return 'Not yet implemented';
+    case 'risk-managed':
+      return 'Risk-managed';
+    case 'not-applicable':
+      return 'Not applicable';
+    case 'not-set':
+      return 'Not set';
+  }
 }
 
-interface GraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  kind: string;
+function mapDirectionResponseLabel(state: DirectionResponseState): string {
+  switch (state) {
+    case 'yes':
+      return 'Dealt with';
+    case 'no':
+      return 'Not dealt with';
+    case 'risk-managed':
+      return 'Risk-managed';
+    case 'not-set':
+      return 'Needs response';
+  }
 }
 
 @customElement('pspf-relationship-map-view')
@@ -40,8 +60,32 @@ export class RelationshipMapView extends LitElement {
         display: block;
       }
       h2 {
-        margin: 0 0 var(--space-3) 0;
+        margin: 0 0 var(--space-2) 0;
         font-size: var(--text-xl);
+      }
+      .intro {
+        margin: 0 0 var(--space-3) 0;
+        color: var(--colour-fg-muted);
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
+      }
+      .metric {
+        padding: var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+      }
+      .metric strong {
+        display: block;
+        font-size: var(--text-lg);
+      }
+      .metric span {
+        color: var(--colour-fg-muted);
+        font-size: var(--text-xs);
       }
       .toolbar {
         display: flex;
@@ -49,6 +93,12 @@ export class RelationshipMapView extends LitElement {
         align-items: center;
         flex-wrap: wrap;
         margin-bottom: var(--space-2);
+      }
+      .map-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+        gap: var(--space-3);
+        align-items: stretch;
       }
       label.row {
         display: inline-flex;
@@ -78,6 +128,52 @@ export class RelationshipMapView extends LitElement {
         text-align: center;
         padding: var(--space-3);
       }
+      .inspector {
+        padding: var(--space-3);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+        min-height: 520px;
+      }
+      .inspector h3 {
+        margin: 0 0 var(--space-2) 0;
+        font-size: var(--text-md);
+      }
+      .inspector p {
+        margin: 0 0 var(--space-2) 0;
+        font-size: var(--text-sm);
+      }
+      .inspector a {
+        color: inherit;
+      }
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+        margin: var(--space-2) 0;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px var(--space-1);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-sm);
+        background: var(--colour-bg);
+        font-size: var(--text-xs);
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: var(--space-1) var(--space-2);
+        margin: var(--space-2) 0 0 0;
+        font-size: var(--text-sm);
+      }
+      dt {
+        color: var(--colour-fg-muted);
+      }
+      dd {
+        margin: 0;
+      }
       details.fallback {
         margin-top: var(--space-3);
         font-size: var(--text-sm);
@@ -104,6 +200,15 @@ export class RelationshipMapView extends LitElement {
         text-transform: uppercase;
         letter-spacing: 0.04em;
       }
+      @media (max-width: 980px) {
+        .summary,
+        .map-layout {
+          grid-template-columns: 1fr;
+        }
+        .inspector {
+          min-height: 0;
+        }
+      }
     `,
   ];
 
@@ -113,7 +218,14 @@ export class RelationshipMapView extends LitElement {
   // eslint-disable-next-line no-unused-private-class-members
   #watcher = new SignalWatcher(this, () =>
     this.store
-      ? [this.store.risks, this.store.actions, this.store.directions, this.store.relationships]
+      ? [
+          this.store.compliance,
+          this.store.risks,
+          this.store.actions,
+          this.store.directions,
+          this.store.relationships,
+          this.store.workTracking,
+        ]
       : [],
   );
 
@@ -121,8 +233,9 @@ export class RelationshipMapView extends LitElement {
   @state() private accessor showRisks = true;
   @state() private accessor showActions = true;
   @state() private accessor showDirections = true;
+  @state() private accessor selectedNodeId = '';
 
-  #cy: { destroy: () => void } | null = null;
+  #cy: Core | null = null;
   #canvas: HTMLDivElement | null = null;
 
   override disconnectedCallback(): void {
@@ -132,15 +245,38 @@ export class RelationshipMapView extends LitElement {
   }
 
   override render(): TemplateResult {
-    const { nodes, edges } = this.#buildGraph();
+    const graph = this.#graph();
+    const { nodes, edges, summary } = graph;
+    const selected =
+      nodes.find((node) => node.id === this.selectedNodeId) ??
+      nodes.find((node) => node.kind === 'requirement') ??
+      nodes[0];
 
     return html`
       <article>
         <h2>Relationship map</h2>
-        <p>
-          Visualises cross-links between requirements, risks, actions and directions. Use the
-          keyboard-accessible adjacency list at the bottom if you prefer text.
+        <p class="intro">
+          Shows how compliance posture connects to risks, remediation actions, Directions and logged
+          work. Select a node to inspect the work-to-compliance trail.
         </p>
+        <section class="summary" aria-label="Work and compliance summary">
+          <div class="metric">
+            <strong>${summary.requirements}</strong><span>Requirements</span>
+          </div>
+          <div class="metric">
+            <strong>${summary.complianceGapsWithWork}</strong><span>Gaps with work</span>
+          </div>
+          <div class="metric">
+            <strong>${summary.complianceGapsWithoutWork}</strong><span>Gaps without work</span>
+          </div>
+          <div class="metric">
+            <strong>${summary.blockedOrOverdueActions}</strong><span>Blocked/overdue actions</span>
+          </div>
+          <div class="metric">
+            <strong>${summary.directionsNeedingResponse}</strong
+            ><span>Directions needing response</span>
+          </div>
+        </section>
 
         <div class="toolbar" role="group" aria-label="Visible node kinds">
           <label class="row">
@@ -191,23 +327,27 @@ export class RelationshipMapView extends LitElement {
           </span>
         </div>
 
-        <div class="stage">
-          ${nodes.length === 0
-            ? html`<div class="empty" data-testid="empty">
-                No relationships to display. Link risks/actions to requirements, or add
-                relationships from the Relationships page.
-              </div>`
-            : html`<div class="canvas" data-testid="map-canvas" ${ref(this.#onCanvasRef)}></div>`}
+        <div class="map-layout">
+          <div class="stage">
+            ${nodes.length === 0
+              ? html`<div class="empty" data-testid="empty">
+                  No work-to-compliance links to display. Link risks, actions or Directions to
+                  requirements, or log work against a requirement.
+                </div>`
+              : html`<div class="canvas" data-testid="map-canvas" ${ref(this.#onCanvasRef)}></div>`}
+          </div>
+          ${this.#renderInspector(selected)}
         </div>
 
-        <details class="fallback" ?open=${nodes.length > 0 && nodes.length <= 30}>
-          <summary>Adjacency list (text fallback)</summary>
-          <table aria-label="Adjacency list">
+        <details class="fallback" ?open=${nodes.length > 0 && nodes.length <= 40}>
+          <summary>Connection list (text fallback)</summary>
+          <table aria-label="Connection list">
             <thead>
               <tr>
                 <th>From</th>
+                <th>Connection</th>
                 <th>To</th>
-                <th>Kind</th>
+                <th>Context</th>
               </tr>
             </thead>
             <tbody data-testid="adjacency">
@@ -216,8 +356,9 @@ export class RelationshipMapView extends LitElement {
                 const tgt = nodes.find((n) => n.id === e.target);
                 return html`<tr>
                   <td>${src?.label ?? e.source}</td>
+                  <td>${e.label}</td>
                   <td>${tgt?.label ?? e.target}</td>
-                  <td>${e.kind}</td>
+                  <td>${src?.detail ?? ''}${tgt?.detail ? html` → ${tgt.detail}` : ''}</td>
                 </tr>`;
               })}
             </tbody>
@@ -235,17 +376,32 @@ export class RelationshipMapView extends LitElement {
 
   async #renderCytoscape(): Promise<void> {
     if (!this.#canvas) return;
-    const { nodes, edges } = this.#buildGraph();
-    if (nodes.length === 0) return;
+    const { nodes, edges } = this.#graph();
+    if (nodes.length === 0) {
+      this.#cy?.destroy();
+      this.#cy = null;
+      return;
+    }
 
     const cytoscapeModule = await import('cytoscape');
     const cytoscape = cytoscapeModule.default;
     this.#cy?.destroy();
 
     const elements = [
-      ...nodes.map((n) => ({ data: { id: n.id, label: n.label, kind: n.kind } })),
+      ...nodes.map((n) => ({
+        data: {
+          id: n.id,
+          label: n.label,
+          kind: n.kind,
+          complianceState: n.complianceState,
+          riskBand: n.riskBand,
+          actionStatus: n.actionStatus,
+          actionOverdue: n.actionOverdue ? 'true' : 'false',
+          directionResponseState: n.directionResponseState,
+        },
+      })),
       ...edges.map((e) => ({
-        data: { id: e.id, source: e.source, target: e.target, kind: e.kind },
+        data: { id: e.id, source: e.source, target: e.target, kind: e.kind, label: e.label },
       })),
     ];
 
@@ -256,31 +412,70 @@ export class RelationshipMapView extends LitElement {
         {
           selector: 'node',
           style: {
-            'background-color': '#1d4ed8',
+            'background-color': '#2563eb',
             label: 'data(label)',
             color: '#0f172a',
             'font-size': 11,
             'text-valign': 'bottom',
             'text-margin-y': 4,
-            width: 18,
-            height: 18,
+            width: 22,
+            height: 22,
           },
         },
         {
           selector: 'node[kind = "requirement"]',
-          style: { 'background-color': '#1d4ed8' },
+          style: { 'background-color': '#475569', 'border-width': 3, 'border-color': '#0f172a' },
+        },
+        {
+          selector: 'node[kind = "requirement"][complianceState = "yes"]',
+          style: { 'background-color': '#2dd4bf' },
+        },
+        {
+          selector: 'node[kind = "requirement"][complianceState = "no"]',
+          style: { 'background-color': '#ef4444' },
+        },
+        {
+          selector: 'node[kind = "requirement"][complianceState = "risk-managed"]',
+          style: { 'background-color': '#facc15' },
+        },
+        {
+          selector: 'node[kind = "requirement"][complianceState = "not-applicable"]',
+          style: { 'background-color': '#94a3b8' },
         },
         {
           selector: 'node[kind = "risk"]',
-          style: { 'background-color': '#dc2626', shape: 'diamond' },
+          style: { 'background-color': '#b34a00', shape: 'diamond' },
+        },
+        {
+          selector: 'node[kind = "risk"][riskBand = "extreme"]',
+          style: { 'background-color': '#99182c', width: 28, height: 28 },
+        },
+        {
+          selector: 'node[kind = "risk"][riskBand = "low"]',
+          style: { 'background-color': '#2f6f3a' },
         },
         {
           selector: 'node[kind = "action"]',
           style: { 'background-color': '#059669', shape: 'round-rectangle' },
         },
         {
+          selector:
+            'node[kind = "action"][actionStatus = "blocked"], node[kind = "action"][actionOverdue = "true"]',
+          style: { 'background-color': '#b34a00', width: 28, height: 20 },
+        },
+        {
+          selector:
+            'node[kind = "action"][actionStatus = "done"], node[kind = "action"][actionStatus = "cancelled"]',
+          style: { 'background-color': '#94a3b8' },
+        },
+        {
           selector: 'node[kind = "direction"]',
           style: { 'background-color': '#7c3aed', shape: 'triangle' },
+        },
+        {
+          selector:
+            'node[kind = "direction"][directionResponseState = "not-set"], node[kind = "direction"][directionResponseState = "no"]',
+          style: { 'background-color': '#ef4444', width: 28, height: 28 },
         },
         {
           selector: 'edge',
@@ -291,8 +486,16 @@ export class RelationshipMapView extends LitElement {
             'target-arrow-shape': 'none',
           },
         },
+        {
+          selector: 'node:selected',
+          style: { 'border-width': 5, 'border-color': '#0f172a' },
+        },
       ],
       layout: { name: 'cose', animate: false, fit: true, padding: 16 },
+    });
+
+    this.#cy.on('tap', 'node', (event: EventObjectNode): void => {
+      this.selectedNodeId = event.target.id();
     });
   }
 
@@ -300,91 +503,103 @@ export class RelationshipMapView extends LitElement {
     void this.#renderCytoscape();
   }
 
-  #buildGraph(): { nodes: readonly GraphNode[]; edges: readonly GraphEdge[] } {
+  #graph(): RelationshipMapGraph {
     const store = this.store;
-    if (!store) return { nodes: [], edges: [] };
-
-    const risks = store.risks.value;
-    const actions = store.actions.value;
-    const directions = store.directions.value;
-    const relationships = store.relationships.value;
-
-    const nodeMap = new Map<string, GraphNode>();
-    const addNode = (n: GraphNode): void => {
-      if (!nodeMap.has(n.id)) nodeMap.set(n.id, n);
-    };
-
-    if (this.showRisks) {
-      for (const r of risks) addNode({ id: r.id, label: r.title, kind: 'risk' });
-    }
-    if (this.showActions) {
-      for (const a of actions) addNode({ id: a.id, label: a.title, kind: 'action' });
-    }
-    if (this.showDirections) {
-      for (const d of directions) addNode({ id: d.id, label: d.reference, kind: 'direction' });
+    if (!store) {
+      return {
+        nodes: [],
+        edges: [],
+        summary: {
+          requirements: 0,
+          complianceGapsWithWork: 0,
+          complianceGapsWithoutWork: 0,
+          blockedOrOverdueActions: 0,
+          directionsNeedingResponse: 0,
+        },
+      };
     }
 
-    const edgeMap = new Map<string, GraphEdge>();
-    const addEdge = (source: string, target: string, kind: string): void => {
-      const id = `${kind}:${source}->${target}`;
-      if (edgeMap.has(id)) return;
-      edgeMap.set(id, { id, source, target, kind });
-    };
+    return buildRelationshipMapGraph({
+      compliance: store.compliance.value,
+      risks: store.risks.value,
+      actions: store.actions.value,
+      directions: store.directions.value,
+      relationships: store.relationships.value,
+      workTracking: store.workTracking.value,
+      visibility: {
+        requirements: this.showRequirements,
+        risks: this.showRisks,
+        actions: this.showActions,
+        directions: this.showDirections,
+      },
+    });
+  }
 
-    const ensureRequirementNode = (reqId: string): void => {
-      if (!this.showRequirements) return;
-      addNode({ id: reqId, label: reqId, kind: 'requirement' });
-    };
-
-    if (this.showRisks) {
-      for (const r of risks) {
-        if (this.showRequirements) {
-          for (const rid of r.requirementIds) {
-            ensureRequirementNode(rid);
-            addEdge(rid, r.id, 'requirement-risk');
-          }
-        }
-        if (this.showActions) {
-          for (const aid of r.actionIds) addEdge(r.id, aid, 'risk-action');
-        }
-      }
-    }
-    if (this.showActions) {
-      for (const a of actions) {
-        if (this.showRequirements) {
-          for (const rid of a.requirementIds) {
-            ensureRequirementNode(rid);
-            addEdge(rid, a.id, 'requirement-action');
-          }
-        }
-        if (this.showRisks) {
-          for (const riskId of a.riskIds) addEdge(riskId, a.id, 'risk-action');
-        }
-      }
-    }
-    if (this.showDirections && this.showRequirements) {
-      for (const d of directions) {
-        for (const rid of d.requirementIds) {
-          ensureRequirementNode(rid);
-          addEdge(rid, d.id, 'requirement-direction');
-        }
-      }
+  #renderInspector(node: MapNode | undefined): TemplateResult {
+    if (!node) {
+      return html`<aside class="inspector" aria-label="Selected map item">
+        <h3>Selection</h3>
+        <p>Select a node to inspect compliance and connected work.</p>
+      </aside>`;
     }
 
-    // Stored Relationship records
-    for (const rel of relationships) {
-      const [a, b] = rel.endpoints;
-      // Only render if both endpoints exist as visible nodes (or are
-      // requirements & visible).
-      const isReq = (s: string): boolean => /^[A-Z]+-\d+$/.test(s);
-      if (isReq(a)) ensureRequirementNode(a);
-      if (isReq(b)) ensureRequirementNode(b);
-      if (nodeMap.has(a) && nodeMap.has(b)) {
-        addEdge(a, b, rel.kind);
-      }
-    }
+    return html`<aside class="inspector" aria-label="Selected map item" data-testid="map-inspector">
+      <h3>${node.label}</h3>
+      <p>${node.detail}</p>
+      <div class="pill-row">${this.#nodePills(node)}</div>
+      ${node.kind === 'requirement' ? this.#requirementDetails(node) : this.#workNodeDetails(node)}
+      <p><a href=${node.href}>Open source record</a></p>
+    </aside>`;
+  }
 
-    return { nodes: [...nodeMap.values()], edges: [...edgeMap.values()] };
+  #nodePills(node: MapNode): TemplateResult {
+    if (node.kind === 'requirement') {
+      return html`<span class="pill"
+        >${mapComplianceLabel(node.complianceState ?? 'not-set')}</span
+      >`;
+    }
+    if (node.kind === 'risk') {
+      return html`<span class="pill">${node.riskStatus}</span
+        ><span class="pill">${node.riskBand}</span>`;
+    }
+    if (node.kind === 'action') {
+      return html`<span class="pill">${node.actionStatus}</span>${node.actionOverdue
+          ? html`<span class="pill">Overdue</span>`
+          : ''}`;
+    }
+    return html`<span class="pill"
+      >${mapDirectionResponseLabel(node.directionResponseState ?? 'not-set')}</span
+    >`;
+  }
+
+  #requirementDetails(node: MapNode): TemplateResult {
+    const work = node.work;
+    if (!work) return html``;
+    return html`<dl>
+      <dt>Risks</dt>
+      <dd>${work.openRiskCount} open / ${work.riskCount} total</dd>
+      <dt>Actions</dt>
+      <dd>${work.activeActionCount} active / ${work.actionCount} total</dd>
+      <dt>Blocked/overdue</dt>
+      <dd>${work.blockedOrOverdueActionCount}</dd>
+      <dt>Directions</dt>
+      <dd>
+        ${work.directionsNeedingResponseCount} needing response / ${work.directionCount} total
+      </dd>
+      <dt>Work log</dt>
+      <dd>${work.workLogCount} entries</dd>
+      <dt>Evidence</dt>
+      <dd>${work.evidenceCount} items</dd>
+    </dl>`;
+  }
+
+  #workNodeDetails(node: MapNode): TemplateResult {
+    return html`<dl>
+      <dt>Type</dt>
+      <dd>${node.kind}</dd>
+      <dt>Connection</dt>
+      <dd>Use the connection list to see the linked requirements and work items.</dd>
+    </dl>`;
   }
 }
 

@@ -349,7 +349,7 @@ Port `archive/v2/scripts/domains/*.js` → `src/pspf/*.ts`.
 "lint": "eslint . && prettier --check .",
 "format": "prettier --write .",
 "typecheck": "tsc --noEmit",
-"sbom": "cyclonedx-npm --output-file sbom.json --omit dev"
+"sbom": "cyclonedx-npm --package-lock-only --output-file sbom.json --omit dev"
 ```
 
 ### Vite

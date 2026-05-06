@@ -7,11 +7,13 @@ It covers all 218 requirements across six domains: Governance, Information, Pers
 ## What you can do
 
 - Browse requirements by domain and open full requirement detail.
+- Search across requirements, compliance notes, evidence, Directions, risks, and actions.
 - Record implementation status with evidence and notes.
-- Track risks, actions, directions, and cross-entity relationships.
+- Track risks, actions, Directions, and cross-entity relationships.
+- Use the relationship map to see how compliance gaps connect to logged work, risks, actions, and Directions.
 - Save filtered views for repeat reporting.
 - Use coverage and analytics views to monitor progress.
-- Export and restore local data with JSON backup files.
+- Copy human-readable summaries and export/restore local data with JSON files.
 
 ## Status labels
 
@@ -37,3 +39,7 @@ It covers all 218 requirements across six domains: Governance, Information, Pers
 - Traffic Light Protocol: TLP:AMBER+STRICT
 
 See [SECURITY.md](SECURITY.md) for security notes.
+
+## Release validation
+
+Before publishing, run the checklist in [docs/release-checklist.md](docs/release-checklist.md).

@@ -1,6 +1,6 @@
 {
   "name": "pspf-explorer",
-  "version": "3.0.0-alpha.0",
+  "version": "3.2.0-alpha.0",
   "description": "Offline-first compliance management for the Australian Government Protective Security Policy Framework (PSPF) 2025.",
   "private": true,
   "type": "module",

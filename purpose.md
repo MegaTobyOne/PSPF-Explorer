@@ -96,7 +96,7 @@ The minimum viable product: everything a practitioner needs to track daily compl
 
 Builds on Phase 1. Adds the tools for sharing, external integration, and relationship visualisation.
 
-- Relationship map (Cytoscape graph) with focus mode.
+- Relationship map (Cytoscape graph) that connects compliance gaps to risks, actions, Directions, and logged work.
 - Coverage matrix (requirements × entity types).
 - PSPF Directions register with requirement linkage.
 - Targeted share packages with offline merge and conflict review on import.
@@ -227,15 +227,16 @@ Yes — v3 deploys to GitHub Pages. Vite's `build` command produces a fully stat
 
 ### Local development
 
-| Task                        | Command            |
-| --------------------------- | ------------------ |
-| Dev server (HMR, port 5173) | `npm run dev`      |
-| Production preview          | `npm run preview`  |
-| Unit tests (watch)          | `npm run test`     |
-| Unit tests (CI, no watch)   | `npm run test:run` |
-| E2E tests                   | `npm run test:e2e` |
-| Build                       | `npm run build`    |
-| SBOM generation             | `npm run sbom`     |
+| Task                        | Command               |
+| --------------------------- | --------------------- |
+| Dev server (HMR, port 5173) | `npm run dev`         |
+| Production preview          | `npm run preview`     |
+| Unit tests (watch)          | `npm run test`        |
+| Unit tests (CI, no watch)   | `npm run test:run`    |
+| E2E tests                   | `npm run test:e2e`    |
+| Build                       | `npm run build`       |
+| Performance budget          | `npm run perf:budget` |
+| SBOM generation             | `npm run sbom`        |
 
 Playwright continues to start the dev/preview server automatically for E2E runs, preserving the v2 workflow.
 
@@ -273,7 +274,7 @@ The `npm run preview` command (Vite's built-in static server) replaces `serve` f
 
 ### Software Bill of Materials (SBOM)
 
-- Generate a CycloneDX SBOM as part of the release process: `npm run sbom` (using `@cyclonedx/cyclonedx-npm`).
+- Generate a CycloneDX SBOM as part of the release process: `npm run sbom` (using `@cyclonedx/cyclonedx-npm` against `package-lock.json`).
 - Include the SBOM (`sbom.json`) as a release artefact in GitHub Releases.
 - The SBOM covers all production dependencies at the resolved version, with licence data.
 - Purpose: supports supply-chain transparency for government deployment and security review.
