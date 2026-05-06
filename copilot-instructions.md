@@ -18,11 +18,14 @@ Lit · Vite · TypeScript (strict) · IndexedDB (idb) · `@vaadin/router` · `@l
 | Unit tests (CI)           | `npm run test:run`  |
 | E2E tests                 | `npm run test:e2e`  |
 | Lint + format check       | `npm run lint`      |
+| Auto-fix formatting       | `npm run format`    |
 | Typecheck                 | `npm run typecheck` |
 | Build                     | `npm run build`     |
 | SBOM                      | `npm run sbom`      |
 
 Playwright auto-starts `npm run preview`. CI runs lint → typecheck → unit → build → e2e.
+
+> **Before every commit**, run `npm run format` (Prettier) then `npm run lint` to ensure the code passes the CI format check. `npm run lint` is `eslint . && prettier --check .` — both must pass.
 
 ## Architecture
 

@@ -269,24 +269,26 @@ export class RequirementView extends LitElement {
               </select>
             </label>
             <label>
-              Target ID
-              <input
-                type="text"
-                required
-                list="requirement-link-targets"
-                .value=${this.linkTargetId}
-                @input=${(event: Event): void => {
-                  this.linkTargetId = (event.target as HTMLInputElement).value;
+              Target
+              <select
+                aria-label="Target"
+                @change=${(event: Event): void => {
+                  this.linkTargetId = (event.target as HTMLSelectElement).value;
                 }}
-              />
-              <datalist id="requirement-link-targets">
-                ${this.#targetOptions().map((id) => html`<option value=${id}></option>`)}
-              </datalist>
+              >
+                <option value="" ?selected=${this.linkTargetId === ''}>— select —</option>
+                ${this.#targetOptions().map(
+                  (opt) =>
+                    html`<option value=${opt.id} ?selected=${opt.id === this.linkTargetId}>
+                      ${opt.label}
+                    </option>`,
+                )}
+              </select>
             </label>
             <button
               type="submit"
               class="primary"
-              ?disabled=${!this.#targetOptions().includes(this.linkTargetId.trim())}
+              ?disabled=${!this.#targetOptions().some((opt) => opt.id === this.linkTargetId.trim())}
             >
               Add relationship
             </button>
@@ -304,15 +306,18 @@ export class RequirementView extends LitElement {
     `;
   }
 
-  #targetOptions(): readonly string[] {
+  #targetOptions(): readonly { id: string; label: string }[] {
     if (!this.store) return [];
     switch (this.linkTargetType) {
       case 'risk':
-        return this.store.risks.value.map((risk) => risk.id);
+        return this.store.risks.value.map((risk) => ({ id: risk.id, label: risk.title }));
       case 'action':
-        return this.store.actions.value.map((action) => action.id);
+        return this.store.actions.value.map((action) => ({ id: action.id, label: action.title }));
       case 'direction':
-        return this.store.directions.value.map((direction) => direction.id);
+        return this.store.directions.value.map((direction) => ({
+          id: direction.id,
+          label: `${direction.reference} – ${direction.title}`,
+        }));
     }
   }
 
@@ -321,12 +326,23 @@ export class RequirementView extends LitElement {
       relationship.endpoints.find((endpoint) => endpoint !== requirementId) ??
       relationship.endpoints[0];
     const targetRoute = this.#targetRoute(target);
+    const label = this.#lookupTargetLabel(target);
     return html`
       <li>
         ${relationship.kind} ·
-        ${targetRoute ? html`<a href=${targetRoute}>${target}</a>` : html`<span>${target}</span>`}
+        ${targetRoute ? html`<a href=${targetRoute}>${label}</a>` : html`<span>${label}</span>`}
       </li>
     `;
+  }
+
+  #lookupTargetLabel(id: string): string {
+    const risk = this.store?.risks.value.find((r) => r.id === id);
+    if (risk) return risk.title;
+    const action = this.store?.actions.value.find((a) => a.id === id);
+    if (action) return action.title;
+    const direction = this.store?.directions.value.find((d) => d.id === id);
+    if (direction) return `${direction.reference} – ${direction.title}`;
+    return id;
   }
 
   #targetRoute(targetId: string): string | undefined {
@@ -341,7 +357,7 @@ export class RequirementView extends LitElement {
   async #createRelationship(requirementId: string): Promise<void> {
     if (!this.store) return;
     const targetId = this.linkTargetId.trim();
-    if (!this.#targetOptions().includes(targetId)) return;
+    if (!this.#targetOptions().some((opt) => opt.id === targetId)) return;
 
     const kind =
       this.linkTargetType === 'risk'
