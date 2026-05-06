@@ -315,7 +315,10 @@ export class RelationshipsView extends LitElement {
     this.right = '';
   }
 
-  #endpointOptions(kind: RelationshipKind, side: 'left' | 'right'): readonly {
+  #endpointOptions(
+    kind: RelationshipKind,
+    side: 'left' | 'right',
+  ): readonly {
     id: string;
     label: string;
   }[] {

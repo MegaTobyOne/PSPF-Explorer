@@ -285,9 +285,7 @@ export class RequirementView extends LitElement {
     return html`
       <li>
         ${relationship.kind} ·
-        ${targetRoute
-          ? html`<a href=${targetRoute}>${label}</a>`
-          : html`<span>${label}</span>`}
+        ${targetRoute ? html`<a href=${targetRoute}>${label}</a>` : html`<span>${label}</span>`}
       </li>
     `;
   }
