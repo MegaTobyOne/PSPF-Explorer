@@ -3,11 +3,10 @@ import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { designTokens } from '../app/design-tokens.ts';
 import type { Relationship, RelationshipKind } from '../data/types.ts';
-import { asRequirementId } from '../data/types.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
-import { allRequirements, requirementById } from '../pspf/index.ts';
+import { allRequirements } from '../pspf/index.ts';
 
 const KINDS: readonly {
   value: RelationshipKind;
@@ -352,7 +351,7 @@ export class RelationshipsView extends LitElement {
   }
 
   #lookupLabel(id: string): string {
-    const req = requirementById.get(asRequirementId(id));
+    const req = allRequirements.find((r) => r.id === id);
     if (req) return `${req.id} – ${req.title}`;
     const risk = this.store?.risks.value.find((r) => r.id === id);
     if (risk) return risk.title;
