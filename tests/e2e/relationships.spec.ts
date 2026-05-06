@@ -28,14 +28,14 @@ test('user can record and remove a requirement-risk relationship', async ({ page
   await expect(view.locator('[data-testid="empty"]')).toBeVisible();
 
   await view.locator('form.create').getByLabel('Kind').selectOption('requirement-direction');
-  await view.getByLabel('Requirement ID', { exact: false }).fill('GOV-001');
-  await view.getByLabel('Direction ID').fill(directionId ?? '');
+  await view.getByRole('combobox', { name: 'Requirement' }).selectOption('GOV-001');
+  await view.getByRole('combobox', { name: 'Direction' }).selectOption(directionId ?? '');
   await view.getByRole('button', { name: 'Add link' }).click();
 
   const row = view.locator('tbody tr').first();
   await expect(row).toContainText('Requirement ↔ Direction');
   await expect(row).toContainText('GOV-001');
-  await expect(row).toContainText(directionId ?? '');
+  await expect(row).toContainText('DIR-001');
 
   // Survives reload
   await page.reload();

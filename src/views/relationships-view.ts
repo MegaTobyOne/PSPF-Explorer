@@ -3,10 +3,11 @@ import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { designTokens } from '../app/design-tokens.ts';
 import type { Relationship, RelationshipKind } from '../data/types.ts';
+import { asRequirementId } from '../data/types.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
-import { allRequirements } from '../pspf/index.ts';
+import { allRequirements, requirementById } from '../pspf/index.ts';
 
 const KINDS: readonly {
   value: RelationshipKind;
@@ -17,26 +18,26 @@ const KINDS: readonly {
   {
     value: 'requirement-risk',
     label: 'Requirement ↔ Risk',
-    left: 'Requirement ID (e.g. GOV-1)',
-    right: 'Risk ID',
+    left: 'Requirement',
+    right: 'Risk',
   },
   {
     value: 'requirement-action',
     label: 'Requirement ↔ Action',
-    left: 'Requirement ID',
-    right: 'Action ID',
+    left: 'Requirement',
+    right: 'Action',
   },
   {
     value: 'risk-action',
     label: 'Risk ↔ Action',
-    left: 'Risk ID',
-    right: 'Action ID',
+    left: 'Risk',
+    right: 'Action',
   },
   {
     value: 'requirement-direction',
     label: 'Requirement ↔ Direction',
-    left: 'Requirement ID',
-    right: 'Direction ID',
+    left: 'Requirement',
+    right: 'Direction',
   },
 ];
 
@@ -145,14 +146,21 @@ export class RelationshipsView extends LitElement {
   private store: AppStore | undefined;
 
   // eslint-disable-next-line no-unused-private-class-members
-  #watcher = new SignalWatcher(this, () => (this.store ? [this.store.relationships] : []));
+  #watcher = new SignalWatcher(this, () =>
+    this.store
+      ? [this.store.relationships, this.store.risks, this.store.actions, this.store.directions]
+      : [],
+  );
 
   @state() private accessor kind: RelationshipKind = 'requirement-risk';
   @state() private accessor left = '';
   @state() private accessor right = '';
   @state() private accessor filterKind: RelationshipKind | 'all' = 'all';
 
-  #requirementIds = new Set(allRequirements.map((req) => req.id));
+  #requirementOptions = allRequirements.map((req) => ({
+    id: req.id,
+    label: `${req.id} – ${req.title}`,
+  }));
 
   override render(): TemplateResult {
     const all = this.store?.relationships.value ?? [];
@@ -182,6 +190,8 @@ export class RelationshipsView extends LitElement {
             <select
               @change=${(e: Event): void => {
                 this.kind = (e.target as HTMLSelectElement).value as RelationshipKind;
+                this.left = '';
+                this.right = '';
               }}
             >
               ${KINDS.map(
@@ -194,33 +204,39 @@ export class RelationshipsView extends LitElement {
           </label>
           <label class="field">
             ${meta.left}
-            <input
-              type="text"
+            <select
+              aria-label=${meta.left}
               required
-              list="left-endpoint-options"
-              .value=${this.left}
-              @input=${(e: Event): void => {
-                this.left = (e.target as HTMLInputElement).value;
+              @change=${(e: Event): void => {
+                this.left = (e.target as HTMLSelectElement).value;
               }}
-            />
-            <datalist id="left-endpoint-options">
-              ${leftOptions.map((id) => html`<option value=${id}></option>`)}
-            </datalist>
+            >
+              <option value="" ?selected=${this.left === ''}>— select —</option>
+              ${leftOptions.map(
+                (opt) =>
+                  html`<option value=${opt.id} ?selected=${opt.id === this.left}>
+                    ${opt.label}
+                  </option>`,
+              )}
+            </select>
           </label>
           <label class="field">
             ${meta.right}
-            <input
-              type="text"
+            <select
+              aria-label=${meta.right}
               required
-              list="right-endpoint-options"
-              .value=${this.right}
-              @input=${(e: Event): void => {
-                this.right = (e.target as HTMLInputElement).value;
+              @change=${(e: Event): void => {
+                this.right = (e.target as HTMLSelectElement).value;
               }}
-            />
-            <datalist id="right-endpoint-options">
-              ${rightOptions.map((id) => html`<option value=${id}></option>`)}
-            </datalist>
+            >
+              <option value="" ?selected=${this.right === ''}>— select —</option>
+              ${rightOptions.map(
+                (opt) =>
+                  html`<option value=${opt.id} ?selected=${opt.id === this.right}>
+                    ${opt.label}
+                  </option>`,
+              )}
+            </select>
           </label>
           <button class="primary" type="submit" ?disabled=${!this.#canCreate()}>Add link</button>
         </form>
@@ -269,8 +285,8 @@ export class RelationshipsView extends LitElement {
     return html`
       <tr data-id=${r.id}>
         <td>${label}</td>
-        <td class="endpoint">${r.endpoints[0]}</td>
-        <td class="endpoint">${r.endpoints[1]}</td>
+        <td class="endpoint">${this.#lookupLabel(r.endpoints[0])}</td>
+        <td class="endpoint">${this.#lookupLabel(r.endpoints[1])}</td>
         <td>
           <button @click=${(): void => void this.#remove(r)} aria-label="Delete relationship">
             Delete
@@ -300,19 +316,31 @@ export class RelationshipsView extends LitElement {
     this.right = '';
   }
 
-  #endpointOptions(kind: RelationshipKind, side: 'left' | 'right'): readonly string[] {
-    const risks = this.store?.risks.value.map((risk) => risk.id) ?? [];
-    const actions = this.store?.actions.value.map((action) => action.id) ?? [];
-    const directions = this.store?.directions.value.map((direction) => direction.id) ?? [];
+  #endpointOptions(kind: RelationshipKind, side: 'left' | 'right'): readonly {
+    id: string;
+    label: string;
+  }[] {
+    const risks = (this.store?.risks.value ?? []).map((risk) => ({
+      id: risk.id,
+      label: risk.title,
+    }));
+    const actions = (this.store?.actions.value ?? []).map((action) => ({
+      id: action.id,
+      label: action.title,
+    }));
+    const directions = (this.store?.directions.value ?? []).map((direction) => ({
+      id: direction.id,
+      label: `${direction.reference} – ${direction.title}`,
+    }));
     switch (kind) {
       case 'requirement-risk':
-        return side === 'left' ? [...this.#requirementIds] : risks;
+        return side === 'left' ? this.#requirementOptions : risks;
       case 'requirement-action':
-        return side === 'left' ? [...this.#requirementIds] : actions;
+        return side === 'left' ? this.#requirementOptions : actions;
       case 'risk-action':
         return side === 'left' ? risks : actions;
       case 'requirement-direction':
-        return side === 'left' ? [...this.#requirementIds] : directions;
+        return side === 'left' ? this.#requirementOptions : directions;
     }
   }
 
@@ -320,7 +348,19 @@ export class RelationshipsView extends LitElement {
     const value = id.trim();
     if (value.length === 0) return false;
     const options = this.#endpointOptions(kind, side);
-    return options.includes(value);
+    return options.some((opt) => opt.id === value);
+  }
+
+  #lookupLabel(id: string): string {
+    const req = requirementById.get(asRequirementId(id));
+    if (req) return `${req.id} – ${req.title}`;
+    const risk = this.store?.risks.value.find((r) => r.id === id);
+    if (risk) return risk.title;
+    const action = this.store?.actions.value.find((a) => a.id === id);
+    if (action) return action.title;
+    const direction = this.store?.directions.value.find((d) => d.id === id);
+    if (direction) return `${direction.reference} – ${direction.title}`;
+    return id;
   }
 
   async #remove(r: Relationship): Promise<void> {
