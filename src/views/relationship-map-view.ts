@@ -11,18 +11,24 @@ import { LitElement, css, html, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { ref } from 'lit/directives/ref.js';
 import { consume } from '@lit/context';
-import type { Core, EventObjectNode } from 'cytoscape';
+import type { Core, EventObjectNode, LayoutOptions } from 'cytoscape';
 import { designTokens } from '../app/design-tokens.ts';
 import {
   buildRelationshipMapGraph,
   formatRelationshipMapSummary,
   type MapNode,
+  type MapFilters,
   type RelationshipMapGraph,
+  type RiskBand,
 } from '../domain/relationship-map.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
-import type { ComplianceState, DirectionResponseState } from '../data/types.ts';
+import type {
+  ActionStatus,
+  ComplianceState,
+  DirectionResponseState,
+} from '../data/types.ts';
 
 function mapComplianceLabel(state: ComplianceState): string {
   switch (state) {
@@ -51,6 +57,60 @@ function mapDirectionResponseLabel(state: DirectionResponseState): string {
       return 'Needs response';
   }
 }
+
+/**
+ * Build the human-readable tooltip lines shown when a map node is hovered.
+ * Exported so the lines can be unit-tested without standing up Cytoscape.
+ */
+export function relationshipMapTooltipLines(node: MapNode): readonly string[] {
+  const lines: string[] = [];
+  switch (node.kind) {
+    case 'requirement':
+      if (node.complianceState) {
+        lines.push(`Compliance: ${mapComplianceLabel(node.complianceState)}`);
+      }
+      break;
+    case 'risk':
+      if (node.riskBand) lines.push(`Band: ${node.riskBand}`);
+      if (node.riskTreatment) {
+        lines.push(
+          `${node.riskTreatment.activeActionsTreating} active / ${node.riskTreatment.actionsTreating} actions`,
+        );
+      }
+      break;
+    case 'action':
+      if (node.actionStatus) lines.push(`Status: ${node.actionStatus}`);
+      if (node.actionOverdue) lines.push('Overdue');
+      if (node.actionValue) {
+        lines.push(
+          `Addresses ${node.actionValue.requirementsAddressed} requirement${
+            node.actionValue.requirementsAddressed === 1 ? '' : 's'
+          } · treats ${node.actionValue.risksTreated} risk${
+            node.actionValue.risksTreated === 1 ? '' : 's'
+          }`,
+        );
+      }
+      break;
+    case 'direction':
+      if (node.directionResponseState) {
+        lines.push(`Response: ${mapDirectionResponseLabel(node.directionResponseState)}`);
+      }
+      if (node.directionImpact) {
+        lines.push(`Affects ${node.directionImpact.requirementsModified} requirement(s)`);
+      }
+      break;
+  }
+  return lines;
+}
+
+type MapLayoutName = 'cose' | 'breadthfirst' | 'concentric' | 'grid';
+
+const MAP_LAYOUT_OPTIONS: readonly { value: MapLayoutName; label: string }[] = [
+  { value: 'cose', label: 'Force-directed' },
+  { value: 'breadthfirst', label: 'Hierarchy' },
+  { value: 'concentric', label: 'Concentric' },
+  { value: 'grid', label: 'Grid' },
+];
 
 @customElement('pspf-relationship-map-view')
 export class RelationshipMapView extends LitElement {
@@ -128,6 +188,127 @@ export class RelationshipMapView extends LitElement {
         border-radius: 999px;
         background: var(--swatch-colour);
       }
+      .filters {
+        display: flex;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        padding: var(--space-2);
+        margin-bottom: var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+      }
+      .filter-group {
+        border: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 12rem;
+      }
+      .filter-group legend {
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--colour-fg-muted);
+        font-weight: 600;
+        padding: 0;
+      }
+      .chip {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        font-size: var(--text-sm);
+      }
+      .filter-clear {
+        align-self: flex-start;
+      }
+      .view-controls {
+        display: flex;
+        gap: var(--space-3);
+        align-items: flex-end;
+        flex-wrap: wrap;
+        padding: var(--space-2);
+        margin-bottom: var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+        position: relative;
+      }
+      .view-controls .row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .view-controls .control-label {
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--colour-fg-muted);
+        font-weight: 600;
+      }
+      .view-controls input[type='search'],
+      .view-controls select {
+        font: inherit;
+        padding: 4px 6px;
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-sm);
+        background: var(--colour-bg);
+        color: var(--colour-fg);
+        min-width: 14rem;
+      }
+      .search-results {
+        list-style: none;
+        margin: 0;
+        padding: 4px;
+        position: absolute;
+        top: 100%;
+        left: var(--space-2);
+        right: var(--space-2);
+        z-index: 5;
+        background: var(--colour-bg-elevated);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-md, 0 4px 12px rgba(15, 23, 42, 0.1));
+        max-height: 16rem;
+        overflow-y: auto;
+      }
+      .search-results li {
+        margin: 0;
+      }
+      .search-results li.empty {
+        padding: 6px 8px;
+        color: var(--colour-fg-muted);
+        font-size: var(--text-sm);
+      }
+      .search-results button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        padding: 6px 8px;
+        cursor: pointer;
+        color: var(--colour-fg);
+        font: inherit;
+        border-radius: var(--radius-sm);
+      }
+      .search-results button:hover,
+      .search-results button:focus-visible {
+        background: var(--colour-bg-subtle, rgba(15, 23, 42, 0.06));
+      }
+      .search-results .kind {
+        display: inline-block;
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--colour-fg-muted);
+        margin-right: 6px;
+      }
+      .reset-selection {
+        margin-left: auto;
+      }
       .map-layout {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
@@ -151,6 +332,33 @@ export class RelationshipMapView extends LitElement {
       .canvas {
         position: absolute;
         inset: 0;
+      }
+      .map-tooltip {
+        position: absolute;
+        transform: translate(12px, -50%);
+        background: var(--colour-bg-elevated);
+        color: var(--colour-fg);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-2);
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--text-sm);
+        line-height: 1.35;
+        pointer-events: none;
+        z-index: 4;
+        max-width: 18rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .map-tooltip strong {
+        font-size: var(--text-base);
+      }
+      .map-tooltip .kind {
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: var(--text-xs);
+        color: var(--colour-fg-muted);
       }
       .empty {
         display: flex;
@@ -207,6 +415,35 @@ export class RelationshipMapView extends LitElement {
       }
       dd {
         margin: 0;
+      }
+      .connections {
+        margin-top: var(--space-3);
+        font-size: var(--text-sm);
+      }
+      .connections h4 {
+        margin: 0 0 var(--space-1) 0;
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--colour-fg-muted);
+        font-weight: 600;
+      }
+      .connections ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+      .connections li {
+        display: flex;
+        gap: var(--space-1);
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .connections a {
+        color: inherit;
       }
       details.fallback {
         margin-top: var(--space-3);
@@ -270,16 +507,43 @@ export class RelationshipMapView extends LitElement {
   @state() private accessor unlinkedGapsOnly = false;
   @state() private accessor selectedNodeId = '';
   @state() private accessor copyStatus = '';
+  @state() private accessor showFilters = false;
+  @state() private accessor complianceFilter: ReadonlySet<ComplianceState> = new Set();
+  @state() private accessor riskBandFilter: ReadonlySet<RiskBand> = new Set();
+  @state() private accessor actionStatusFilter: ReadonlySet<ActionStatus> = new Set();
+  @state() private accessor actionOverdueOnly = false;
+  @state() private accessor directionResponseFilter: ReadonlySet<DirectionResponseState> =
+    new Set();
+  @state() private accessor layoutName: MapLayoutName = 'cose';
+  @state() private accessor searchQuery = '';
 
   #cy: Core | null = null;
   #canvas: HTMLDivElement | null = null;
   #graphSignature = '';
+  #lastLayoutName: MapLayoutName | null = null;
+  #urlFocusApplied = false;
+  #lastCentredNodeId: string | null = null;
+  #hover: { nodeId: string; x: number; y: number } | null = null;
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#cy?.destroy();
     this.#cy = null;
     this.#graphSignature = '';
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (!this.#urlFocusApplied) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const focus = params.get('focus');
+        if (focus) this.selectedNodeId = focus;
+      } catch {
+        // No-op: not all environments expose a parseable URL.
+      }
+      this.#urlFocusApplied = true;
+    }
   }
 
   override render(): TemplateResult {
@@ -376,6 +640,18 @@ export class RelationshipMapView extends LitElement {
           >
             Copy map summary
           </button>
+          <button
+            type="button"
+            data-testid="toggle-filters"
+            aria-expanded=${this.showFilters ? 'true' : 'false'}
+            @click=${(): void => {
+              this.showFilters = !this.showFilters;
+            }}
+          >
+            ${this.showFilters ? 'Hide filters' : 'Show filters'}${this.#activeFilterCount() > 0
+              ? ` (${this.#activeFilterCount()})`
+              : ''}
+          </button>
           ${this.copyStatus
             ? html`<span class="copy-status" role="status">${this.copyStatus}</span>`
             : ''}
@@ -387,6 +663,8 @@ export class RelationshipMapView extends LitElement {
           </span>
         </div>
 
+        ${this.#renderViewControls(nodes)}
+        ${this.showFilters ? this.#renderFilters() : ''}
         ${this.#renderLegend()}
 
         <div class="map-layout">
@@ -397,8 +675,9 @@ export class RelationshipMapView extends LitElement {
                   requirements, or log work against a requirement.
                 </div>`
               : html`<div class="canvas" data-testid="map-canvas" ${ref(this.#onCanvasRef)}></div>`}
+            ${this.#renderHoverTooltip(nodes)}
           </div>
-          ${this.#renderInspector(selected)}
+          ${this.#renderInspector(selected, nodes)}
         </div>
 
         <details class="fallback" ?open=${nodes.length > 0 && nodes.length <= 40}>
@@ -469,11 +748,29 @@ export class RelationshipMapView extends LitElement {
           directionResponseState: n.directionResponseState,
         },
       })),
-      ...edges.map((e) => ({
-        data: { id: e.id, source: e.source, target: e.target, kind: e.kind, label: e.label },
-      })),
+      ...edges.map((e) => {
+        // Visually orient arrows toward the requirement (the asset being
+        // assured). The underlying graph data is unchanged; we only flip
+        // source/target on the rendered Cytoscape edge.
+        const flip =
+          e.kind === 'requirement-risk' ||
+          e.kind === 'requirement-action' ||
+          e.kind === 'requirement-direction';
+        const renderedSource = flip ? e.target : e.source;
+        const renderedTarget = flip ? e.source : e.target;
+        return {
+          data: {
+            id: e.id,
+            source: renderedSource,
+            target: renderedTarget,
+            kind: e.kind,
+            label: e.label,
+          },
+        };
+      }),
     ];
 
+    const tokens = this.#resolveStyleTokens();
     this.#cy = cytoscape({
       container: this.#canvas,
       elements,
@@ -481,95 +778,157 @@ export class RelationshipMapView extends LitElement {
         {
           selector: 'node',
           style: {
-            'background-color': '#2563eb',
+            'background-color': tokens.statusNotSet,
             label: 'data(label)',
-            color: '#0f172a',
+            color: tokens.fg,
             'font-size': 11,
             'text-valign': 'bottom',
             'text-margin-y': 4,
+            'text-outline-color': tokens.bg,
+            'text-outline-width': 2,
             width: 22,
             height: 22,
+            'border-width': 1,
+            'border-color': tokens.nodeStroke,
+            'border-opacity': 0.4,
           },
         },
         {
           selector: 'node[kind = "requirement"]',
-          style: { 'background-color': '#475569', 'border-width': 3, 'border-color': '#0f172a' },
+          style: {
+            'background-color': tokens.statusNotSet,
+            shape: 'ellipse',
+            'border-width': 2,
+            'border-color': tokens.nodeStroke,
+            'border-opacity': 0.7,
+          },
         },
         {
           selector: 'node[kind = "requirement"][complianceState = "yes"]',
-          style: { 'background-color': '#2dd4bf' },
+          style: { 'background-color': tokens.statusYes },
         },
         {
           selector: 'node[kind = "requirement"][complianceState = "no"]',
-          style: { 'background-color': '#ef4444' },
+          style: { 'background-color': tokens.statusNo },
         },
         {
           selector: 'node[kind = "requirement"][complianceState = "risk-managed"]',
-          style: { 'background-color': '#facc15' },
+          style: { 'background-color': tokens.statusRiskManaged },
         },
         {
           selector: 'node[kind = "requirement"][complianceState = "not-applicable"]',
-          style: { 'background-color': '#94a3b8' },
+          style: { 'background-color': tokens.statusNotApplicable },
         },
         {
           selector: 'node[kind = "risk"]',
-          style: { 'background-color': '#b34a00', shape: 'diamond' },
+          style: { 'background-color': tokens.riskMedium, shape: 'diamond' },
         },
         {
           selector: 'node[kind = "risk"][riskBand = "extreme"]',
-          style: { 'background-color': '#99182c', width: 28, height: 28 },
+          style: { 'background-color': tokens.riskExtreme, width: 30, height: 30 },
+        },
+        {
+          selector: 'node[kind = "risk"][riskBand = "high"]',
+          style: { 'background-color': tokens.riskHigh, width: 26, height: 26 },
+        },
+        {
+          selector: 'node[kind = "risk"][riskBand = "medium"]',
+          style: { 'background-color': tokens.riskMedium },
         },
         {
           selector: 'node[kind = "risk"][riskBand = "low"]',
-          style: { 'background-color': '#2f6f3a' },
+          style: { 'background-color': tokens.riskLow },
         },
         {
           selector: 'node[kind = "action"]',
-          style: { 'background-color': '#059669', shape: 'round-rectangle' },
+          style: { 'background-color': tokens.actionTodo, shape: 'round-rectangle' },
         },
         {
-          selector:
-            'node[kind = "action"][actionStatus = "blocked"], node[kind = "action"][actionOverdue = "true"]',
-          style: { 'background-color': '#b34a00', width: 28, height: 20 },
+          selector: 'node[kind = "action"][actionStatus = "todo"]',
+          style: { 'background-color': tokens.actionTodo },
         },
         {
-          selector:
-            'node[kind = "action"][actionStatus = "done"], node[kind = "action"][actionStatus = "cancelled"]',
-          style: { 'background-color': '#94a3b8' },
+          selector: 'node[kind = "action"][actionStatus = "in-progress"]',
+          style: { 'background-color': tokens.actionInProgress },
+        },
+        {
+          selector: 'node[kind = "action"][actionStatus = "blocked"]',
+          style: { 'background-color': tokens.actionBlocked, width: 28, height: 20 },
+        },
+        {
+          selector: 'node[kind = "action"][actionStatus = "done"]',
+          style: { 'background-color': tokens.actionDone },
+        },
+        {
+          selector: 'node[kind = "action"][actionStatus = "cancelled"]',
+          style: { 'background-color': tokens.actionCancelled },
+        },
+        {
+          selector: 'node[kind = "action"][actionOverdue = "true"]',
+          style: {
+            'background-color': tokens.actionBlocked,
+            'border-color': tokens.statusNo,
+            'border-width': 3,
+          },
         },
         {
           selector: 'node[kind = "direction"]',
-          style: { 'background-color': '#7c3aed', shape: 'triangle' },
+          style: { 'background-color': tokens.directionNotSet, shape: 'triangle' },
         },
         {
-          selector:
-            'node[kind = "direction"][directionResponseState = "not-set"], node[kind = "direction"][directionResponseState = "no"]',
-          style: { 'background-color': '#ef4444', width: 28, height: 28 },
+          selector: 'node[kind = "direction"][directionResponseState = "not-set"]',
+          style: { 'background-color': tokens.directionNotSet, width: 28, height: 28 },
+        },
+        {
+          selector: 'node[kind = "direction"][directionResponseState = "no"]',
+          style: { 'background-color': tokens.directionNo, width: 28, height: 28 },
+        },
+        {
+          selector: 'node[kind = "direction"][directionResponseState = "risk-managed"]',
+          style: { 'background-color': tokens.directionRiskManaged },
+        },
+        {
+          selector: 'node[kind = "direction"][directionResponseState = "yes"]',
+          style: { 'background-color': tokens.directionYes },
         },
         {
           selector: 'edge',
           style: {
             width: 1.5,
-            'line-color': '#94a3b8',
+            'line-color': tokens.edgeDefault,
             'curve-style': 'bezier',
-            'target-arrow-shape': 'none',
+            'target-arrow-shape': 'triangle',
+            'target-arrow-color': tokens.edgeDefault,
+            'arrow-scale': 0.9,
           },
         },
         {
           selector: 'edge[kind = "requirement-risk"]',
-          style: { 'line-color': '#b34a00' },
+          style: {
+            'line-color': tokens.edgeRequirementRisk,
+            'target-arrow-color': tokens.edgeRequirementRisk,
+          },
         },
         {
           selector: 'edge[kind = "requirement-action"]',
-          style: { 'line-color': '#059669' },
+          style: {
+            'line-color': tokens.edgeRequirementAction,
+            'target-arrow-color': tokens.edgeRequirementAction,
+          },
         },
         {
           selector: 'edge[kind = "risk-action"]',
-          style: { 'line-color': '#2563eb' },
+          style: {
+            'line-color': tokens.edgeRiskAction,
+            'target-arrow-color': tokens.edgeRiskAction,
+          },
         },
         {
           selector: 'edge[kind = "requirement-direction"]',
-          style: { 'line-color': '#7c3aed' },
+          style: {
+            'line-color': tokens.edgeRequirementDirection,
+            'target-arrow-color': tokens.edgeRequirementDirection,
+          },
         },
         {
           selector: '.dimmed',
@@ -581,7 +940,7 @@ export class RelationshipMapView extends LitElement {
         },
         {
           selector: 'node.highlighted',
-          style: { 'border-width': 4, 'border-color': '#0f172a' },
+          style: { 'border-width': 4, 'border-color': tokens.nodeStroke, 'border-opacity': 1 },
         },
         {
           selector: 'edge.highlighted',
@@ -589,20 +948,145 @@ export class RelationshipMapView extends LitElement {
         },
         {
           selector: 'node:selected',
-          style: { 'border-width': 5, 'border-color': '#0f172a' },
+          style: { 'border-width': 5, 'border-color': tokens.nodeStroke, 'border-opacity': 1 },
         },
       ],
-      layout: { name: 'cose', animate: false, fit: true, padding: 16 },
+      layout: this.#buildLayoutOptions(),
     });
+    this.#lastLayoutName = this.layoutName;
 
     this.#cy.on('tap', 'node', (event: EventObjectNode): void => {
       this.selectedNodeId = event.target.id();
     });
+    this.#cy.on('mouseover', 'node', (event: EventObjectNode): void => {
+      const node = event.target;
+      const pos = node.renderedPosition();
+      this.#hover = {
+        nodeId: node.id(),
+        x: pos.x,
+        y: pos.y,
+      };
+      this.requestUpdate();
+    });
+    this.#cy.on('mouseout', 'node', (): void => {
+      this.#hover = null;
+      this.requestUpdate();
+    });
+    this.#cy.on('pan zoom', (): void => {
+      if (this.#hover) {
+        this.#hover = null;
+        this.requestUpdate();
+      }
+    });
     this.#applySelectionHighlight();
+  }
+
+  #resolveStyleTokens(): {
+    fg: string;
+    bg: string;
+    nodeStroke: string;
+    statusYes: string;
+    statusNo: string;
+    statusRiskManaged: string;
+    statusNotApplicable: string;
+    statusNotSet: string;
+    riskExtreme: string;
+    riskHigh: string;
+    riskMedium: string;
+    riskLow: string;
+    actionTodo: string;
+    actionInProgress: string;
+    actionBlocked: string;
+    actionDone: string;
+    actionCancelled: string;
+    directionNotSet: string;
+    directionNo: string;
+    directionRiskManaged: string;
+    directionYes: string;
+    edgeDefault: string;
+    edgeRequirementRisk: string;
+    edgeRequirementAction: string;
+    edgeRiskAction: string;
+    edgeRequirementDirection: string;
+  } {
+    const source = this.#canvas ?? this;
+    const styles = window.getComputedStyle(source as Element);
+    const read = (name: string, fallback: string): string => {
+      const value = styles.getPropertyValue(name).trim();
+      return value.length > 0 ? value : fallback;
+    };
+    return {
+      fg: read('--colour-fg', '#0f172a'),
+      bg: read('--colour-bg', '#f8fafc'),
+      nodeStroke: read('--colour-map-node-stroke', '#0f172a'),
+      statusYes: read('--colour-status-yes', '#2dd4bf'),
+      statusNo: read('--colour-status-no', '#ef4444'),
+      statusRiskManaged: read('--colour-status-risk-managed', '#facc15'),
+      statusNotApplicable: read('--colour-status-not-applicable', '#94a3b8'),
+      statusNotSet: read('--colour-status-not-set', '#475569'),
+      riskExtreme: read('--colour-risk-extreme', '#99182c'),
+      riskHigh: read('--colour-risk-high', '#d4451f'),
+      riskMedium: read('--colour-risk-medium', '#e0903b'),
+      riskLow: read('--colour-risk-low', '#2f6f3a'),
+      actionTodo: read('--colour-action-todo', '#475569'),
+      actionInProgress: read('--colour-action-in-progress', '#2563eb'),
+      actionBlocked: read('--colour-action-blocked', '#b34a00'),
+      actionDone: read('--colour-action-done', '#2dd4bf'),
+      actionCancelled: read('--colour-action-cancelled', '#94a3b8'),
+      directionNotSet: read('--colour-direction-not-set', '#ef4444'),
+      directionNo: read('--colour-direction-no', '#d4451f'),
+      directionRiskManaged: read('--colour-direction-risk-managed', '#facc15'),
+      directionYes: read('--colour-direction-yes', '#2dd4bf'),
+      edgeDefault: read('--colour-map-edge-default', '#94a3b8'),
+      edgeRequirementRisk: read('--colour-map-edge-requirement-risk', '#b34a00'),
+      edgeRequirementAction: read('--colour-map-edge-requirement-action', '#059669'),
+      edgeRiskAction: read('--colour-map-edge-risk-action', '#2563eb'),
+      edgeRequirementDirection: read('--colour-map-edge-requirement-direction', '#7c3aed'),
+    };
+  }
+
+  #buildLayoutOptions(): LayoutOptions {
+    const padding = 16;
+    switch (this.layoutName) {
+      case 'breadthfirst':
+        return {
+          name: 'breadthfirst',
+          animate: false,
+          fit: true,
+          padding,
+          directed: true,
+          spacingFactor: 1.1,
+        };
+      case 'concentric':
+        return {
+          name: 'concentric',
+          animate: false,
+          fit: true,
+          padding,
+          minNodeSpacing: 30,
+          concentric: (node): number => {
+            const kind = node.data('kind') as string;
+            if (kind === 'requirement') return 4;
+            if (kind === 'risk') return 3;
+            if (kind === 'action') return 2;
+            return 1;
+          },
+          levelWidth: (): number => 1,
+        };
+      case 'grid':
+        return { name: 'grid', animate: false, fit: true, padding, avoidOverlap: true };
+      case 'cose':
+      default:
+        return { name: 'cose', animate: false, fit: true, padding };
+    }
   }
 
   override updated(): void {
     void this.#renderCytoscape();
+    if (this.#cy && this.#lastLayoutName !== this.layoutName) {
+      this.#cy.layout(this.#buildLayoutOptions()).run();
+      this.#lastLayoutName = this.layoutName;
+    }
     this.#applySelectionHighlight();
   }
 
@@ -622,6 +1106,14 @@ export class RelationshipMapView extends LitElement {
       };
     }
 
+    const filters: MapFilters = {};
+    if (this.complianceFilter.size > 0) filters.complianceStates = [...this.complianceFilter];
+    if (this.riskBandFilter.size > 0) filters.riskBands = [...this.riskBandFilter];
+    if (this.actionStatusFilter.size > 0) filters.actionStatuses = [...this.actionStatusFilter];
+    if (this.actionOverdueOnly) filters.actionOverdueOnly = true;
+    if (this.directionResponseFilter.size > 0)
+      filters.directionResponseStates = [...this.directionResponseFilter];
+
     return buildRelationshipMapGraph({
       compliance: store.compliance.value,
       risks: store.risks.value,
@@ -635,8 +1127,124 @@ export class RelationshipMapView extends LitElement {
         actions: this.showActions,
         directions: this.showDirections,
         unlinkedGapsOnly: this.unlinkedGapsOnly,
+        filters,
       },
     });
+  }
+
+  #renderHoverTooltip(nodes: readonly MapNode[]): TemplateResult | '' {
+    const hover = this.#hover;
+    if (!hover) return '';
+    const node = nodes.find((n) => n.id === hover.nodeId);
+    if (!node) return '';
+    const lines = this.#tooltipLinesFor(node);
+    return html`<div
+      class="map-tooltip"
+      role="tooltip"
+      data-testid="map-tooltip"
+      style=${`left:${hover.x}px; top:${hover.y}px;`}
+    >
+      <strong>${node.label}</strong>
+      <span class="kind">${node.kind} · ${node.id}</span>
+      ${lines.map((line) => html`<span>${line}</span>`)}
+    </div>`;
+  }
+
+  #tooltipLinesFor(node: MapNode): readonly string[] {
+    return relationshipMapTooltipLines(node);
+  }
+
+  #renderViewControls(nodes: readonly MapNode[]): TemplateResult {
+    const query = this.searchQuery.trim().toLowerCase();
+    const matches =
+      query.length === 0
+        ? []
+        : nodes
+            .filter(
+              (node) =>
+                node.label.toLowerCase().includes(query) || node.id.toLowerCase().includes(query),
+            )
+            .slice(0, 6);
+    return html`<div class="view-controls" role="group" aria-label="Map view controls">
+      <label class="row">
+        <span class="control-label">Layout</span>
+        <select
+          data-testid="map-layout"
+          .value=${this.layoutName}
+          @change=${(e: Event): void => {
+            this.layoutName = (e.target as HTMLSelectElement).value as MapLayoutName;
+          }}
+        >
+          ${MAP_LAYOUT_OPTIONS.map(
+            (option) =>
+              html`<option value=${option.value} ?selected=${option.value === this.layoutName}>
+                ${option.label}
+              </option>`,
+          )}
+        </select>
+      </label>
+      <label class="row search">
+        <span class="control-label">Find node</span>
+        <input
+          data-testid="map-search"
+          type="search"
+          placeholder="Search by label or ID"
+          .value=${this.searchQuery}
+          @input=${(e: Event): void => {
+            this.searchQuery = (e.target as HTMLInputElement).value;
+          }}
+          @keydown=${(e: KeyboardEvent): void => {
+            if (e.key === 'Enter') {
+              const liveQuery = (e.target as HTMLInputElement).value.trim().toLowerCase();
+              if (liveQuery.length === 0) return;
+              const liveMatch = nodes.find(
+                (node) =>
+                  node.label.toLowerCase().includes(liveQuery) ||
+                  node.id.toLowerCase().includes(liveQuery),
+              );
+              if (liveMatch) {
+                this.selectedNodeId = liveMatch.id;
+                this.searchQuery = '';
+              }
+            } else if (e.key === 'Escape') {
+              this.searchQuery = '';
+            }
+          }}
+        />
+      </label>
+      ${query.length > 0
+        ? html`<ul class="search-results" role="listbox" data-testid="map-search-results">
+            ${matches.length === 0
+              ? html`<li class="empty">No matches</li>`
+              : matches.map(
+                  (node) => html`<li>
+                    <button
+                      type="button"
+                      data-testid=${`map-search-result-${node.id}`}
+                      @click=${(): void => {
+                        this.selectedNodeId = node.id;
+                        this.searchQuery = '';
+                      }}
+                    >
+                      <span class="kind">${node.kind}</span> ${node.label}
+                    </button>
+                  </li>`,
+                )}
+          </ul>`
+        : ''}
+      ${this.selectedNodeId
+        ? html`<button
+            type="button"
+            class="reset-selection"
+            data-testid="map-clear-selection"
+            @click=${(): void => {
+              this.selectedNodeId = '';
+            }}
+          >
+            Clear selection
+          </button>`
+        : ''}
+    </div>`;
   }
 
   #renderLegend(): TemplateResult {
@@ -657,6 +1265,133 @@ export class RelationshipMapView extends LitElement {
     </div>`;
   }
 
+  #activeFilterCount(): number {
+    return (
+      this.complianceFilter.size +
+      this.riskBandFilter.size +
+      this.actionStatusFilter.size +
+      (this.actionOverdueOnly ? 1 : 0) +
+      this.directionResponseFilter.size
+    );
+  }
+
+  #toggleFromSet<T>(current: ReadonlySet<T>, value: T): ReadonlySet<T> {
+    const next = new Set(current);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    return next;
+  }
+
+  #renderFilters(): TemplateResult {
+    const complianceOptions: readonly { value: ComplianceState; label: string }[] = [
+      { value: 'no', label: 'Not yet implemented' },
+      { value: 'risk-managed', label: 'Risk-managed' },
+      { value: 'not-set', label: 'Not set' },
+      { value: 'yes', label: 'Fully implemented' },
+      { value: 'not-applicable', label: 'Not applicable' },
+    ];
+    const riskBandOptions: readonly { value: RiskBand; label: string }[] = [
+      { value: 'extreme', label: 'Extreme' },
+      { value: 'high', label: 'High' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'low', label: 'Low' },
+    ];
+    const actionStatusOptions: readonly { value: ActionStatus; label: string }[] = [
+      { value: 'todo', label: 'To do' },
+      { value: 'in-progress', label: 'In progress' },
+      { value: 'blocked', label: 'Blocked' },
+      { value: 'done', label: 'Done' },
+      { value: 'cancelled', label: 'Cancelled' },
+    ];
+    const directionResponseOptions: readonly { value: DirectionResponseState; label: string }[] = [
+      { value: 'not-set', label: 'Needs response' },
+      { value: 'no', label: 'Not dealt with' },
+      { value: 'risk-managed', label: 'Risk-managed' },
+      { value: 'yes', label: 'Dealt with' },
+    ];
+    const renderChips = <T extends string>(
+      groupLabel: string,
+      testId: string,
+      options: readonly { value: T; label: string }[],
+      selected: ReadonlySet<T>,
+      onToggle: (value: T) => void,
+    ): TemplateResult => html`<fieldset class="filter-group" data-testid=${testId}>
+      <legend>${groupLabel}</legend>
+      ${options.map(
+        (option) => html`<label class="chip">
+          <input
+            type="checkbox"
+            ?checked=${selected.has(option.value)}
+            @change=${(): void => onToggle(option.value)}
+          />
+          ${option.label}
+        </label>`,
+      )}
+    </fieldset>`;
+    return html`<section class="filters" data-testid="map-filters" aria-label="Map filters">
+      ${renderChips(
+        'Compliance state',
+        'filter-compliance',
+        complianceOptions,
+        this.complianceFilter,
+        (value) => {
+          this.complianceFilter = this.#toggleFromSet(this.complianceFilter, value);
+        },
+      )}
+      ${renderChips('Risk band', 'filter-risk-band', riskBandOptions, this.riskBandFilter, (value) => {
+        this.riskBandFilter = this.#toggleFromSet(this.riskBandFilter, value);
+      })}
+      ${renderChips(
+        'Action status',
+        'filter-action-status',
+        actionStatusOptions,
+        this.actionStatusFilter,
+        (value) => {
+          this.actionStatusFilter = this.#toggleFromSet(this.actionStatusFilter, value);
+        },
+      )}
+      <fieldset class="filter-group">
+        <legend>Action urgency</legend>
+        <label class="chip">
+          <input
+            data-testid="filter-action-overdue"
+            type="checkbox"
+            ?checked=${this.actionOverdueOnly}
+            @change=${(e: Event): void => {
+              this.actionOverdueOnly = (e.target as HTMLInputElement).checked;
+            }}
+          />
+          Blocked or overdue only
+        </label>
+      </fieldset>
+      ${renderChips(
+        'Direction response',
+        'filter-direction-response',
+        directionResponseOptions,
+        this.directionResponseFilter,
+        (value) => {
+          this.directionResponseFilter = this.#toggleFromSet(this.directionResponseFilter, value);
+        },
+      )}
+      ${this.#activeFilterCount() > 0
+        ? html`<button
+            type="button"
+            data-testid="filter-clear"
+            class="filter-clear"
+            @click=${(): void => {
+              this.complianceFilter = new Set();
+              this.riskBandFilter = new Set();
+              this.actionStatusFilter = new Set();
+              this.actionOverdueOnly = false;
+              this.directionResponseFilter = new Set();
+            }}
+          >
+            Clear filters
+          </button>`
+        : ''}
+    </section>`;
+  }
+
   #applySelectionHighlight(): void {
     const cy = this.#cy;
     if (!cy) return;
@@ -664,9 +1399,35 @@ export class RelationshipMapView extends LitElement {
     if (!this.selectedNodeId) return;
     const selected = cy.getElementById(this.selectedNodeId);
     if (selected.empty()) return;
-    const connected = selected.closedNeighborhood();
-    cy.elements().not(connected).addClass('dimmed');
-    connected.addClass('highlighted');
+    // Highlight the full reachable subgraph (treating edges as undirected) so
+    // a selected action lights the whole chain action -> risk -> requirement
+    // -> direction. The 1-hop neighbourhood is too narrow for the common
+    // assurance question "what does this connect to in the end?".
+    const reachable = cy.collection().union(selected);
+    const visited = new Set<string>([selected.id()]);
+    const queue: string[] = [selected.id()];
+    while (queue.length > 0) {
+      const id = queue.shift() as string;
+      const node = cy.getElementById(id);
+      if (node.empty()) continue;
+      const incident = node.connectedEdges();
+      reachable.merge(incident);
+      const neighbours = node.neighborhood('node');
+      for (let i = 0; i < neighbours.length; i++) {
+        const next = neighbours[i];
+        if (next && !visited.has(next.id())) {
+          visited.add(next.id());
+          reachable.merge(next);
+          queue.push(next.id());
+        }
+      }
+    }
+    cy.elements().not(reachable).addClass('dimmed');
+    reachable.addClass('highlighted');
+    if (this.#lastCentredNodeId !== this.selectedNodeId) {
+      cy.center(selected);
+      this.#lastCentredNodeId = this.selectedNodeId;
+    }
   }
 
   #cytoscapeSignature(graph: Pick<RelationshipMapGraph, 'nodes' | 'edges'>): string {
@@ -699,21 +1460,35 @@ export class RelationshipMapView extends LitElement {
     }
   }
 
-  #renderInspector(node: MapNode | undefined): TemplateResult {
+  #renderInspector(node: MapNode | undefined, nodes: readonly MapNode[]): TemplateResult {
     if (!node) {
       return html`<aside class="inspector" aria-label="Selected map item">
         <h3>Selection</h3>
         <p>Select a node to inspect compliance and connected work.</p>
       </aside>`;
     }
+    const nodesById = new Map(nodes.map((n) => [n.id, n]));
 
     return html`<aside class="inspector" aria-label="Selected map item" data-testid="map-inspector">
       <h3>${node.label}</h3>
       <p>${node.detail}</p>
       <div class="pill-row">${this.#nodePills(node)}</div>
-      ${node.kind === 'requirement' ? this.#requirementDetails(node) : this.#workNodeDetails(node)}
+      ${this.#renderNodeBody(node, nodesById)}
       <p><a href=${node.href}>Open source record</a></p>
     </aside>`;
+  }
+
+  #renderNodeBody(node: MapNode, nodesById: Map<string, MapNode>): TemplateResult {
+    switch (node.kind) {
+      case 'requirement':
+        return this.#requirementDetails(node);
+      case 'action':
+        return this.#actionDetails(node, nodesById);
+      case 'risk':
+        return this.#riskDetails(node, nodesById);
+      case 'direction':
+        return this.#directionDetails(node, nodesById);
+    }
   }
 
   #nodePills(node: MapNode): TemplateResult {
@@ -757,13 +1532,130 @@ export class RelationshipMapView extends LitElement {
     </dl>`;
   }
 
-  #workNodeDetails(node: MapNode): TemplateResult {
-    return html`<dl>
-      <dt>Type</dt>
-      <dd>${node.kind}</dd>
-      <dt>Connection</dt>
-      <dd>Use the connection list to see the linked requirements and work items.</dd>
-    </dl>`;
+  #actionDetails(node: MapNode, nodesById: Map<string, MapNode>): TemplateResult {
+    const value = node.actionValue;
+    const conns = node.connections;
+    return html`${value
+        ? html`<dl data-testid="action-value">
+            <dt>Requirements addressed</dt>
+            <dd>
+              ${value.requirementsAddressed} (${value.requirementsWithGap} currently a gap)
+            </dd>
+            <dt>Uniquely covered</dt>
+            <dd>
+              ${value.uniquelyCoveredRequirements}
+              ${value.uniquelyCoveredRequirements === 1 ? 'requirement' : 'requirements'}
+              would be uncovered without this action
+            </dd>
+            <dt>Risks treated</dt>
+            <dd>
+              ${value.risksTreated} (${value.openRisksTreated} open,
+              ${value.highOrExtremeRisksTreated} high or extreme)
+            </dd>
+          </dl>`
+        : ''}
+      ${this.#renderConnectedRequirements(conns, nodesById)}
+      ${this.#renderConnectedRisks(conns, nodesById)}`;
+  }
+
+  #riskDetails(node: MapNode, nodesById: Map<string, MapNode>): TemplateResult {
+    const treatment = node.riskTreatment;
+    const conns = node.connections;
+    return html`${treatment
+        ? html`<dl data-testid="risk-treatment">
+            <dt>Requirements affected</dt>
+            <dd>
+              ${treatment.requirementsAffected} (${treatment.requirementsWithGap} currently a gap)
+            </dd>
+            <dt>Actions treating</dt>
+            <dd>
+              ${treatment.activeActionsTreating} active /
+              ${treatment.actionsTreating} total
+            </dd>
+            <dt>Blocked or overdue</dt>
+            <dd>${treatment.blockedOrOverdueActionsTreating}</dd>
+          </dl>`
+        : ''}
+      ${this.#renderConnectedRequirements(conns, nodesById)}
+      ${this.#renderConnectedActions(conns, nodesById)}`;
+  }
+
+  #directionDetails(node: MapNode, nodesById: Map<string, MapNode>): TemplateResult {
+    const impact = node.directionImpact;
+    const conns = node.connections;
+    return html`${impact
+        ? html`<dl data-testid="direction-impact">
+            <dt>Requirements modified</dt>
+            <dd>${impact.requirementsModified} (${impact.requirementsWithGap} currently a gap)</dd>
+          </dl>`
+        : ''}
+      ${this.#renderConnectedRequirements(conns, nodesById)}`;
+  }
+
+  #renderConnectedRequirements(
+    conns: MapNode['connections'],
+    nodesById: Map<string, MapNode>,
+  ): TemplateResult {
+    const ids = conns?.requirementIds ?? [];
+    if (ids.length === 0) return html``;
+    return html`<section class="connections" data-testid="connected-requirements">
+      <h4>Linked requirements</h4>
+      <ul>
+        ${ids.map((id) => {
+          const reqNode = nodesById.get(id);
+          const label = reqNode?.label ?? id;
+          const stateLabel = mapComplianceLabel(reqNode?.complianceState ?? 'not-set');
+          return html`<li>
+            <a href=${`#/requirement/${id}`}>${label}</a>
+            <span class="pill">${stateLabel}</span>
+          </li>`;
+        })}
+      </ul>
+    </section>`;
+  }
+
+  #renderConnectedRisks(
+    conns: MapNode['connections'],
+    nodesById: Map<string, MapNode>,
+  ): TemplateResult {
+    const ids = conns?.riskIds ?? [];
+    if (ids.length === 0) return html``;
+    return html`<section class="connections" data-testid="connected-risks">
+      <h4>Linked risks</h4>
+      <ul>
+        ${ids.map((id) => {
+          const riskNode = nodesById.get(id);
+          if (!riskNode) return html`<li>${id}</li>`;
+          return html`<li>
+            <a href=${riskNode.href}>${riskNode.label}</a>
+            <span class="pill">${riskNode.riskBand ?? 'unknown'}</span>
+            <span class="pill">${riskNode.riskStatus ?? 'unknown'}</span>
+          </li>`;
+        })}
+      </ul>
+    </section>`;
+  }
+
+  #renderConnectedActions(
+    conns: MapNode['connections'],
+    nodesById: Map<string, MapNode>,
+  ): TemplateResult {
+    const ids = conns?.actionIds ?? [];
+    if (ids.length === 0) return html``;
+    return html`<section class="connections" data-testid="connected-actions">
+      <h4>Linked actions</h4>
+      <ul>
+        ${ids.map((id) => {
+          const actionNode = nodesById.get(id);
+          if (!actionNode) return html`<li>${id}</li>`;
+          return html`<li>
+            <a href=${actionNode.href}>${actionNode.label}</a>
+            <span class="pill">${actionNode.actionStatus ?? 'unknown'}</span>
+            ${actionNode.actionOverdue ? html`<span class="pill">Overdue</span>` : ''}
+          </li>`;
+        })}
+      </ul>
+    </section>`;
   }
 }
 

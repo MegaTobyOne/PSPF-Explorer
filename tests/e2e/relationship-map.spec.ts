@@ -166,9 +166,357 @@ test('relationship map shows work connected to compliance gaps', async ({ page }
   expect(copied).toContain('Relationship map summary');
   expect(copied).toContain('GOV-001:');
   expect(copied).toContain('Control gap remains untreated');
+  expect(copied).toContain('Action compliance value');
+  expect(copied).toContain('Implement uplift plan');
+  expect(copied).toContain('Risk treatment progress');
+  expect(copied).toContain('Direction impact');
+  expect(copied).toContain('PSPF Direction 123-2026');
 
   await view.getByTestId('unlinked-gaps-only').check();
   await expect(view.getByTestId('counts')).toContainText('1 nodes');
   await expect(view.getByTestId('counts')).toContainText('0 edges');
   await expect(view.getByTestId('map-inspector')).toContainText('GOV-002');
+});
+
+test('relationship map inspector reveals the value chain of an action', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
+  });
+  await page.reload();
+
+  await page.evaluate(async () => {
+    const request = indexedDB.open('pspf-explorer.v3');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onerror = () => reject(request.error ?? new Error('Failed to open PSPF database'));
+      request.onsuccess = () => resolve(request.result);
+    });
+    const now = new Date('2026-05-07T00:00:00.000Z').toISOString();
+    const tx = db.transaction(['compliance', 'risks', 'actions'], 'readwrite');
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-001',
+      state: 'no',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-002',
+      state: 'risk-managed',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-value-1',
+      title: 'Privileged access drift',
+      likelihood: 4,
+      impact: 5,
+      status: 'open',
+      requirementIds: ['GOV-001'],
+      actionIds: ['action-value-1'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('actions').put({
+      id: 'action-value-1',
+      title: 'Tighten access controls',
+      type: 'remediation',
+      status: 'in-progress',
+      requirementIds: ['GOV-001', 'GOV-002'],
+      riskIds: ['risk-value-1'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('Failed to seed map test data'));
+      tx.onabort = () => reject(tx.error ?? new Error('Map test data transaction aborted'));
+    });
+    db.close();
+  });
+  await page.reload();
+
+  await page.locator('pspf-app').getByRole('link', { name: /^Map$/ }).click();
+  const view = page.locator('pspf-relationship-map-view');
+  await expect(view.getByTestId('counts')).toContainText('4 nodes');
+
+  // Force the inspector to show the action node, since clicking the
+  // Cytoscape canvas in headless mode is unreliable.
+  await expect(view.getByTestId('map-canvas')).toBeVisible();
+  await page.evaluate(async () => {
+    function findInShadow(root: Document | ShadowRoot, tag: string): HTMLElement | null {
+      const direct = root.querySelector(tag) as HTMLElement | null;
+      if (direct) return direct;
+      const all = root.querySelectorAll('*');
+      for (const node of all) {
+        const sr = (node as HTMLElement).shadowRoot;
+        if (sr) {
+          const found = findInShadow(sr, tag);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    const el = findInShadow(document, 'pspf-relationship-map-view') as
+      | (HTMLElement & { selectedNodeId?: string; updateComplete?: Promise<unknown> })
+      | null;
+    if (!el) throw new Error('Map view missing');
+    el.selectedNodeId = 'action-value-1';
+    await el.updateComplete;
+  });
+
+  const inspector = view.getByTestId('map-inspector');
+  await expect(inspector).toContainText('Tighten access controls');
+  const actionValue = view.getByTestId('action-value');
+  await expect(actionValue).toContainText('Requirements addressed');
+  await expect(actionValue).toContainText('2 (2 currently a gap)');
+  await expect(actionValue).toContainText('Uniquely covered');
+  await expect(actionValue).toContainText('2 requirements would be uncovered');
+  await expect(actionValue).toContainText('Risks treated');
+  await expect(actionValue).toContainText('1 (1 open, 1 high or extreme)');
+
+  const reqs = view.getByTestId('connected-requirements');
+  await expect(reqs).toContainText('GOV-001');
+  await expect(reqs).toContainText('GOV-002');
+  await expect(reqs).toContainText('Not yet implemented');
+  await expect(reqs).toContainText('Risk-managed');
+
+  const risks = view.getByTestId('connected-risks');
+  await expect(risks).toContainText('Privileged access drift');
+  await expect(risks).toContainText('extreme');
+  await expect(risks).toContainText('open');
+});
+
+test('relationship map filters narrow the visible network', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
+  });
+  await page.reload();
+
+  await page.evaluate(async () => {
+    const request = indexedDB.open('pspf-explorer.v3');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onerror = () => reject(request.error ?? new Error('Failed to open PSPF database'));
+      request.onsuccess = () => resolve(request.result);
+    });
+    const now = new Date('2026-05-07T00:00:00.000Z').toISOString();
+    const tx = db.transaction(['compliance', 'risks', 'actions'], 'readwrite');
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-001',
+      state: 'no',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-002',
+      state: 'risk-managed',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-extreme',
+      title: 'Extreme exposure',
+      likelihood: 5,
+      impact: 5,
+      status: 'open',
+      requirementIds: ['GOV-001'],
+      actionIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-low',
+      title: 'Low exposure',
+      likelihood: 1,
+      impact: 1,
+      status: 'open',
+      requirementIds: ['GOV-002'],
+      actionIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('actions').put({
+      id: 'action-blocked',
+      title: 'Blocked uplift',
+      type: 'remediation',
+      status: 'blocked',
+      requirementIds: ['GOV-001'],
+      riskIds: ['risk-extreme'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('actions').put({
+      id: 'action-progress',
+      title: 'In progress review',
+      type: 'review',
+      status: 'in-progress',
+      requirementIds: ['GOV-002'],
+      riskIds: ['risk-low'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('Failed to seed map test data'));
+      tx.onabort = () => reject(tx.error ?? new Error('Map test data transaction aborted'));
+    });
+    db.close();
+  });
+  await page.reload();
+
+  await page.locator('pspf-app').getByRole('link', { name: /^Map$/ }).click();
+  const view = page.locator('pspf-relationship-map-view');
+  // Two requirements + two risks + two actions = 6 nodes initially.
+  await expect(view.getByTestId('counts')).toContainText('6 nodes');
+
+  // Open the filter panel.
+  await view.getByTestId('toggle-filters').click();
+  await expect(view.getByTestId('map-filters')).toBeVisible();
+
+  // Filter to extreme risks only.
+  await view
+    .getByTestId('filter-risk-band')
+    .getByRole('checkbox', { name: 'Extreme' })
+    .check();
+  await expect(view.getByTestId('counts')).toContainText('5 nodes');
+  // The button label reflects active filter count.
+  await expect(view.getByTestId('toggle-filters')).toContainText('(1)');
+
+  // Add an action filter for "Blocked or overdue only".
+  await view.getByTestId('filter-action-overdue').check();
+  await expect(view.getByTestId('counts')).toContainText('4 nodes');
+  await expect(view.getByTestId('toggle-filters')).toContainText('(2)');
+
+  // Clear filters returns to the original view.
+  await view.getByTestId('filter-clear').click();
+  await expect(view.getByTestId('counts')).toContainText('6 nodes');
+  await expect(view.getByTestId('toggle-filters')).not.toContainText('(');
+});
+
+test('relationship map supports layout switch, node search and URL focus', async ({ page }) => {
+  // Seed a small graph (1 requirement, 1 risk, 1 action) so search can find nodes.
+  await page.goto('./');
+  await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
+  });
+  await page.reload();
+  await page.evaluate(async () => {
+    const request = indexedDB.open('pspf-explorer.v3');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onerror = () => reject(request.error ?? new Error('Failed to open PSPF database'));
+      request.onsuccess = () => resolve(request.result);
+    });
+    const now = new Date('2026-05-07T00:00:00.000Z').toISOString();
+    const tx = db.transaction(['compliance', 'risks', 'actions'], 'readwrite');
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-001',
+      state: 'no',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-search-target',
+      title: 'Searchable supply-chain risk',
+      likelihood: 4,
+      impact: 4,
+      status: 'open',
+      requirementIds: ['GOV-001'],
+      actionIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('actions').put({
+      id: 'action-search-1',
+      title: 'Vendor uplift programme',
+      type: 'remediation',
+      status: 'in-progress',
+      requirementIds: ['GOV-001'],
+      riskIds: ['risk-search-target'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('Failed to seed'));
+      tx.onabort = () => reject(tx.error ?? new Error('Aborted'));
+    });
+    db.close();
+  });
+  await page.reload();
+
+  await page.locator('pspf-app').getByRole('link', { name: /^Map$/ }).click();
+  const view = page.locator('pspf-relationship-map-view');
+
+  // Layout selector defaults to cose and switches to breadthfirst.
+  const layout = view.getByTestId('map-layout');
+  await expect(layout).toHaveValue('cose');
+  await layout.selectOption('breadthfirst');
+  await expect(layout).toHaveValue('breadthfirst');
+
+  // Search by label finds the action and selecting it via Enter focuses it.
+  const search = view.getByTestId('map-search');
+  await search.fill('vendor');
+  await expect(view.getByTestId('map-search-result-action-search-1')).toBeVisible();
+  await search.press('Enter');
+  await expect(view.getByTestId('map-inspector')).toContainText('Vendor uplift programme');
+
+  // Clear selection.
+  await view.getByTestId('map-clear-selection').click();
+  await expect(view.getByTestId('map-clear-selection')).toBeHidden();
+});
+
+test('relationship map honours ?focus= query param to deep-link a node', async ({ page }) => {
+  // Reuse a single seeded item.
+  await page.goto('./');
+  await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
+  });
+  await page.reload();
+  await page.evaluate(async () => {
+    const request = indexedDB.open('pspf-explorer.v3');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onerror = () => reject(request.error ?? new Error('open failed'));
+      request.onsuccess = () => resolve(request.result);
+    });
+    const now = new Date('2026-05-07T00:00:00.000Z').toISOString();
+    const tx = db.transaction(['compliance', 'risks'], 'readwrite');
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-010',
+      state: 'no',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-deep-link',
+      title: 'Deep-linked risk',
+      likelihood: 3,
+      impact: 4,
+      status: 'open',
+      requirementIds: ['GOV-010'],
+      actionIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('seed failed'));
+      tx.onabort = () => reject(tx.error ?? new Error('seed aborted'));
+    });
+    db.close();
+  });
+
+  // Visit with focus query param.
+  await page.goto('./?focus=risk-deep-link#/map');
+  const view = page.locator('pspf-relationship-map-view');
+  await expect(view.getByTestId('map-inspector')).toContainText('Deep-linked risk');
 });

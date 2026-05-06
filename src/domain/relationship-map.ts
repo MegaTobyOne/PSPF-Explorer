@@ -30,6 +30,23 @@ export interface MapVisibility {
   actions: boolean;
   directions: boolean;
   unlinkedGapsOnly?: boolean;
+  /** Optional filter sets — when present, only matching records are included. */
+  filters?: MapFilters;
+}
+
+export interface MapFilters {
+  /** Compliance states to include for requirements. Empty/undefined = all. */
+  complianceStates?: readonly ComplianceState[];
+  /** Risk bands to include. Empty/undefined = all. */
+  riskBands?: readonly RiskBand[];
+  /** Risk statuses to include. Empty/undefined = all. */
+  riskStatuses?: readonly RiskStatus[];
+  /** Action statuses to include. Empty/undefined = all. */
+  actionStatuses?: readonly ActionStatus[];
+  /** When true, only include actions that are blocked or overdue. */
+  actionOverdueOnly?: boolean;
+  /** Direction response states to include. Empty/undefined = all. */
+  directionResponseStates?: readonly DirectionResponseState[];
 }
 
 export interface RequirementWorkSummary {
@@ -45,6 +62,54 @@ export interface RequirementWorkSummary {
   hasWork: boolean;
 }
 
+/**
+ * Compliance value of a single action — answers "if this action ships, what
+ * does the organisation get in return for it?"
+ */
+export interface ActionValueSummary {
+  /** Number of distinct requirements this action remediates. */
+  requirementsAddressed: number;
+  /** Of those, how many are currently a compliance gap (no/risk-managed/not-set). */
+  requirementsWithGap: number;
+  /** Requirements where this is the only active action — losing this action uncovers them. */
+  uniquelyCoveredRequirements: number;
+  /** Risks this action treats. */
+  risksTreated: number;
+  /** Of those, how many are still open. */
+  openRisksTreated: number;
+  /** Of those, how many are high or extreme band. */
+  highOrExtremeRisksTreated: number;
+}
+
+/**
+ * Treatment context for a single risk — answers "is this risk being worked on,
+ * and on whose behalf?"
+ */
+export interface RiskTreatmentSummary {
+  requirementsAffected: number;
+  requirementsWithGap: number;
+  actionsTreating: number;
+  activeActionsTreating: number;
+  blockedOrOverdueActionsTreating: number;
+}
+
+/** Compliance scope of a single direction. */
+export interface DirectionImpactSummary {
+  requirementsModified: number;
+  requirementsWithGap: number;
+}
+
+/**
+ * IDs of nodes connected to this node, grouped by kind. The view uses these
+ * to draw the value-chain in the inspector without re-walking edges.
+ */
+export interface NodeConnections {
+  requirementIds: readonly string[];
+  riskIds: readonly string[];
+  actionIds: readonly string[];
+  directionIds: readonly string[];
+}
+
 export interface MapNode {
   id: string;
   label: string;
@@ -58,6 +123,14 @@ export interface MapNode {
   actionOverdue?: boolean;
   directionResponseState?: DirectionResponseState;
   work?: RequirementWorkSummary;
+  /** For action nodes: compliance/risk value of the action. */
+  actionValue?: ActionValueSummary;
+  /** For risk nodes: treatment progress against the risk. */
+  riskTreatment?: RiskTreatmentSummary;
+  /** For direction nodes: scope of the direction's compliance impact. */
+  directionImpact?: DirectionImpactSummary;
+  /** IDs of directly connected nodes, grouped by kind. */
+  connections?: NodeConnections;
 }
 
 export interface MapEdge {
@@ -131,9 +204,39 @@ function complianceGap(state: ComplianceState): boolean {
 export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): RelationshipMapGraph {
   const visibility = { ...DEFAULT_VISIBILITY, ...input.visibility };
   const now = input.now ?? Date.now();
-  const risksById = new Map(input.risks.map((risk) => [risk.id, risk]));
-  const actionsById = new Map(input.actions.map((action) => [action.id, action]));
-  const directionsById = new Map(input.directions.map((direction) => [direction.id, direction]));
+  const filters = visibility.filters ?? {};
+
+  // Pre-filter source records so downstream graph-building, edge collection
+  // and value/treatment summaries all operate on the same filtered universe.
+  const includesAll = <T,>(allowed: readonly T[] | undefined, value: T): boolean =>
+    !allowed || allowed.length === 0 || allowed.includes(value);
+  const riskMatches = (risk: Risk): boolean => {
+    const band = riskBandOf(risk.likelihood * risk.impact);
+    return (
+      includesAll(filters.riskBands, band) && includesAll(filters.riskStatuses, risk.status)
+    );
+  };
+  const actionMatches = (action: Action): boolean => {
+    const overdue = isActionOverdue(action, now);
+    if (filters.actionOverdueOnly && action.status !== 'blocked' && !overdue) return false;
+    return includesAll(filters.actionStatuses, action.status);
+  };
+  const directionMatches = (direction: Direction): boolean =>
+    includesAll(filters.directionResponseStates, direction.responseState);
+  const complianceMatches = (state: ComplianceState): boolean =>
+    includesAll(filters.complianceStates, state);
+
+  const inputRisks = input.risks.filter(riskMatches);
+  const inputActions = input.actions.filter(actionMatches);
+  const inputDirections = input.directions.filter(directionMatches);
+  const filteredCompliance = new Map<RequirementId, ComplianceEntry>();
+  for (const [id, entry] of input.compliance) {
+    if (complianceMatches(entry.state)) filteredCompliance.set(id, entry);
+  }
+
+  const risksById = new Map(inputRisks.map((risk) => [risk.id, risk]));
+  const actionsById = new Map(inputActions.map((action) => [action.id, action]));
+  const directionsById = new Map(inputDirections.map((direction) => [direction.id, direction]));
   const workByRequirement = new Map<string, WorkTrackingEntry[]>();
 
   for (const entry of input.workTracking) {
@@ -155,16 +258,16 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     map.set(requirementId, set);
   };
 
-  for (const risk of input.risks) {
+  for (const risk of inputRisks) {
     for (const requirementId of risk.requirementIds)
       addRelated(relatedRiskIds, requirementId, risk.id);
   }
-  for (const action of input.actions) {
+  for (const action of inputActions) {
     for (const requirementId of action.requirementIds) {
       addRelated(relatedActionIds, requirementId, action.id);
     }
   }
-  for (const direction of input.directions) {
+  for (const direction of inputDirections) {
     for (const requirementId of direction.requirementIds) {
       addRelated(relatedDirectionIds, requirementId, direction.id);
     }
@@ -262,7 +365,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
   };
 
   if (visibility.risks && !visibility.unlinkedGapsOnly) {
-    for (const risk of input.risks) {
+    for (const risk of inputRisks) {
       addNode({
         id: risk.id,
         label: risk.title,
@@ -275,7 +378,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     }
   }
   if (visibility.actions && !visibility.unlinkedGapsOnly) {
-    for (const action of input.actions) {
+    for (const action of inputActions) {
       const actionOverdue = isActionOverdue(action, now);
       addNode({
         id: action.id,
@@ -289,7 +392,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     }
   }
   if (visibility.directions && !visibility.unlinkedGapsOnly) {
-    for (const direction of input.directions) {
+    for (const direction of inputDirections) {
       addNode({
         id: direction.id,
         label: direction.reference,
@@ -302,12 +405,18 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
   }
 
   if (visibility.requirements) {
-    for (const entry of input.compliance.values()) {
+    for (const entry of filteredCompliance.values()) {
       if (complianceGap(entry.state) || workByRequirement.has(entry.requirementId)) {
         addRequirementNode(entry.requirementId);
       }
     }
-    for (const requirementId of workByRequirement.keys()) addRequirementNode(requirementId);
+    // Auto-emit work-only requirements only if no compliance-state filter is
+    // active (otherwise the user has explicitly narrowed the view).
+    const filteringByState =
+      Array.isArray(filters.complianceStates) && filters.complianceStates.length > 0;
+    if (!filteringByState) {
+      for (const requirementId of workByRequirement.keys()) addRequirementNode(requirementId);
+    }
   }
 
   const edgeMap = new Map<string, MapEdge>();
@@ -320,7 +429,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
   };
 
   if (visibility.risks && !visibility.unlinkedGapsOnly) {
-    for (const risk of input.risks) {
+    for (const risk of inputRisks) {
       if (visibility.requirements) {
         for (const requirementId of risk.requirementIds) {
           addRequirementNode(requirementId);
@@ -333,7 +442,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     }
   }
   if (visibility.actions && !visibility.unlinkedGapsOnly) {
-    for (const action of input.actions) {
+    for (const action of inputActions) {
       if (visibility.requirements) {
         for (const requirementId of action.requirementIds) {
           addRequirementNode(requirementId);
@@ -346,7 +455,7 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     }
   }
   if (visibility.directions && visibility.requirements && !visibility.unlinkedGapsOnly) {
-    for (const direction of input.directions) {
+    for (const direction of inputDirections) {
       for (const requirementId of direction.requirementIds) {
         addRequirementNode(requirementId);
         addEdge(requirementId, direction.id, 'requirement-direction');
@@ -372,15 +481,127 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
     complianceGapsWithoutWork: visibleRequirements.filter(
       (node) => complianceGap(node.complianceState ?? 'not-set') && !node.work?.hasWork,
     ).length,
-    blockedOrOverdueActions: input.actions.filter(
+    blockedOrOverdueActions: inputActions.filter(
       (action) => action.status === 'blocked' || isActionOverdue(action, now),
     ).length,
-    directionsNeedingResponse: input.directions.filter(
+    directionsNeedingResponse: inputDirections.filter(
       (direction) => direction.responseState === 'not-set' || direction.responseState === 'no',
     ).length,
   };
 
-  return { nodes: [...nodeMap.values()], edges: [...edgeMap.values()], summary };
+  // -------- Enrich non-requirement nodes with value/treatment/impact summaries --------
+
+  const isActionActive = (action: Action): boolean =>
+    action.status !== 'done' && action.status !== 'cancelled';
+  const requirementGap = (requirementId: string): boolean =>
+    complianceGap(input.compliance.get(requirementId as RequirementId)?.state ?? 'not-set');
+
+  // Active actions per requirement (within the filtered universe) — used to
+  // identify uniquely-covered requirements.
+  const activeActionsByRequirement = new Map<string, Set<string>>();
+  for (const action of inputActions) {
+    if (!isActionActive(action)) continue;
+    for (const requirementId of action.requirementIds) {
+      const set = activeActionsByRequirement.get(requirementId) ?? new Set<string>();
+      set.add(action.id);
+      activeActionsByRequirement.set(requirementId, set);
+    }
+  }
+
+  // Build per-node connection sets from the visible edges.
+  const connectionsByNode = new Map<
+    string,
+    { requirements: Set<string>; risks: Set<string>; actions: Set<string>; directions: Set<string> }
+  >();
+  const ensureConnections = (id: string) => {
+    let entry = connectionsByNode.get(id);
+    if (!entry) {
+      entry = {
+        requirements: new Set(),
+        risks: new Set(),
+        actions: new Set(),
+        directions: new Set(),
+      };
+      connectionsByNode.set(id, entry);
+    }
+    return entry;
+  };
+  const recordConnection = (fromId: string, toId: string): void => {
+    const toNode = nodeMap.get(toId);
+    if (!toNode) return;
+    const entry = ensureConnections(fromId);
+    if (toNode.kind === 'requirement') entry.requirements.add(toId);
+    else if (toNode.kind === 'risk') entry.risks.add(toId);
+    else if (toNode.kind === 'action') entry.actions.add(toId);
+    else if (toNode.kind === 'direction') entry.directions.add(toId);
+  };
+  for (const edge of edgeMap.values()) {
+    recordConnection(edge.source, edge.target);
+    recordConnection(edge.target, edge.source);
+  }
+
+  const enrichedNodes: MapNode[] = [...nodeMap.values()].map((node) => {
+    const conns = connectionsByNode.get(node.id);
+    const connections: NodeConnections = {
+      requirementIds: conns ? [...conns.requirements].sort() : [],
+      riskIds: conns ? [...conns.risks].sort() : [],
+      actionIds: conns ? [...conns.actions].sort() : [],
+      directionIds: conns ? [...conns.directions].sort() : [],
+    };
+    if (node.kind === 'action') {
+      const action = actionsById.get(node.id as Action['id']);
+      const requirementIds = connections.requirementIds;
+      const risks = connections.riskIds
+        .map((id) => risksById.get(id as Risk['id']))
+        .filter((risk): risk is Risk => Boolean(risk));
+      const isThisActionActive = action ? isActionActive(action) : false;
+      const uniquelyCoveredRequirements = isThisActionActive
+        ? requirementIds.filter((requirementId) => {
+            const active = activeActionsByRequirement.get(requirementId);
+            return active?.size === 1 && active.has(node.id);
+          }).length
+        : 0;
+      const actionValue: ActionValueSummary = {
+        requirementsAddressed: requirementIds.length,
+        requirementsWithGap: requirementIds.filter(requirementGap).length,
+        uniquelyCoveredRequirements,
+        risksTreated: risks.length,
+        openRisksTreated: risks.filter((risk) => risk.status === 'open').length,
+        highOrExtremeRisksTreated: risks.filter((risk) => {
+          const band = riskBandOf(risk.likelihood * risk.impact);
+          return band === 'high' || band === 'extreme';
+        }).length,
+      };
+      return { ...node, connections, actionValue };
+    }
+    if (node.kind === 'risk') {
+      const requirementIds = connections.requirementIds;
+      const actions = connections.actionIds
+        .map((id) => actionsById.get(id as Action['id']))
+        .filter((action): action is Action => Boolean(action));
+      const riskTreatment: RiskTreatmentSummary = {
+        requirementsAffected: requirementIds.length,
+        requirementsWithGap: requirementIds.filter(requirementGap).length,
+        actionsTreating: actions.length,
+        activeActionsTreating: actions.filter(isActionActive).length,
+        blockedOrOverdueActionsTreating: actions.filter(
+          (action) => action.status === 'blocked' || isActionOverdue(action, now),
+        ).length,
+      };
+      return { ...node, connections, riskTreatment };
+    }
+    if (node.kind === 'direction') {
+      const requirementIds = connections.requirementIds;
+      const directionImpact: DirectionImpactSummary = {
+        requirementsModified: requirementIds.length,
+        requirementsWithGap: requirementIds.filter(requirementGap).length,
+      };
+      return { ...node, connections, directionImpact };
+    }
+    return { ...node, connections };
+  });
+
+  return { nodes: enrichedNodes, edges: [...edgeMap.values()], summary };
 }
 
 export function formatRelationshipMapSummary(graph: RelationshipMapGraph): string {
@@ -432,6 +653,98 @@ export function formatRelationshipMapSummary(graph: RelationshipMapGraph): strin
     lines.push(`Work log: ${work?.workLogCount ?? 0} entries`);
     lines.push(`Evidence: ${work?.evidenceCount ?? 0} items`);
     lines.push('');
+  }
+
+  const actionNodes = graph.nodes
+    .filter((node) => node.kind === 'action' && node.actionValue)
+    .sort((left, right) => {
+      // Most-valuable actions first: prefer those with the most uniquely-covered
+      // requirements, then total gaps remediated, then risks treated.
+      const leftValue = left.actionValue!;
+      const rightValue = right.actionValue!;
+      return (
+        rightValue.uniquelyCoveredRequirements - leftValue.uniquelyCoveredRequirements ||
+        rightValue.requirementsWithGap - leftValue.requirementsWithGap ||
+        rightValue.risksTreated - leftValue.risksTreated ||
+        left.label.localeCompare(right.label)
+      );
+    });
+
+  if (actionNodes.length > 0) {
+    lines.push('Action compliance value');
+    lines.push('');
+    for (const action of actionNodes) {
+      const value = action.actionValue!;
+      lines.push(`${action.label}: ${action.actionStatus ?? 'unknown'}${action.actionOverdue ? ' (overdue)' : ''}`);
+      lines.push(
+        `Requirements addressed: ${value.requirementsAddressed} (${value.requirementsWithGap} currently a gap)`,
+      );
+      lines.push(
+        `Uniquely covered: ${value.uniquelyCoveredRequirements} ${value.uniquelyCoveredRequirements === 1 ? 'requirement' : 'requirements'} would be uncovered without this action`,
+      );
+      lines.push(
+        `Risks treated: ${value.risksTreated} (${value.openRisksTreated} open, ${value.highOrExtremeRisksTreated} high or extreme)`,
+      );
+      lines.push('');
+    }
+  }
+
+  const riskNodes = graph.nodes
+    .filter((node) => node.kind === 'risk' && node.riskTreatment)
+    .sort((left, right) => {
+      // Highest exposure first: requirements-with-gap, then blocked/overdue, then label.
+      const leftTreatment = left.riskTreatment!;
+      const rightTreatment = right.riskTreatment!;
+      return (
+        rightTreatment.requirementsWithGap - leftTreatment.requirementsWithGap ||
+        rightTreatment.blockedOrOverdueActionsTreating -
+          leftTreatment.blockedOrOverdueActionsTreating ||
+        left.label.localeCompare(right.label)
+      );
+    });
+
+  if (riskNodes.length > 0) {
+    lines.push('Risk treatment progress');
+    lines.push('');
+    for (const risk of riskNodes) {
+      const treatment = risk.riskTreatment!;
+      lines.push(
+        `${risk.label} (${risk.riskBand ?? 'unknown'}, ${risk.riskStatus ?? 'unknown'})`,
+      );
+      lines.push(
+        `Requirements affected: ${treatment.requirementsAffected} (${treatment.requirementsWithGap} currently a gap)`,
+      );
+      lines.push(
+        `Actions treating: ${treatment.activeActionsTreating} active / ${treatment.actionsTreating} total (${treatment.blockedOrOverdueActionsTreating} blocked or overdue)`,
+      );
+      lines.push('');
+    }
+  }
+
+  const directionNodes = graph.nodes
+    .filter((node) => node.kind === 'direction' && node.directionImpact)
+    .sort((left, right) => {
+      const leftImpact = left.directionImpact!;
+      const rightImpact = right.directionImpact!;
+      return (
+        rightImpact.requirementsWithGap - leftImpact.requirementsWithGap ||
+        left.label.localeCompare(right.label)
+      );
+    });
+
+  if (directionNodes.length > 0) {
+    lines.push('Direction impact');
+    lines.push('');
+    for (const direction of directionNodes) {
+      const impact = direction.directionImpact!;
+      lines.push(
+        `${direction.label}: ${direction.directionResponseState ?? 'unknown'}`,
+      );
+      lines.push(
+        `Requirements modified: ${impact.requirementsModified} (${impact.requirementsWithGap} currently a gap)`,
+      );
+      lines.push('');
+    }
   }
 
   return lines.join('\n').trimEnd();

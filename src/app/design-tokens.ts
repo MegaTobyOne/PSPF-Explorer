@@ -22,6 +22,33 @@ export const designTokens = css`
     --colour-status-not-applicable: #94a3b8;
     --colour-status-not-set: #475569;
 
+    /* Risk bands — graduated red/amber/green. */
+    --colour-risk-extreme: #99182c;
+    --colour-risk-high: #d4451f;
+    --colour-risk-medium: #e0903b;
+    --colour-risk-low: #2f6f3a;
+
+    /* Action statuses. */
+    --colour-action-todo: #475569;
+    --colour-action-in-progress: #2563eb;
+    --colour-action-blocked: #b34a00;
+    --colour-action-done: #2dd4bf;
+    --colour-action-cancelled: #94a3b8;
+
+    /* Direction response states. */
+    --colour-direction-not-set: #ef4444;
+    --colour-direction-no: #d4451f;
+    --colour-direction-risk-managed: #facc15;
+    --colour-direction-yes: #2dd4bf;
+
+    /* Relationship-map edges. */
+    --colour-map-edge-default: #94a3b8;
+    --colour-map-edge-requirement-risk: #b34a00;
+    --colour-map-edge-requirement-action: #059669;
+    --colour-map-edge-risk-action: #2563eb;
+    --colour-map-edge-requirement-direction: #7c3aed;
+    --colour-map-node-stroke: #0f172a;
+
     --colour-classification-bg: #f59e0b;
     --colour-classification-fg: #1a1300;
 
