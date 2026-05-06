@@ -438,8 +438,9 @@ describe('buildRelationshipMapGraph', () => {
     const riskNodes = graph.nodes.filter((n) => n.kind === 'risk');
     expect(riskNodes.map((n) => n.id)).toEqual([extremeRisk.id]);
     // Edge to the filtered-out low risk should not be present.
-    expect(graph.edges.every((edge) => edge.target !== lowRisk.id && edge.source !== lowRisk.id))
-      .toBe(true);
+    expect(
+      graph.edges.every((edge) => edge.target !== lowRisk.id && edge.source !== lowRisk.id),
+    ).toBe(true);
   });
 
   it('filters actions to blocked or overdue only', () => {

@@ -10,9 +10,17 @@ It covers all 218 requirements across six domains: Governance, Information, Pers
 - Search across requirements, compliance notes, evidence, Directions, risks, and actions.
 - Record implementation status with evidence and notes.
 - Track risks, actions, Directions, and cross-entity relationships.
-- Use the relationship map to see how compliance gaps connect to logged work, risks, actions, and Directions.
+- Use the relationship map to see how compliance gaps connect to logged work, risks, actions, and
+  Directions. The map uses recognisable shapes (hexagon for requirements, triangle for risks,
+  rounded rectangle for actions, tag for Directions), supports filtering by compliance state,
+  risk band, action status and Direction response, switchable layouts (force-directed, hierarchy,
+  concentric, grid), node search, hover tooltips, full-chain highlighting, and `?focus=node-id`
+  deep links. Switch to **Board** mode for a column view (Compliance gaps · Risks · Actions ·
+  Directions) when a force-directed graph is more network than you need.
 - Save filtered views for repeat reporting.
-- Use coverage and analytics views to monitor progress.
+- Use coverage and analytics views to monitor progress. The Coverage matrix's _Fully
+  implemented %_ column excludes Not&nbsp;applicable requirements from the calculation so they
+  don't drag the rating down.
 - Copy human-readable summaries and export/restore local data with JSON files.
 
 ## Status labels

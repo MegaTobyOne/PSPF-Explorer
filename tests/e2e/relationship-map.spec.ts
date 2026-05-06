@@ -246,8 +246,8 @@ test('relationship map inspector reveals the value chain of an action', async ({
   // Cytoscape canvas in headless mode is unreliable.
   await expect(view.getByTestId('map-canvas')).toBeVisible();
   await page.evaluate(async () => {
-    function findInShadow(root: Document | ShadowRoot, tag: string): HTMLElement | null {
-      const direct = root.querySelector(tag) as HTMLElement | null;
+    function findInShadow(root: Document | ShadowRoot, tag: string): Element | null {
+      const direct = root.querySelector(tag);
       if (direct) return direct;
       const all = root.querySelectorAll('*');
       for (const node of all) {
@@ -259,10 +259,12 @@ test('relationship map inspector reveals the value chain of an action', async ({
       }
       return null;
     }
-    const el = findInShadow(document, 'pspf-relationship-map-view') as
-      | (HTMLElement & { selectedNodeId?: string; updateComplete?: Promise<unknown> })
-      | null;
-    if (!el) throw new Error('Map view missing');
+    const found = findInShadow(document, 'pspf-relationship-map-view');
+    if (!found) throw new Error('Map view missing');
+    const el = found as Element & {
+      selectedNodeId?: string;
+      updateComplete?: Promise<unknown>;
+    };
     el.selectedNodeId = 'action-value-1';
     await el.updateComplete;
   });
@@ -380,10 +382,7 @@ test('relationship map filters narrow the visible network', async ({ page }) => 
   await expect(view.getByTestId('map-filters')).toBeVisible();
 
   // Filter to extreme risks only.
-  await view
-    .getByTestId('filter-risk-band')
-    .getByRole('checkbox', { name: 'Extreme' })
-    .check();
+  await view.getByTestId('filter-risk-band').getByRole('checkbox', { name: 'Extreme' }).check();
   await expect(view.getByTestId('counts')).toContainText('5 nodes');
   // The button label reflects active filter count.
   await expect(view.getByTestId('toggle-filters')).toContainText('(1)');
@@ -519,4 +518,83 @@ test('relationship map honours ?focus= query param to deep-link a node', async (
   await page.goto('./?focus=risk-deep-link#/map');
   const view = page.locator('pspf-relationship-map-view');
   await expect(view.getByTestId('map-inspector')).toContainText('Deep-linked risk');
+});
+
+test('relationship map board mode lists items in columns by kind', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
+  });
+  await page.reload();
+
+  await page.evaluate(async () => {
+    const open = indexedDB.open('pspf-explorer.v3');
+    const db: IDBDatabase = await new Promise((resolve, reject) => {
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error ?? new Error('Failed to open PSPF database'));
+    });
+    const now = new Date().toISOString();
+    const tx = db.transaction(['compliance', 'risks', 'actions', 'directions'], 'readwrite');
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-001',
+      state: 'no',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-board-1',
+      title: 'Board risk',
+      likelihood: 4,
+      impact: 4,
+      status: 'open',
+      requirementIds: ['GOV-001'],
+      actionIds: ['action-board-1'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('actions').put({
+      id: 'action-board-1',
+      title: 'Board action',
+      status: 'in-progress',
+      requirementIds: ['GOV-001'],
+      riskIds: ['risk-board-1'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('directions').put({
+      id: 'direction-board-1',
+      reference: 'PSPF Direction 042-2025',
+      title: 'Board direction',
+      issuedAt: '2025-01-01',
+      requirementIds: ['GOV-001'],
+      responseState: 'not-set',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('seed failed'));
+      tx.onabort = () => reject(tx.error ?? new Error('seed aborted'));
+    });
+    db.close();
+  });
+
+  await page.reload();
+  await page.locator('pspf-app').getByRole('link', { name: /^Map$/ }).click();
+  const view = page.locator('pspf-relationship-map-view');
+  await view.getByTestId('map-mode-board').click();
+  await expect(view.getByTestId('map-board')).toBeVisible();
+  await expect(view.getByTestId('board-column-requirement')).toContainText('GOV-001');
+  await expect(view.getByTestId('board-column-risk')).toContainText('Board risk');
+  await expect(view.getByTestId('board-column-action')).toContainText('Board action');
+  await expect(view.getByTestId('board-column-direction')).toContainText('PSPF Direction 042-2025');
+
+  await view.getByTestId('board-card-action-board-1').click();
+  await expect(view.getByTestId('map-inspector')).toContainText('Board action');
+
+  // Switching back to graph mode reveals the canvas
+  await view.getByTestId('map-mode-graph').click();
+  await expect(view.getByTestId('map-canvas')).toBeVisible();
 });

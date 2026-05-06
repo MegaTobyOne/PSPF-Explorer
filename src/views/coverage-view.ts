@@ -71,6 +71,13 @@ export class CoverageView extends LitElement {
       a.domain-link:hover {
         text-decoration: underline;
       }
+      .muted {
+        color: var(--colour-fg-muted);
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: var(--text-xs);
+      }
     `,
   ];
 
@@ -96,14 +103,18 @@ export class CoverageView extends LitElement {
       grandTotal += s.total;
       for (const state of COMPLIANCE_STATES) totals[state] += s.byState[state];
     }
-    const overallCompliantPct = grandTotal === 0 ? 0 : Math.round((totals.yes / grandTotal) * 100);
+    const overallApplicable = grandTotal - totals['not-applicable'];
+    const overallCompliantPct =
+      overallApplicable === 0 ? 0 : Math.round((totals.yes / overallApplicable) * 100);
 
     return html`
       <article>
         <h2>Coverage matrix</h2>
         <p>
           Per-domain compliance state breakdown. The Fully implemented % column is the share of
-          requirements marked fully implemented for that domain.
+          <em>applicable</em> requirements marked fully implemented; requirements marked
+          not&nbsp;applicable are excluded from both the numerator and denominator so they don't
+          drag the rating down.
         </p>
         <div class="panel" data-testid="coverage-matrix">
           <table aria-label="Coverage matrix by domain and state">
@@ -121,12 +132,20 @@ export class CoverageView extends LitElement {
                     </th>`,
                 )}
                 <th class="numeric" scope="col">Total</th>
-                <th class="numeric" scope="col">Fully implemented&nbsp;%</th>
+                <th
+                  class="numeric"
+                  scope="col"
+                  title="Share of applicable requirements (Total minus Not applicable) marked Fully implemented"
+                >
+                  Fully implemented&nbsp;%<br /><span class="muted">(excl. n/a)</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              ${summaries.map(
-                (s) => html`
+              ${summaries.map((s) => {
+                const applicable = s.total - s.byState['not-applicable'];
+                const pct = applicable === 0 ? 0 : Math.round((s.byState.yes / applicable) * 100);
+                return html`
                   <tr data-domain=${s.domain.key}>
                     <th scope="row">
                       <a class="domain-link" href="#/domain/${s.domain.key}">${s.domain.name}</a>
@@ -136,12 +155,10 @@ export class CoverageView extends LitElement {
                         html`<td class="numeric" data-state=${state}>${s.byState[state]}</td>`,
                     )}
                     <td class="numeric">${s.total}</td>
-                    <td class="numeric">
-                      ${s.total === 0 ? 0 : Math.round(s.compliantPct * 100)}%
-                    </td>
+                    <td class="numeric" data-compliant-pct>${pct}%</td>
                   </tr>
-                `,
-              )}
+                `;
+              })}
               <tr class="totals">
                 <th scope="row">All domains</th>
                 ${COMPLIANCE_STATES.map(

@@ -208,13 +208,11 @@ export function buildRelationshipMapGraph(input: BuildRelationshipMapInput): Rel
 
   // Pre-filter source records so downstream graph-building, edge collection
   // and value/treatment summaries all operate on the same filtered universe.
-  const includesAll = <T,>(allowed: readonly T[] | undefined, value: T): boolean =>
+  const includesAll = <T>(allowed: readonly T[] | undefined, value: T): boolean =>
     !allowed || allowed.length === 0 || allowed.includes(value);
   const riskMatches = (risk: Risk): boolean => {
     const band = riskBandOf(risk.likelihood * risk.impact);
-    return (
-      includesAll(filters.riskBands, band) && includesAll(filters.riskStatuses, risk.status)
-    );
+    return includesAll(filters.riskBands, band) && includesAll(filters.riskStatuses, risk.status);
   };
   const actionMatches = (action: Action): boolean => {
     const overdue = isActionOverdue(action, now);
@@ -675,7 +673,9 @@ export function formatRelationshipMapSummary(graph: RelationshipMapGraph): strin
     lines.push('');
     for (const action of actionNodes) {
       const value = action.actionValue!;
-      lines.push(`${action.label}: ${action.actionStatus ?? 'unknown'}${action.actionOverdue ? ' (overdue)' : ''}`);
+      lines.push(
+        `${action.label}: ${action.actionStatus ?? 'unknown'}${action.actionOverdue ? ' (overdue)' : ''}`,
+      );
       lines.push(
         `Requirements addressed: ${value.requirementsAddressed} (${value.requirementsWithGap} currently a gap)`,
       );
@@ -708,9 +708,7 @@ export function formatRelationshipMapSummary(graph: RelationshipMapGraph): strin
     lines.push('');
     for (const risk of riskNodes) {
       const treatment = risk.riskTreatment!;
-      lines.push(
-        `${risk.label} (${risk.riskBand ?? 'unknown'}, ${risk.riskStatus ?? 'unknown'})`,
-      );
+      lines.push(`${risk.label} (${risk.riskBand ?? 'unknown'}, ${risk.riskStatus ?? 'unknown'})`);
       lines.push(
         `Requirements affected: ${treatment.requirementsAffected} (${treatment.requirementsWithGap} currently a gap)`,
       );
@@ -737,9 +735,7 @@ export function formatRelationshipMapSummary(graph: RelationshipMapGraph): strin
     lines.push('');
     for (const direction of directionNodes) {
       const impact = direction.directionImpact!;
-      lines.push(
-        `${direction.label}: ${direction.directionResponseState ?? 'unknown'}`,
-      );
+      lines.push(`${direction.label}: ${direction.directionResponseState ?? 'unknown'}`);
       lines.push(
         `Requirements modified: ${impact.requirementsModified} (${impact.requirementsWithGap} currently a gap)`,
       );

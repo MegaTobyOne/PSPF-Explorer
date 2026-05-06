@@ -24,11 +24,7 @@ import {
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
-import type {
-  ActionStatus,
-  ComplianceState,
-  DirectionResponseState,
-} from '../data/types.ts';
+import type { ActionStatus, ComplianceState, DirectionResponseState } from '../data/types.ts';
 
 function mapComplianceLabel(state: ComplianceState): string {
   switch (state) {
@@ -161,8 +157,8 @@ export class RelationshipMapView extends LitElement {
       }
       .legend {
         display: flex;
-        gap: var(--space-2);
-        align-items: center;
+        gap: var(--space-3) var(--space-4);
+        align-items: flex-start;
         flex-wrap: wrap;
         margin-bottom: var(--space-2);
         padding: var(--space-2);
@@ -170,6 +166,12 @@ export class RelationshipMapView extends LitElement {
         border-radius: var(--radius-md);
         background: var(--colour-bg-elevated);
         font-size: var(--text-sm);
+      }
+      .legend-section {
+        display: flex;
+        gap: var(--space-2);
+        align-items: center;
+        flex-wrap: wrap;
       }
       .legend strong {
         font-size: var(--text-xs);
@@ -181,6 +183,17 @@ export class RelationshipMapView extends LitElement {
         display: inline-flex;
         gap: var(--space-1);
         align-items: center;
+      }
+      .legend-glyph {
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .legend-glyph svg {
+        width: 100%;
+        height: 100%;
       }
       .swatch {
         width: 1.8rem;
@@ -480,6 +493,100 @@ export class RelationshipMapView extends LitElement {
           min-height: 0;
         }
       }
+      .mode-toggle {
+        display: inline-flex;
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+      }
+      .mode-toggle button {
+        font: inherit;
+        padding: 4px 10px;
+        background: var(--colour-bg-elevated);
+        color: var(--colour-fg);
+        border: none;
+        cursor: pointer;
+      }
+      .mode-toggle button + button {
+        border-left: 1px solid var(--colour-border);
+      }
+      .mode-toggle button.active {
+        background: var(--colour-accent, #2563eb);
+        color: var(--colour-bg, #fff);
+      }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-2);
+        min-height: 520px;
+      }
+      .board-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        padding: var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+        max-height: 600px;
+        overflow-y: auto;
+      }
+      .board-column h3 {
+        margin: 0 0 var(--space-1) 0;
+        font-size: var(--text-sm);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--colour-fg-muted);
+        position: sticky;
+        top: 0;
+        background: var(--colour-bg-elevated);
+        padding-bottom: 4px;
+      }
+      .board-column .count {
+        font-weight: 400;
+        color: var(--colour-fg-muted);
+      }
+      .board-card {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: var(--space-1) var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-left: 4px solid var(--card-accent, var(--colour-status-not-set));
+        border-radius: var(--radius-sm);
+        background: var(--colour-bg);
+        cursor: pointer;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+      }
+      .board-card:hover,
+      .board-card:focus-visible {
+        background: var(--colour-bg-subtle, rgba(15, 23, 42, 0.04));
+      }
+      .board-card.selected {
+        outline: 2px solid var(--colour-accent, #2563eb);
+        outline-offset: 1px;
+      }
+      .board-card .card-title {
+        font-weight: 600;
+        font-size: var(--text-sm);
+      }
+      .board-card .card-meta {
+        font-size: var(--text-xs);
+        color: var(--colour-fg-muted);
+      }
+      .board-empty {
+        font-size: var(--text-sm);
+        color: var(--colour-fg-muted);
+        padding: var(--space-2);
+      }
+      @media (max-width: 980px) {
+        .board {
+          grid-template-columns: 1fr;
+          min-height: 0;
+        }
+      }
     `,
   ];
 
@@ -516,6 +623,7 @@ export class RelationshipMapView extends LitElement {
     new Set();
   @state() private accessor layoutName: MapLayoutName = 'cose';
   @state() private accessor searchQuery = '';
+  @state() private accessor viewMode: 'graph' | 'board' = 'graph';
 
   #cy: Core | null = null;
   #canvas: HTMLDivElement | null = null;
@@ -652,6 +760,30 @@ export class RelationshipMapView extends LitElement {
               ? ` (${this.#activeFilterCount()})`
               : ''}
           </button>
+          <div role="group" aria-label="View mode" class="mode-toggle">
+            <button
+              type="button"
+              data-testid="map-mode-graph"
+              class=${this.viewMode === 'graph' ? 'active' : ''}
+              aria-pressed=${this.viewMode === 'graph' ? 'true' : 'false'}
+              @click=${(): void => {
+                this.viewMode = 'graph';
+              }}
+            >
+              Graph
+            </button>
+            <button
+              type="button"
+              data-testid="map-mode-board"
+              class=${this.viewMode === 'board' ? 'active' : ''}
+              aria-pressed=${this.viewMode === 'board' ? 'true' : 'false'}
+              @click=${(): void => {
+                this.viewMode = 'board';
+              }}
+            >
+              Board
+            </button>
+          </div>
           ${this.copyStatus
             ? html`<span class="copy-status" role="status">${this.copyStatus}</span>`
             : ''}
@@ -663,20 +795,25 @@ export class RelationshipMapView extends LitElement {
           </span>
         </div>
 
-        ${this.#renderViewControls(nodes)}
-        ${this.showFilters ? this.#renderFilters() : ''}
+        ${this.#renderViewControls(nodes)} ${this.showFilters ? this.#renderFilters() : ''}
         ${this.#renderLegend()}
 
         <div class="map-layout">
-          <div class="stage">
-            ${nodes.length === 0
-              ? html`<div class="empty" data-testid="empty">
-                  No work-to-compliance links to display. Link risks, actions or Directions to
-                  requirements, or log work against a requirement.
-                </div>`
-              : html`<div class="canvas" data-testid="map-canvas" ${ref(this.#onCanvasRef)}></div>`}
-            ${this.#renderHoverTooltip(nodes)}
-          </div>
+          ${this.viewMode === 'graph'
+            ? html`<div class="stage">
+                ${nodes.length === 0
+                  ? html`<div class="empty" data-testid="empty">
+                      No work-to-compliance links to display. Link risks, actions or Directions to
+                      requirements, or log work against a requirement.
+                    </div>`
+                  : html`<div
+                      class="canvas"
+                      data-testid="map-canvas"
+                      ${ref(this.#onCanvasRef)}
+                    ></div>`}
+                ${this.#renderHoverTooltip(nodes)}
+              </div>`
+            : this.#renderBoard(nodes)}
           ${this.#renderInspector(selected, nodes)}
         </div>
 
@@ -710,7 +847,17 @@ export class RelationshipMapView extends LitElement {
   }
 
   #onCanvasRef = (el: Element | undefined): void => {
-    if (!(el instanceof HTMLDivElement)) return;
+    if (!(el instanceof HTMLDivElement)) {
+      // Canvas was removed from the DOM (e.g. switching to board mode).
+      // Tear down Cytoscape so the next mount rebuilds cleanly.
+      if (this.#cy) {
+        this.#cy.destroy();
+        this.#cy = null;
+        this.#graphSignature = '';
+      }
+      this.#canvas = null;
+      return;
+    }
     this.#canvas = el;
     void this.#renderCytoscape();
   };
@@ -797,7 +944,9 @@ export class RelationshipMapView extends LitElement {
           selector: 'node[kind = "requirement"]',
           style: {
             'background-color': tokens.statusNotSet,
-            shape: 'ellipse',
+            shape: 'hexagon',
+            width: 26,
+            height: 26,
             'border-width': 2,
             'border-color': tokens.nodeStroke,
             'border-opacity': 0.7,
@@ -821,15 +970,20 @@ export class RelationshipMapView extends LitElement {
         },
         {
           selector: 'node[kind = "risk"]',
-          style: { 'background-color': tokens.riskMedium, shape: 'diamond' },
+          style: {
+            'background-color': tokens.riskMedium,
+            shape: 'triangle',
+            width: 24,
+            height: 24,
+          },
         },
         {
           selector: 'node[kind = "risk"][riskBand = "extreme"]',
-          style: { 'background-color': tokens.riskExtreme, width: 30, height: 30 },
+          style: { 'background-color': tokens.riskExtreme, width: 32, height: 32 },
         },
         {
           selector: 'node[kind = "risk"][riskBand = "high"]',
-          style: { 'background-color': tokens.riskHigh, width: 26, height: 26 },
+          style: { 'background-color': tokens.riskHigh, width: 28, height: 28 },
         },
         {
           selector: 'node[kind = "risk"][riskBand = "medium"]',
@@ -841,7 +995,12 @@ export class RelationshipMapView extends LitElement {
         },
         {
           selector: 'node[kind = "action"]',
-          style: { 'background-color': tokens.actionTodo, shape: 'round-rectangle' },
+          style: {
+            'background-color': tokens.actionTodo,
+            shape: 'round-rectangle',
+            width: 30,
+            height: 22,
+          },
         },
         {
           selector: 'node[kind = "action"][actionStatus = "todo"]',
@@ -873,7 +1032,12 @@ export class RelationshipMapView extends LitElement {
         },
         {
           selector: 'node[kind = "direction"]',
-          style: { 'background-color': tokens.directionNotSet, shape: 'triangle' },
+          style: {
+            'background-color': tokens.directionNotSet,
+            shape: 'round-tag',
+            width: 30,
+            height: 22,
+          },
         },
         {
           selector: 'node[kind = "direction"][directionResponseState = "not-set"]',
@@ -1141,6 +1305,7 @@ export class RelationshipMapView extends LitElement {
     return html`<div
       class="map-tooltip"
       role="tooltip"
+      aria-label=${`Map node ${node.label}`}
       data-testid="map-tooltip"
       style=${`left:${hover.x}px; top:${hover.y}px;`}
     >
@@ -1213,22 +1378,28 @@ export class RelationshipMapView extends LitElement {
         />
       </label>
       ${query.length > 0
-        ? html`<ul class="search-results" role="listbox" data-testid="map-search-results">
+        ? html`<ul
+            class="search-results"
+            role="listbox"
+            aria-label="Map node search results"
+            data-testid="map-search-results"
+          >
             ${matches.length === 0
               ? html`<li class="empty">No matches</li>`
               : matches.map(
-                  (node) => html`<li>
-                    <button
-                      type="button"
-                      data-testid=${`map-search-result-${node.id}`}
-                      @click=${(): void => {
-                        this.selectedNodeId = node.id;
-                        this.searchQuery = '';
-                      }}
-                    >
-                      <span class="kind">${node.kind}</span> ${node.label}
-                    </button>
-                  </li>`,
+                  (node) =>
+                    html`<li>
+                      <button
+                        type="button"
+                        data-testid=${`map-search-result-${node.id}`}
+                        @click=${(): void => {
+                          this.selectedNodeId = node.id;
+                          this.searchQuery = '';
+                        }}
+                      >
+                        <span class="kind">${node.kind}</span> ${node.label}
+                      </button>
+                    </li>`,
                 )}
           </ul>`
         : ''}
@@ -1248,20 +1419,57 @@ export class RelationshipMapView extends LitElement {
   }
 
   #renderLegend(): TemplateResult {
-    const items = [
+    const connections = [
       ['#b34a00', 'Risk affects requirement'],
       ['#059669', 'Action remediates requirement'],
       ['#2563eb', 'Action treats risk'],
       ['#7c3aed', 'Direction modifies requirement'],
     ] as const;
-    return html`<div class="legend" aria-label="Connection legend" data-testid="map-legend">
-      <strong>Connections</strong>
-      ${items.map(
-        ([colour, label]) =>
-          html`<span class="legend-item">
-            <span class="swatch" style=${`--swatch-colour: ${colour}`}></span>${label}
-          </span>`,
-      )}
+    const kinds: readonly { label: string; shape: TemplateResult }[] = [
+      {
+        label: 'Requirement (hexagon)',
+        shape: html`<svg viewBox="0 0 24 24" aria-hidden="true">
+          <polygon points="6,3 18,3 22,12 18,21 6,21 2,12" fill="var(--colour-status-not-set)" />
+        </svg>`,
+      },
+      {
+        label: 'Risk (triangle)',
+        shape: html`<svg viewBox="0 0 24 24" aria-hidden="true">
+          <polygon points="12,3 22,21 2,21" fill="var(--colour-risk-medium)" />
+        </svg>`,
+      },
+      {
+        label: 'Action (rounded rectangle)',
+        shape: html`<svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="7" width="18" height="10" rx="3" fill="var(--colour-action-in-progress)" />
+        </svg>`,
+      },
+      {
+        label: 'Direction (tag)',
+        shape: html`<svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 7 h13 l5 5 -5 5 H3 z" fill="var(--colour-direction-yes)" />
+        </svg>`,
+      },
+    ];
+    return html`<div class="legend" aria-label="Map legend" data-testid="map-legend">
+      <div class="legend-section">
+        <strong>Node kinds</strong>
+        ${kinds.map(
+          (kind) =>
+            html`<span class="legend-item legend-kind">
+              <span class="legend-glyph">${kind.shape}</span>${kind.label}
+            </span>`,
+        )}
+      </div>
+      <div class="legend-section">
+        <strong>Connections</strong>
+        ${connections.map(
+          ([colour, label]) =>
+            html`<span class="legend-item">
+              <span class="swatch" style=${`--swatch-colour: ${colour}`}></span>${label}
+            </span>`,
+        )}
+      </div>
     </div>`;
   }
 
@@ -1315,19 +1523,21 @@ export class RelationshipMapView extends LitElement {
       options: readonly { value: T; label: string }[],
       selected: ReadonlySet<T>,
       onToggle: (value: T) => void,
-    ): TemplateResult => html`<fieldset class="filter-group" data-testid=${testId}>
-      <legend>${groupLabel}</legend>
-      ${options.map(
-        (option) => html`<label class="chip">
-          <input
-            type="checkbox"
-            ?checked=${selected.has(option.value)}
-            @change=${(): void => onToggle(option.value)}
-          />
-          ${option.label}
-        </label>`,
-      )}
-    </fieldset>`;
+    ): TemplateResult =>
+      html`<fieldset class="filter-group" data-testid=${testId}>
+        <legend>${groupLabel}</legend>
+        ${options.map(
+          (option) =>
+            html`<label class="chip">
+              <input
+                type="checkbox"
+                ?checked=${selected.has(option.value)}
+                @change=${(): void => onToggle(option.value)}
+              />
+              ${option.label}
+            </label>`,
+        )}
+      </fieldset>`;
     return html`<section class="filters" data-testid="map-filters" aria-label="Map filters">
       ${renderChips(
         'Compliance state',
@@ -1338,9 +1548,15 @@ export class RelationshipMapView extends LitElement {
           this.complianceFilter = this.#toggleFromSet(this.complianceFilter, value);
         },
       )}
-      ${renderChips('Risk band', 'filter-risk-band', riskBandOptions, this.riskBandFilter, (value) => {
-        this.riskBandFilter = this.#toggleFromSet(this.riskBandFilter, value);
-      })}
+      ${renderChips(
+        'Risk band',
+        'filter-risk-band',
+        riskBandOptions,
+        this.riskBandFilter,
+        (value) => {
+          this.riskBandFilter = this.#toggleFromSet(this.riskBandFilter, value);
+        },
+      )}
       ${renderChips(
         'Action status',
         'filter-action-status',
@@ -1407,14 +1623,13 @@ export class RelationshipMapView extends LitElement {
     const visited = new Set<string>([selected.id()]);
     const queue: string[] = [selected.id()];
     while (queue.length > 0) {
-      const id = queue.shift() as string;
+      const id = queue.shift()!;
       const node = cy.getElementById(id);
       if (node.empty()) continue;
       const incident = node.connectedEdges();
       reachable.merge(incident);
       const neighbours = node.neighborhood('node');
-      for (let i = 0; i < neighbours.length; i++) {
-        const next = neighbours[i];
+      for (const next of neighbours) {
         if (next && !visited.has(next.id())) {
           visited.add(next.id());
           reachable.merge(next);
@@ -1457,6 +1672,116 @@ export class RelationshipMapView extends LitElement {
       this.copyStatus = 'Copied map summary.';
     } catch {
       this.copyStatus = 'Copy failed.';
+    }
+  }
+
+  #renderBoard(nodes: readonly MapNode[]): TemplateResult {
+    const requirements = nodes.filter(
+      (n) =>
+        n.kind === 'requirement' &&
+        n.complianceState !== 'yes' &&
+        n.complianceState !== 'not-applicable',
+    );
+    const risks = nodes.filter((n) => n.kind === 'risk');
+    const actions = nodes.filter((n) => n.kind === 'action');
+    const directions = nodes.filter((n) => n.kind === 'direction');
+    if (nodes.length === 0) {
+      return html`<div class="board" data-testid="map-board">
+        <div class="empty" data-testid="empty">
+          No work-to-compliance links to display. Link risks, actions or Directions to requirements,
+          or log work against a requirement.
+        </div>
+      </div>`;
+    }
+    return html`<div class="board" role="list" data-testid="map-board">
+      ${this.#renderBoardColumn('Compliance gaps', 'requirement', requirements)}
+      ${this.#renderBoardColumn('Risks', 'risk', risks)}
+      ${this.#renderBoardColumn('Actions', 'action', actions)}
+      ${this.#renderBoardColumn('Directions', 'direction', directions)}
+    </div>`;
+  }
+
+  #renderBoardColumn(
+    title: string,
+    kind: MapNode['kind'],
+    items: readonly MapNode[],
+  ): TemplateResult {
+    return html`<section
+      class="board-column"
+      data-testid=${`board-column-${kind}`}
+      role="listitem"
+      aria-label=${title}
+    >
+      <h3>${title} <span class="count">(${items.length})</span></h3>
+      ${items.length === 0
+        ? html`<p class="board-empty">No items.</p>`
+        : items.map((node) => this.#renderBoardCard(node))}
+    </section>`;
+  }
+
+  #renderBoardCard(node: MapNode): TemplateResult {
+    const accent = this.#cardAccent(node);
+    const meta = this.#cardMeta(node);
+    const selected = this.selectedNodeId === node.id;
+    return html`<button
+      type="button"
+      class=${`board-card${selected ? ' selected' : ''}`}
+      data-testid=${`board-card-${node.id}`}
+      style=${`--card-accent: ${accent};`}
+      @click=${(): void => {
+        this.selectedNodeId = node.id;
+      }}
+    >
+      <span class="card-title">${node.label}</span>
+      ${meta ? html`<span class="card-meta">${meta}</span>` : ''}
+    </button>`;
+  }
+
+  #cardAccent(node: MapNode): string {
+    switch (node.kind) {
+      case 'requirement':
+        return `var(--colour-status-${node.complianceState ?? 'not-set'})`;
+      case 'risk':
+        return `var(--colour-risk-${node.riskBand ?? 'medium'})`;
+      case 'action':
+        return `var(--colour-action-${node.actionStatus ?? 'todo'})`;
+      case 'direction':
+        return `var(--colour-direction-${node.directionResponseState ?? 'not-set'})`;
+    }
+  }
+
+  #cardMeta(node: MapNode): string {
+    switch (node.kind) {
+      case 'requirement': {
+        const state = mapComplianceLabel(node.complianceState ?? 'not-set');
+        const work = node.work;
+        if (!work) return state;
+        return `${state} · ${work.activeActionCount} action${work.activeActionCount === 1 ? '' : 's'} · ${work.openRiskCount} open risk${work.openRiskCount === 1 ? '' : 's'}`;
+      }
+      case 'risk': {
+        const parts = [`${node.riskBand} band`, node.riskStatus ?? ''];
+        const t = node.riskTreatment;
+        if (t) parts.push(`${t.activeActionsTreating}/${t.actionsTreating} actions`);
+        return parts.filter(Boolean).join(' · ');
+      }
+      case 'action': {
+        const parts: string[] = [node.actionStatus ?? 'unknown'];
+        if (node.actionOverdue) parts.push('overdue');
+        const v = node.actionValue;
+        if (v) {
+          parts.push(
+            `${v.requirementsAddressed} req${v.requirementsAddressed === 1 ? '' : 's'} · ${v.risksTreated} risk${v.risksTreated === 1 ? '' : 's'}`,
+          );
+        }
+        return parts.join(' · ');
+      }
+      case 'direction': {
+        const response = mapDirectionResponseLabel(node.directionResponseState ?? 'not-set');
+        const i = node.directionImpact;
+        return i
+          ? `${response} · ${i.requirementsModified} requirement${i.requirementsModified === 1 ? '' : 's'} affected`
+          : response;
+      }
     }
   }
 
@@ -1536,60 +1861,55 @@ export class RelationshipMapView extends LitElement {
     const value = node.actionValue;
     const conns = node.connections;
     return html`${value
-        ? html`<dl data-testid="action-value">
-            <dt>Requirements addressed</dt>
-            <dd>
-              ${value.requirementsAddressed} (${value.requirementsWithGap} currently a gap)
-            </dd>
-            <dt>Uniquely covered</dt>
-            <dd>
-              ${value.uniquelyCoveredRequirements}
-              ${value.uniquelyCoveredRequirements === 1 ? 'requirement' : 'requirements'}
-              would be uncovered without this action
-            </dd>
-            <dt>Risks treated</dt>
-            <dd>
-              ${value.risksTreated} (${value.openRisksTreated} open,
-              ${value.highOrExtremeRisksTreated} high or extreme)
-            </dd>
-          </dl>`
-        : ''}
-      ${this.#renderConnectedRequirements(conns, nodesById)}
-      ${this.#renderConnectedRisks(conns, nodesById)}`;
+      ? html`<dl data-testid="action-value">
+          <dt>Requirements addressed</dt>
+          <dd>${value.requirementsAddressed} (${value.requirementsWithGap} currently a gap)</dd>
+          <dt>Uniquely covered</dt>
+          <dd>
+            ${value.uniquelyCoveredRequirements}
+            ${value.uniquelyCoveredRequirements === 1 ? 'requirement' : 'requirements'} would be
+            uncovered without this action
+          </dd>
+          <dt>Risks treated</dt>
+          <dd>
+            ${value.risksTreated} (${value.openRisksTreated} open,
+            ${value.highOrExtremeRisksTreated} high or extreme)
+          </dd>
+        </dl>`
+      : ''}
+    ${this.#renderConnectedRequirements(conns, nodesById)}
+    ${this.#renderConnectedRisks(conns, nodesById)}`;
   }
 
   #riskDetails(node: MapNode, nodesById: Map<string, MapNode>): TemplateResult {
     const treatment = node.riskTreatment;
     const conns = node.connections;
     return html`${treatment
-        ? html`<dl data-testid="risk-treatment">
-            <dt>Requirements affected</dt>
-            <dd>
-              ${treatment.requirementsAffected} (${treatment.requirementsWithGap} currently a gap)
-            </dd>
-            <dt>Actions treating</dt>
-            <dd>
-              ${treatment.activeActionsTreating} active /
-              ${treatment.actionsTreating} total
-            </dd>
-            <dt>Blocked or overdue</dt>
-            <dd>${treatment.blockedOrOverdueActionsTreating}</dd>
-          </dl>`
-        : ''}
-      ${this.#renderConnectedRequirements(conns, nodesById)}
-      ${this.#renderConnectedActions(conns, nodesById)}`;
+      ? html`<dl data-testid="risk-treatment">
+          <dt>Requirements affected</dt>
+          <dd>
+            ${treatment.requirementsAffected} (${treatment.requirementsWithGap} currently a gap)
+          </dd>
+          <dt>Actions treating</dt>
+          <dd>${treatment.activeActionsTreating} active / ${treatment.actionsTreating} total</dd>
+          <dt>Blocked or overdue</dt>
+          <dd>${treatment.blockedOrOverdueActionsTreating}</dd>
+        </dl>`
+      : ''}
+    ${this.#renderConnectedRequirements(conns, nodesById)}
+    ${this.#renderConnectedActions(conns, nodesById)}`;
   }
 
   #directionDetails(node: MapNode, nodesById: Map<string, MapNode>): TemplateResult {
     const impact = node.directionImpact;
     const conns = node.connections;
     return html`${impact
-        ? html`<dl data-testid="direction-impact">
-            <dt>Requirements modified</dt>
-            <dd>${impact.requirementsModified} (${impact.requirementsWithGap} currently a gap)</dd>
-          </dl>`
-        : ''}
-      ${this.#renderConnectedRequirements(conns, nodesById)}`;
+      ? html`<dl data-testid="direction-impact">
+          <dt>Requirements modified</dt>
+          <dd>${impact.requirementsModified} (${impact.requirementsWithGap} currently a gap)</dd>
+        </dl>`
+      : ''}
+    ${this.#renderConnectedRequirements(conns, nodesById)}`;
   }
 
   #renderConnectedRequirements(

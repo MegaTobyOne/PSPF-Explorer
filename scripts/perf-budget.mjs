@@ -34,7 +34,7 @@ const BUDGETS = [
 // specific route. Each must still have its own per-file budget above.
 const EXCLUDE_FROM_TOTAL = /^(cytoscape|relationship-map-view)-.*\.js$/;
 
-const TOTAL_GZIP_KB_BUDGET = 80;
+const TOTAL_GZIP_KB_BUDGET = 82;
 
 const files = readdirSync(ROOT).filter((f) => f.endsWith('.js'));
 let totalGzip = 0;

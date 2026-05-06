@@ -4,7 +4,9 @@ import type { MapNode } from '../domain/relationship-map.ts';
 
 describe('relationshipMapTooltipLines', () => {
   it('summarises a requirement with compliance state', () => {
-    const node: MapNode = { detail: '', href: '',
+    const node: MapNode = {
+      detail: '',
+      href: '',
       id: 'GOV-001',
       kind: 'requirement',
       label: 'GOV-001',
@@ -14,7 +16,9 @@ describe('relationshipMapTooltipLines', () => {
   });
 
   it('summarises a risk with band and treatment counts', () => {
-    const node: MapNode = { detail: '', href: '',
+    const node: MapNode = {
+      detail: '',
+      href: '',
       id: 'risk-1',
       kind: 'risk',
       label: 'Test risk',
@@ -33,7 +37,9 @@ describe('relationshipMapTooltipLines', () => {
   });
 
   it('summarises an action with status, overdue flag and value', () => {
-    const node: MapNode = { detail: '', href: '',
+    const node: MapNode = {
+      detail: '',
+      href: '',
       id: 'action-1',
       kind: 'action',
       label: 'Test action',
@@ -55,7 +61,9 @@ describe('relationshipMapTooltipLines', () => {
   });
 
   it('summarises a direction with response state and impact', () => {
-    const node: MapNode = { detail: '', href: '',
+    const node: MapNode = {
+      detail: '',
+      href: '',
       id: 'direction-1',
       kind: 'direction',
       label: 'Test direction',
