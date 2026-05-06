@@ -2,7 +2,12 @@ import { LitElement, css, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { designTokens } from '../app/design-tokens.ts';
-import { allDomains, requirementById, essentialEightControls } from '../pspf/index.ts';
+import {
+  allDomains,
+  allRequirements,
+  requirementById,
+  essentialEightControls,
+} from '../pspf/index.ts';
 import { asRequirementId, type ComplianceState, type Relationship } from '../data/types.ts';
 import { appStoreContext } from '../state/contexts.ts';
 import type { AppStore } from '../state/app-store.ts';
@@ -30,6 +35,28 @@ export class RequirementView extends LitElement {
       h2 {
         margin: 0;
         font-size: var(--text-xl);
+      }
+      .req-nav {
+        display: flex;
+        gap: var(--space-2);
+        margin: 0 0 var(--space-3) 0;
+      }
+      .req-nav a,
+      .req-nav span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 7.5rem;
+        font-size: var(--text-sm);
+        padding: var(--space-1) var(--space-2);
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-sm);
+        background: var(--colour-bg-elevated);
+        color: inherit;
+        text-decoration: none;
+      }
+      .req-nav span {
+        opacity: 0.6;
       }
       dl {
         display: grid;
@@ -153,6 +180,12 @@ export class RequirementView extends LitElement {
       return html`<p class="placeholder">Unknown requirement: ${raw}.</p>`;
     }
     const domain = allDomains.find((d) => d.key === req.domain);
+    const reqIndex = allRequirements.findIndex((r) => r.id === req.id);
+    const prevReq = reqIndex > 0 ? allRequirements[reqIndex - 1] : undefined;
+    const nextReq =
+      reqIndex >= 0 && reqIndex < allRequirements.length - 1
+        ? allRequirements[reqIndex + 1]
+        : undefined;
     const entry = this.store?.compliance.value.get(req.id);
     const state: ComplianceState = entry ? entry.state : 'not-set';
     const e8 = req.essentialEightControl
@@ -174,6 +207,18 @@ export class RequirementView extends LitElement {
           <h2>${req.id} — ${req.title}</h2>
           <pspf-compliance-badge .state=${state}></pspf-compliance-badge>
         </header>
+        <nav class="req-nav" aria-label="Requirement navigation">
+          ${prevReq
+            ? html`<a href=${`#/requirement/${prevReq.id}`} data-testid="prev-requirement"
+                >← Previous</a
+              >`
+            : html`<span data-testid="prev-requirement-disabled">← Previous</span>`}
+          ${nextReq
+            ? html`<a href=${`#/requirement/${nextReq.id}`} data-testid="next-requirement"
+                >Next →</a
+              >`
+            : html`<span data-testid="next-requirement-disabled">Next →</span>`}
+        </nav>
         <p class="text">${req.text}</p>
         <dl>
           <dt>Domain</dt>

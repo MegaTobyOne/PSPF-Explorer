@@ -48,3 +48,14 @@ test('unknown route shows the not-found view', async ({ page }) => {
   await page.goto('/#/no-such-route');
   await expect(page.locator('pspf-not-found-view')).toBeVisible();
 });
+
+test('requirement view supports previous and next navigation', async ({ page }) => {
+  await page.goto('/#/requirement/GOV-001');
+  const reqView = page.locator('pspf-requirement-view');
+  await expect(reqView).toContainText('GOV-001');
+  await expect(reqView.getByTestId('prev-requirement-disabled')).toBeVisible();
+
+  await reqView.getByTestId('next-requirement').click();
+  await expect(page).toHaveURL(/#\/requirement\/GOV-002$/);
+  await expect(reqView.getByTestId('prev-requirement')).toBeVisible();
+});
