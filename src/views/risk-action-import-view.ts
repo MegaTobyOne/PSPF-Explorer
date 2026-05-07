@@ -1031,14 +1031,27 @@ export class RiskActionImportView extends LitElement {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const isStatusError = message.includes('.status');
+      let retryMode: ImportStatusMode | null = null;
       if (
         this.statusMode === 'strict' &&
-        message.includes('.status') &&
+        isStatusError &&
         globalThis.confirm(
           'Import includes unknown statuses. Switch to "Map common aliases" and retry?',
         )
       ) {
-        this.statusMode = 'map-common';
+        retryMode = 'map-common';
+      } else if (
+        this.statusMode === 'map-common' &&
+        isStatusError &&
+        globalThis.confirm(
+          `Some statuses are still unknown after alias mapping. Switch to "Force all imported statuses" (risk → ${this.forcedRiskStatus}, action → ${this.forcedActionStatus}) and retry?`,
+        )
+      ) {
+        retryMode = 'force';
+      }
+      if (retryMode) {
+        this.statusMode = retryMode;
         try {
           const text = await file.text();
           const parsed = JSON.parse(text) as unknown;
