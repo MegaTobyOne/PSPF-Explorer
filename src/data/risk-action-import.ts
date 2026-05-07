@@ -168,21 +168,34 @@ const DEFAULT_ACTION_STATUS_MAP: Readonly<Record<string, ActionStatus>> = {
   todo: 'todo',
   'to do': 'todo',
   'to-do': 'todo',
+  pending: 'todo',
+  'pending review': 'todo',
+  planned: 'todo',
+  'not started': 'todo',
+  backlog: 'todo',
   open: 'in-progress',
   opened: 'in-progress',
   'in progress': 'in-progress',
   'in-progress': 'in-progress',
   wip: 'in-progress',
   active: 'in-progress',
+  doing: 'in-progress',
+  underway: 'in-progress',
+  ongoing: 'in-progress',
   blocked: 'blocked',
   'on hold': 'blocked',
   'on-hold': 'blocked',
+  waiting: 'blocked',
+  deferred: 'blocked',
   done: 'done',
   complete: 'done',
   completed: 'done',
   closed: 'done',
+  resolved: 'done',
   cancelled: 'cancelled',
   canceled: 'cancelled',
+  abandoned: 'cancelled',
+  rejected: 'cancelled',
 };
 
 function normaliseStatusToken(value: string): string {
@@ -199,9 +212,20 @@ function mapWithAliases<S extends string>(
   custom?: Readonly<Record<string, S>>,
 ): S | undefined {
   const key = normaliseStatusToken(value);
-  const customMapped = custom?.[key];
-  if (customMapped) return customMapped;
-  return defaults[key];
+  const variants = new Set([
+    key,
+    key.replaceAll('_', ' '),
+    key.replaceAll('_', '-'),
+    key.replaceAll(/[\s_]+/g, '-'),
+    key.replaceAll(/[\s_-]+/g, ''),
+  ]);
+  for (const variant of variants) {
+    const customMapped = custom?.[variant];
+    if (customMapped) return customMapped;
+    const defaultMapped = defaults[variant];
+    if (defaultMapped) return defaultMapped;
+  }
+  return undefined;
 }
 
 function resolveRiskStatus(

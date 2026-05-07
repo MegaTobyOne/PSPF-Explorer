@@ -58,6 +58,21 @@ describe('risk-action import validation', () => {
     expect(out.actions?.[0]?.status).toBe('in-progress');
   });
 
+  it('maps additional action aliases and separator variants in map-common mode', () => {
+    const out = validateRiskActionImport(
+      {
+        ...validBase,
+        actions: [
+          { title: 'a1', type: 'remediation', status: 'Pending' },
+          { title: 'a2', type: 'review', status: 'pending_review' },
+        ],
+      },
+      { status: { mode: 'map-common' } },
+    );
+    expect(out.actions?.[0]?.status).toBe('todo');
+    expect(out.actions?.[1]?.status).toBe('todo');
+  });
+
   it('forces statuses when force mode is selected', () => {
     const out = validateRiskActionImport(
       {
