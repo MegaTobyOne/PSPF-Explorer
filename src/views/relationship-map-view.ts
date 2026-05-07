@@ -7,7 +7,7 @@
  * Cytoscape is loaded lazily so the main bundle stays slim.
  */
 
-import { LitElement, css, html, type TemplateResult } from 'lit';
+import { LitElement, css, html, svg, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { ref } from 'lit/directives/ref.js';
 import { consume } from '@lit/context';
@@ -519,6 +519,31 @@ export class RelationshipMapView extends LitElement {
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: var(--space-2);
         min-height: 520px;
+        position: relative;
+      }
+      .board-edges {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        overflow: visible;
+        z-index: 0;
+      }
+      .board-edges path {
+        fill: none;
+        stroke: var(--colour-border-strong, var(--colour-border));
+        stroke-width: 1.25;
+        stroke-opacity: 0.55;
+        transition: stroke-opacity 120ms ease;
+      }
+      .board-edges path.edge-dimmed {
+        stroke-opacity: 0.08;
+      }
+      .board-edges path.edge-highlighted {
+        stroke: var(--colour-accent, #2563eb);
+        stroke-width: 2;
+        stroke-opacity: 0.9;
       }
       .board-column {
         display: flex;
@@ -530,6 +555,8 @@ export class RelationshipMapView extends LitElement {
         background: var(--colour-bg-elevated);
         max-height: 600px;
         overflow-y: auto;
+        position: relative;
+        z-index: 1;
       }
       .board-column h3 {
         margin: 0 0 var(--space-1) 0;
@@ -567,6 +594,22 @@ export class RelationshipMapView extends LitElement {
       .board-card.selected {
         outline: 2px solid var(--colour-accent, #2563eb);
         outline-offset: 1px;
+      }
+      .board-card.focused {
+        outline: 2px solid var(--colour-accent, #2563eb);
+        outline-offset: 1px;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+      }
+      .board-card.linked {
+        border-color: var(--colour-accent, #2563eb);
+      }
+      .board-card.dimmed {
+        opacity: 0.3;
+        filter: saturate(0.5);
+      }
+      .board-card.dimmed:hover,
+      .board-card.dimmed:focus-visible {
+        opacity: 0.6;
       }
       .board-card .card-title {
         font-weight: 600;
@@ -624,6 +667,9 @@ export class RelationshipMapView extends LitElement {
   @state() private accessor layoutName: MapLayoutName = 'cose';
   @state() private accessor searchQuery = '';
   @state() private accessor viewMode: 'graph' | 'board' = 'graph';
+  @state() private accessor focusedNodeIds: ReadonlySet<string> = new Set();
+  /** Bumped by board observers to trigger a re-render of edge lines. */
+  @state() private accessor boardLayoutVersion = 0;
 
   #cy: Core | null = null;
   #canvas: HTMLDivElement | null = null;
@@ -632,12 +678,17 @@ export class RelationshipMapView extends LitElement {
   #urlFocusApplied = false;
   #lastCentredNodeId: string | null = null;
   #hover: { nodeId: string; x: number; y: number } | null = null;
+  #boardEl: HTMLDivElement | null = null;
+  #boardResizeObserver: ResizeObserver | null = null;
+  #boardScrollCleanup: (() => void) | null = null;
+  #boardRafId = 0;
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#cy?.destroy();
     this.#cy = null;
     this.#graphSignature = '';
+    this.#teardownBoardObservers();
   }
 
   override connectedCallback(): void {
@@ -813,7 +864,7 @@ export class RelationshipMapView extends LitElement {
                     ></div>`}
                 ${this.#renderHoverTooltip(nodes)}
               </div>`
-            : this.#renderBoard(nodes)}
+            : this.#renderBoard(graph)}
           ${this.#renderInspector(selected, nodes)}
         </div>
 
@@ -1252,6 +1303,10 @@ export class RelationshipMapView extends LitElement {
       this.#lastLayoutName = this.layoutName;
     }
     this.#applySelectionHighlight();
+    if (this.viewMode !== 'board' && this.#boardEl) {
+      this.#teardownBoardObservers();
+      this.#boardEl = null;
+    }
   }
 
   #graph(): RelationshipMapGraph {
@@ -1675,7 +1730,8 @@ export class RelationshipMapView extends LitElement {
     }
   }
 
-  #renderBoard(nodes: readonly MapNode[]): TemplateResult {
+  #renderBoard(graph: RelationshipMapGraph): TemplateResult {
+    const { nodes, edges } = graph;
     const requirements = nodes.filter(
       (n) =>
         n.kind === 'requirement' &&
@@ -1693,11 +1749,26 @@ export class RelationshipMapView extends LitElement {
         </div>
       </div>`;
     }
-    return html`<div class="board" role="list" data-testid="map-board">
-      ${this.#renderBoardColumn('Compliance gaps', 'requirement', requirements)}
-      ${this.#renderBoardColumn('Risks', 'risk', risks)}
-      ${this.#renderBoardColumn('Actions', 'action', actions)}
-      ${this.#renderBoardColumn('Directions', 'direction', directions)}
+    const focusSet = this.#boardFocusSet();
+    const linkedSet = this.#boardLinkedSet(focusSet, edges);
+    const hasFocus = focusSet.size > 0;
+    return html`<div
+      class=${`board${hasFocus ? ' has-focus' : ''}`}
+      role="list"
+      data-testid="map-board"
+      ${ref(this.#onBoardRef)}
+    >
+      ${this.#renderBoardColumn(
+        'Compliance gaps',
+        'requirement',
+        requirements,
+        focusSet,
+        linkedSet,
+      )}
+      ${this.#renderBoardColumn('Risks', 'risk', risks, focusSet, linkedSet)}
+      ${this.#renderBoardColumn('Actions', 'action', actions, focusSet, linkedSet)}
+      ${this.#renderBoardColumn('Directions', 'direction', directions, focusSet, linkedSet)}
+      ${this.#renderBoardEdges(edges, focusSet, linkedSet)}
     </div>`;
   }
 
@@ -1705,6 +1776,8 @@ export class RelationshipMapView extends LitElement {
     title: string,
     kind: MapNode['kind'],
     items: readonly MapNode[],
+    focusSet: ReadonlySet<string>,
+    linkedSet: ReadonlySet<string>,
   ): TemplateResult {
     return html`<section
       class="board-column"
@@ -1715,26 +1788,192 @@ export class RelationshipMapView extends LitElement {
       <h3>${title} <span class="count">(${items.length})</span></h3>
       ${items.length === 0
         ? html`<p class="board-empty">No items.</p>`
-        : items.map((node) => this.#renderBoardCard(node))}
+        : items.map((node) => this.#renderBoardCard(node, focusSet, linkedSet))}
     </section>`;
   }
 
-  #renderBoardCard(node: MapNode): TemplateResult {
+  #renderBoardCard(
+    node: MapNode,
+    focusSet: ReadonlySet<string>,
+    linkedSet: ReadonlySet<string>,
+  ): TemplateResult {
     const accent = this.#cardAccent(node);
     const meta = this.#cardMeta(node);
     const selected = this.selectedNodeId === node.id;
+    const focused = focusSet.has(node.id);
+    const linked = linkedSet.has(node.id);
+    const dimmed = focusSet.size > 0 && !linked;
+    const classes = [
+      'board-card',
+      selected ? 'selected' : '',
+      focused ? 'focused' : '',
+      linked && !focused ? 'linked' : '',
+      dimmed ? 'dimmed' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
     return html`<button
       type="button"
-      class=${`board-card${selected ? ' selected' : ''}`}
+      class=${classes}
       data-testid=${`board-card-${node.id}`}
+      data-node-id=${node.id}
       style=${`--card-accent: ${accent};`}
-      @click=${(): void => {
-        this.selectedNodeId = node.id;
-      }}
+      aria-pressed=${focused ? 'true' : 'false'}
+      @click=${(e: MouseEvent): void => this.#onBoardCardClick(e, node.id)}
     >
       <span class="card-title">${node.label}</span>
       ${meta ? html`<span class="card-meta">${meta}</span>` : ''}
     </button>`;
+  }
+
+  #boardFocusSet(): ReadonlySet<string> {
+    if (this.focusedNodeIds.size > 0) return this.focusedNodeIds;
+    return this.selectedNodeId ? new Set([this.selectedNodeId]) : new Set();
+  }
+
+  #boardLinkedSet(
+    focus: ReadonlySet<string>,
+    edges: readonly { source: string; target: string }[],
+  ): ReadonlySet<string> {
+    if (focus.size === 0) return new Set();
+    const linked = new Set<string>(focus);
+    for (const edge of edges) {
+      if (focus.has(edge.source)) linked.add(edge.target);
+      if (focus.has(edge.target)) linked.add(edge.source);
+    }
+    return linked;
+  }
+
+  #onBoardCardClick(event: MouseEvent, nodeId: string): void {
+    const multi = event.metaKey || event.ctrlKey || event.shiftKey;
+    if (multi) {
+      event.preventDefault();
+      const next = new Set(this.focusedNodeIds);
+      // Seed multi-selection with the current single selection so a plain click
+      // followed by a Ctrl-click extends the focus rather than starting fresh.
+      if (next.size === 0 && this.selectedNodeId) next.add(this.selectedNodeId);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      this.focusedNodeIds = next;
+      this.selectedNodeId = next.has(nodeId) ? nodeId : (next.values().next().value ?? '');
+      return;
+    }
+    this.focusedNodeIds = new Set();
+    this.selectedNodeId = nodeId;
+  }
+
+  #onBoardRef = (el: Element | undefined): void => {
+    if (!(el instanceof HTMLDivElement)) {
+      this.#teardownBoardObservers();
+      this.#boardEl = null;
+      return;
+    }
+    if (this.#boardEl === el) return;
+    this.#teardownBoardObservers();
+    this.#boardEl = el;
+    this.#setupBoardObservers(el);
+    this.#scheduleBoardEdgesUpdate();
+  };
+
+  #setupBoardObservers(board: HTMLDivElement): void {
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => this.#scheduleBoardEdgesUpdate());
+      ro.observe(board);
+      for (const col of board.querySelectorAll('.board-column')) ro.observe(col);
+      this.#boardResizeObserver = ro;
+    }
+    const onScroll = (): void => this.#scheduleBoardEdgesUpdate();
+    const cols = Array.from(board.querySelectorAll<HTMLElement>('.board-column'));
+    for (const col of cols) col.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    this.#boardScrollCleanup = (): void => {
+      for (const col of cols) col.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }
+
+  #teardownBoardObservers(): void {
+    this.#boardResizeObserver?.disconnect();
+    this.#boardResizeObserver = null;
+    this.#boardScrollCleanup?.();
+    this.#boardScrollCleanup = null;
+    if (this.#boardRafId) {
+      cancelAnimationFrame(this.#boardRafId);
+      this.#boardRafId = 0;
+    }
+  }
+
+  #scheduleBoardEdgesUpdate(): void {
+    if (this.#boardRafId) return;
+    this.#boardRafId = requestAnimationFrame(() => {
+      this.#boardRafId = 0;
+      this.boardLayoutVersion = (this.boardLayoutVersion + 1) & 0xffff;
+    });
+  }
+
+  #renderBoardEdges(
+    edges: readonly { id: string; source: string; target: string; label: string }[],
+    focusSet: ReadonlySet<string>,
+    linkedSet: ReadonlySet<string>,
+  ): TemplateResult {
+    void this.boardLayoutVersion;
+    const board = this.#boardEl;
+    if (!board) return html`<svg class="board-edges" aria-hidden="true"></svg>`;
+    const boardRect = board.getBoundingClientRect();
+    const cardRects = new Map<string, DOMRect>();
+    const colRects = new Map<HTMLElement, DOMRect>();
+    for (const card of board.querySelectorAll<HTMLElement>('.board-card')) {
+      const id = card.dataset.nodeId;
+      if (!id) continue;
+      const col = card.closest<HTMLElement>('.board-column');
+      if (!col) continue;
+      let colRect = colRects.get(col);
+      if (!colRect) {
+        colRect = col.getBoundingClientRect();
+        colRects.set(col, colRect);
+      }
+      const r = card.getBoundingClientRect();
+      // Skip cards scrolled out of view inside their column (the sticky header
+      // occupies ~18px at the top, so allow a small inset).
+      if (r.bottom <= colRect.top + 18 || r.top >= colRect.bottom - 4) continue;
+      cardRects.set(id, r);
+    }
+    const hasFocus = focusSet.size > 0;
+    const lines: { key: string; d: string; cls: string }[] = [];
+    for (const edge of edges) {
+      const a = cardRects.get(edge.source);
+      const b = cardRects.get(edge.target);
+      if (!a || !b) continue;
+      const aLeft = a.right < b.left;
+      const x1 = (aLeft ? a.right : a.left) - boardRect.left;
+      const x2 = (aLeft ? b.left : b.right) - boardRect.left;
+      const y1 = a.top + a.height / 2 - boardRect.top;
+      const y2 = b.top + b.height / 2 - boardRect.top;
+      const dx = Math.abs(x2 - x1);
+      const cx1 = x1 + (aLeft ? dx * 0.45 : -dx * 0.45);
+      const cx2 = x2 + (aLeft ? -dx * 0.45 : dx * 0.45);
+      const highlighted = hasFocus && linkedSet.has(edge.source) && linkedSet.has(edge.target);
+      const dimmed = hasFocus && !highlighted;
+      const cls = ['edge', highlighted ? 'edge-highlighted' : '', dimmed ? 'edge-dimmed' : '']
+        .filter(Boolean)
+        .join(' ');
+      lines.push({
+        key: edge.id,
+        d: `M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`,
+        cls,
+      });
+    }
+    return html`<svg
+      class="board-edges"
+      width=${boardRect.width}
+      height=${boardRect.height}
+      aria-hidden="true"
+    >
+      ${lines.map((l) => svg`<path class=${l.cls} d=${l.d}></path>`)}
+    </svg>`;
   }
 
   #cardAccent(node: MapNode): string {

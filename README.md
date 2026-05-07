@@ -16,7 +16,10 @@ It covers all 218 requirements across six domains: Governance, Information, Pers
   risk band, action status and Direction response, switchable layouts (force-directed, hierarchy,
   concentric, grid), node search, hover tooltips, full-chain highlighting, and `?focus=node-id`
   deep links. Switch to **Board** mode for a column view (Compliance gaps · Risks · Actions ·
-  Directions) when a force-directed graph is more network than you need.
+  Directions) when a force-directed graph is more network than you need. The board draws
+  curved connection lines between linked items across columns; click a card to focus its
+  related items (everything else fades), and Ctrl/Cmd-click to extend the focus to multiple
+  cards at once.
 - Save filtered views for repeat reporting.
 - Use coverage and analytics views to monitor progress. The Coverage matrix's _Fully
   implemented %_ column excludes Not&nbsp;applicable requirements from the calculation so they

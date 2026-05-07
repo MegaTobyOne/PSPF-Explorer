@@ -293,6 +293,25 @@ export class AppStore {
     this.risks.value = this.risks.value.filter((r) => r.id !== id);
   }
 
+  /**
+   * Upsert a fully-formed Risk (with id) — used by importers that need to
+   * preserve externally-assigned IDs and timestamps. `updatedAt` is refreshed.
+   */
+  async upsertRiskRecord(risk: Risk): Promise<Risk> {
+    const now = new Date().toISOString();
+    const existing = this.risks.value.find((r) => r.id === risk.id);
+    const next: Risk = {
+      ...risk,
+      createdAt: existing?.createdAt ?? risk.createdAt ?? now,
+      updatedAt: now,
+    };
+    await putRisk(this.db, next);
+    this.risks.value = existing
+      ? this.risks.value.map((r) => (r.id === next.id ? next : r))
+      : [...this.risks.value, next];
+    return next;
+  }
+
   // ---------- Actions ----------
 
   async createAction(input: Omit<Action, 'id' | 'createdAt' | 'updatedAt'>): Promise<Action> {
@@ -315,6 +334,25 @@ export class AppStore {
   async removeAction(id: ActionId): Promise<void> {
     await deleteAction(this.db, id);
     this.actions.value = this.actions.value.filter((a) => a.id !== id);
+  }
+
+  /**
+   * Upsert a fully-formed Action (with id) — used by importers that need to
+   * preserve externally-assigned IDs and timestamps. `updatedAt` is refreshed.
+   */
+  async upsertActionRecord(action: Action): Promise<Action> {
+    const now = new Date().toISOString();
+    const existing = this.actions.value.find((a) => a.id === action.id);
+    const next: Action = {
+      ...action,
+      createdAt: existing?.createdAt ?? action.createdAt ?? now,
+      updatedAt: now,
+    };
+    await putAction(this.db, next);
+    this.actions.value = existing
+      ? this.actions.value.map((a) => (a.id === next.id ? next : a))
+      : [...this.actions.value, next];
+    return next;
   }
 
   // ---------- Tags ----------

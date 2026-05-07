@@ -598,3 +598,104 @@ test('relationship map board mode lists items in columns by kind', async ({ page
   await view.getByTestId('map-mode-graph').click();
   await expect(view.getByTestId('map-canvas')).toBeVisible();
 });
+
+test('relationship map board mode draws connection lines and supports multi-select highlight', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await page.evaluate(async () => {
+    const dbs = await indexedDB.databases?.();
+    for (const d of dbs ?? []) if (d.name) indexedDB.deleteDatabase(d.name);
+  });
+  await page.reload();
+
+  await page.evaluate(async () => {
+    const open = indexedDB.open('pspf-explorer.v3');
+    const db: IDBDatabase = await new Promise((resolve, reject) => {
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error ?? new Error('Failed to open PSPF database'));
+    });
+    const now = new Date().toISOString();
+    const tx = db.transaction(['compliance', 'risks', 'actions', 'directions'], 'readwrite');
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-001',
+      state: 'no',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('compliance').put({
+      requirementId: 'GOV-002',
+      state: 'no',
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-link-1',
+      title: 'Linked risk one',
+      likelihood: 3,
+      impact: 3,
+      status: 'open',
+      requirementIds: ['GOV-001'],
+      actionIds: ['action-link-1'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('risks').put({
+      id: 'risk-link-2',
+      title: 'Unrelated risk',
+      likelihood: 2,
+      impact: 2,
+      status: 'open',
+      requirementIds: ['GOV-002'],
+      actionIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    tx.objectStore('actions').put({
+      id: 'action-link-1',
+      title: 'Linked action',
+      status: 'in-progress',
+      requirementIds: ['GOV-001'],
+      riskIds: ['risk-link-1'],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('seed failed'));
+      tx.onabort = () => reject(tx.error ?? new Error('seed aborted'));
+    });
+    db.close();
+  });
+
+  await page.reload();
+  await page.locator('pspf-app').getByRole('link', { name: /^Map$/ }).click();
+  const view = page.locator('pspf-relationship-map-view');
+  await view.getByTestId('map-mode-board').click();
+  const board = view.getByTestId('map-board');
+  await expect(board).toBeVisible();
+
+  // Connection lines render as <path> children of the board-edges SVG overlay.
+  const edgePaths = board.locator('svg.board-edges path');
+  await expect.poll(async () => edgePaths.count()).toBeGreaterThan(0);
+
+  // Single-click GOV-001 — its linked risk and action should keep full opacity,
+  // while the unrelated risk should be dimmed.
+  await view.getByTestId('board-card-GOV-001').click();
+  await expect(view.getByTestId('board-card-risk-link-1')).not.toHaveClass(/dimmed/);
+  await expect(view.getByTestId('board-card-action-link-1')).not.toHaveClass(/dimmed/);
+  await expect(view.getByTestId('board-card-risk-link-2')).toHaveClass(/dimmed/);
+
+  // Ctrl-click adds the unrelated risk to the focus set; both groups now
+  // unfaded and both cards carry the focused class.
+  await view.getByTestId('board-card-risk-link-2').click({ modifiers: ['ControlOrMeta'] });
+  await expect(view.getByTestId('board-card-GOV-001')).toHaveClass(/focused/);
+  await expect(view.getByTestId('board-card-risk-link-2')).toHaveClass(/focused/);
+  await expect(view.getByTestId('board-card-risk-link-2')).not.toHaveClass(/dimmed/);
+
+  // Plain-clicking elsewhere clears multi-select.
+  await view.getByTestId('board-card-action-link-1').click();
+  await expect(view.getByTestId('board-card-GOV-001')).not.toHaveClass(/focused/);
+});
