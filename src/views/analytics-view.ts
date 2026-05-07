@@ -9,9 +9,12 @@ import { SignalWatcher } from '../state/signal-watcher.ts';
 import {
   actionStatusCounts,
   complianceBreakdown,
+  directionsSummary,
+  essentialEightCoverage,
   overdueActionCount,
   riskBandCounts,
 } from '../domain/analytics.ts';
+import { directionResponseLabel } from '../domain/reporting.ts';
 import { summariseAllDomains } from '../domain/summary.ts';
 import { complianceColourVar, complianceLabel } from '../domain/compliance-display.ts';
 
@@ -44,9 +47,19 @@ export class AnalyticsView extends LitElement {
         gap: var(--space-3);
       }
       .kpi {
+        display: block;
         padding: var(--space-3);
         border: 1px solid var(--colour-border);
         border-radius: var(--radius-md);
+      }
+      a.kpi {
+        color: inherit;
+        text-decoration: none;
+      }
+      a.kpi:hover,
+      a.kpi:focus-visible {
+        border-color: var(--colour-fg-muted);
+        outline: none;
       }
       .kpi .value {
         font-size: 2rem;
@@ -101,15 +114,20 @@ export class AnalyticsView extends LitElement {
 
   // eslint-disable-next-line no-unused-private-class-members
   #watcher = new SignalWatcher(this, () =>
-    this.store ? [this.store.compliance, this.store.risks, this.store.actions] : [],
+    this.store
+      ? [this.store.compliance, this.store.risks, this.store.actions, this.store.directions]
+      : [],
   );
 
   override render(): TemplateResult {
     const compliance = this.store?.compliance.value ?? new Map();
     const risks = this.store?.risks.value ?? [];
     const actions = this.store?.actions.value ?? [];
+    const directions = this.store?.directions.value ?? [];
 
     const breakdown = complianceBreakdown(compliance);
+    const e8 = essentialEightCoverage(compliance);
+    const directionStats = directionsSummary(directions);
     const bands = riskBandCounts(risks);
     const statusCounts = actionStatusCounts(actions);
     const overdue = overdueActionCount(actions);
@@ -143,7 +161,52 @@ export class AnalyticsView extends LitElement {
               <div class="value" data-kpi="overdue-actions">${overdue}</div>
               <div class="label">Overdue actions</div>
             </div>
+            <div class="kpi">
+              <div class="value" data-kpi="e8-pct">${e8.implementedPct}%</div>
+              <div class="label">
+                Essential Eight (TECH-099 to TECH-106) · catchall TECH-107:
+                ${complianceLabel(e8.catchall.state)}
+              </div>
+            </div>
+            <a class="kpi" href="#/directions/not-set">
+              <div class="value" data-kpi="directions-needing-response">
+                ${directionStats.needsResponseCount}
+              </div>
+              <div class="label">
+                Directions needing response · addressed ${directionStats.addressedPct}%
+              </div>
+            </a>
           </div>
+        </section>
+
+        <section class="panel" aria-label="Directions response coverage">
+          <h3>Directions response coverage</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Response</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${directionResponseLabel('yes')}</td>
+                <td>${directionStats.byState.yes}</td>
+              </tr>
+              <tr>
+                <td>${directionResponseLabel('no')}</td>
+                <td>${directionStats.byState.no}</td>
+              </tr>
+              <tr>
+                <td>${directionResponseLabel('risk-managed')}</td>
+                <td>${directionStats.byState['risk-managed']}</td>
+              </tr>
+              <tr>
+                <td>${directionResponseLabel('not-set')}</td>
+                <td>${directionStats.byState['not-set']}</td>
+              </tr>
+            </tbody>
+          </table>
         </section>
 
         <section class="panel" aria-label="Compliance by domain">

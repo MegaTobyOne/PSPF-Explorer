@@ -55,6 +55,16 @@ export const routes: readonly RouteSpec[] = [
     load: () => import('../views/coverage-view.ts'),
   },
   {
+    path: '/essential-eight',
+    component: 'pspf-essential-eight-view',
+    load: () => import('../views/essential-eight-view.ts'),
+  },
+  {
+    path: '/directions/:state',
+    component: 'pspf-directions-view',
+    load: () => import('../views/directions-view.ts'),
+  },
+  {
     path: '/directions',
     component: 'pspf-directions-view',
     load: () => import('../views/directions-view.ts'),

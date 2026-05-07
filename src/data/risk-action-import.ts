@@ -60,6 +60,39 @@ import { newId } from './ids.ts';
 const FORMAT = 'pspfWorkImport';
 const VERSION = 'v1';
 
+export type ImportStatusMode = 'strict' | 'map-common' | 'force';
+export type ImportLinkMode = 'as-provided' | 'rebuild-bidirectional';
+export type ImportUpdateMode = 'replace-all' | 'patch';
+
+export interface StatusNormalisationOptions {
+  mode?: ImportStatusMode;
+  /** Optional case-insensitive aliases applied in map-common mode. */
+  riskStatusMap?: Readonly<Record<string, RiskStatus>>;
+  /** Optional case-insensitive aliases applied in map-common mode. */
+  actionStatusMap?: Readonly<Record<string, ActionStatus>>;
+  /** Required in force mode when risks are present. */
+  forcedRiskStatus?: RiskStatus;
+  /** Required in force mode when actions are present. */
+  forcedActionStatus?: ActionStatus;
+}
+
+export interface RiskActionImportOptions {
+  status?: StatusNormalisationOptions;
+}
+
+export interface PlanOptions {
+  /**
+   * `replace-all`: omitted optional import fields clear stored values.
+   * `patch`: omitted optional import fields preserve existing values.
+   */
+  updateMode?: ImportUpdateMode;
+  /**
+   * `as-provided`: keep provided links (after dedupe + orphan filtering).
+   * `rebuild-bidirectional`: rebuild links so risk/action references are symmetric.
+   */
+  linkMode?: ImportLinkMode;
+}
+
 export interface RiskImportEntry {
   id?: string;
   title: string;
@@ -114,6 +147,121 @@ const ALLOWED_ACTION_KEYS = new Set([
   'riskIds',
 ]);
 
+const DEFAULT_RISK_STATUS_MAP: Readonly<Record<string, RiskStatus>> = {
+  open: 'open',
+  opened: 'open',
+  'in progress': 'open',
+  'in-progress': 'open',
+  active: 'open',
+  monitored: 'monitored',
+  monitoring: 'monitored',
+  watch: 'monitored',
+  watching: 'monitored',
+  closed: 'closed',
+  complete: 'closed',
+  completed: 'closed',
+  done: 'closed',
+  resolved: 'closed',
+};
+
+const DEFAULT_ACTION_STATUS_MAP: Readonly<Record<string, ActionStatus>> = {
+  todo: 'todo',
+  'to do': 'todo',
+  'to-do': 'todo',
+  open: 'in-progress',
+  opened: 'in-progress',
+  'in progress': 'in-progress',
+  'in-progress': 'in-progress',
+  wip: 'in-progress',
+  active: 'in-progress',
+  blocked: 'blocked',
+  'on hold': 'blocked',
+  'on-hold': 'blocked',
+  done: 'done',
+  complete: 'done',
+  completed: 'done',
+  closed: 'done',
+  cancelled: 'cancelled',
+  canceled: 'cancelled',
+};
+
+function normaliseStatusToken(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function resolveStatusMode(options?: StatusNormalisationOptions): ImportStatusMode {
+  return options?.mode ?? 'strict';
+}
+
+function mapWithAliases<S extends string>(
+  value: string,
+  defaults: Readonly<Record<string, S>>,
+  custom?: Readonly<Record<string, S>>,
+): S | undefined {
+  const key = normaliseStatusToken(value);
+  const customMapped = custom?.[key];
+  if (customMapped) return customMapped;
+  return defaults[key];
+}
+
+function resolveRiskStatus(
+  raw: unknown,
+  path: string,
+  options?: StatusNormalisationOptions,
+): RiskStatus {
+  const mode = resolveStatusMode(options);
+  if (mode === 'force') {
+    if (!options?.forcedRiskStatus) {
+      throw new RiskActionImportValidationError(
+        `Status mode is force but no forced risk status was provided for ${path}.`,
+      );
+    }
+    return options.forcedRiskStatus;
+  }
+  if (typeof raw !== 'string') {
+    throw new RiskActionImportValidationError(
+      `${path}.status must be one of ${RISK_STATUSES.join(', ')}.`,
+    );
+  }
+  if (isRiskStatus(raw)) return raw;
+  if (mode === 'map-common') {
+    const mapped = mapWithAliases(raw, DEFAULT_RISK_STATUS_MAP, options?.riskStatusMap);
+    if (mapped) return mapped;
+  }
+  throw new RiskActionImportValidationError(
+    `${path}.status must be one of ${RISK_STATUSES.join(', ')}.`,
+  );
+}
+
+function resolveActionStatus(
+  raw: unknown,
+  path: string,
+  options?: StatusNormalisationOptions,
+): ActionStatus {
+  const mode = resolveStatusMode(options);
+  if (mode === 'force') {
+    if (!options?.forcedActionStatus) {
+      throw new RiskActionImportValidationError(
+        `Status mode is force but no forced action status was provided for ${path}.`,
+      );
+    }
+    return options.forcedActionStatus;
+  }
+  if (typeof raw !== 'string') {
+    throw new RiskActionImportValidationError(
+      `${path}.status must be one of ${ACTION_STATUSES.join(', ')}.`,
+    );
+  }
+  if (isActionStatus(raw)) return raw;
+  if (mode === 'map-common') {
+    const mapped = mapWithAliases(raw, DEFAULT_ACTION_STATUS_MAP, options?.actionStatusMap);
+    if (mapped) return mapped;
+  }
+  throw new RiskActionImportValidationError(
+    `${path}.status must be one of ${ACTION_STATUSES.join(', ')}.`,
+  );
+}
+
 function ensureNoExtraKeys(obj: object, allowed: Set<string>, path: string): void {
   for (const k of Object.keys(obj)) {
     if (!allowed.has(k)) {
@@ -157,7 +305,11 @@ function validateStringArray(v: unknown, path: string): readonly string[] {
   return v as readonly string[];
 }
 
-function validateRiskEntry(e: unknown, path: string): RiskImportEntry {
+function validateRiskEntry(
+  e: unknown,
+  path: string,
+  statusOptions?: StatusNormalisationOptions,
+): RiskImportEntry {
   if (!e || typeof e !== 'object') {
     throw new RiskActionImportValidationError(`${path} must be an object.`);
   }
@@ -172,11 +324,7 @@ function validateRiskEntry(e: unknown, path: string): RiskImportEntry {
   if (!isLikelihoodImpact(r.impact)) {
     throw new RiskActionImportValidationError(`${path}.impact must be 1-5.`);
   }
-  if (!isRiskStatus(r.status)) {
-    throw new RiskActionImportValidationError(
-      `${path}.status must be one of ${RISK_STATUSES.join(', ')}.`,
-    );
-  }
+  const status = resolveRiskStatus(r.status, path, statusOptions);
   if (r.id !== undefined && (typeof r.id !== 'string' || r.id.length === 0)) {
     throw new RiskActionImportValidationError(`${path}.id must be a non-empty string when given.`);
   }
@@ -187,7 +335,7 @@ function validateRiskEntry(e: unknown, path: string): RiskImportEntry {
     title: r.title,
     likelihood: r.likelihood,
     impact: r.impact,
-    status: r.status,
+    status,
     ...(r.id !== undefined ? { id: r.id } : {}),
     ...(r.description !== undefined ? { description: r.description } : {}),
   };
@@ -200,7 +348,11 @@ function validateRiskEntry(e: unknown, path: string): RiskImportEntry {
   return out;
 }
 
-function validateActionEntry(e: unknown, path: string): ActionImportEntry {
+function validateActionEntry(
+  e: unknown,
+  path: string,
+  statusOptions?: StatusNormalisationOptions,
+): ActionImportEntry {
   if (!e || typeof e !== 'object') {
     throw new RiskActionImportValidationError(`${path} must be an object.`);
   }
@@ -214,11 +366,7 @@ function validateActionEntry(e: unknown, path: string): ActionImportEntry {
       `${path}.type must be one of ${ACTION_TYPES.join(', ')}.`,
     );
   }
-  if (!isActionStatus(a.status)) {
-    throw new RiskActionImportValidationError(
-      `${path}.status must be one of ${ACTION_STATUSES.join(', ')}.`,
-    );
-  }
+  const status = resolveActionStatus(a.status, path, statusOptions);
   if (a.id !== undefined && (typeof a.id !== 'string' || a.id.length === 0)) {
     throw new RiskActionImportValidationError(`${path}.id must be a non-empty string when given.`);
   }
@@ -229,7 +377,7 @@ function validateActionEntry(e: unknown, path: string): ActionImportEntry {
   const out: ActionImportEntry = {
     title: a.title,
     type: a.type,
-    status: a.status,
+    status,
     ...(a.id !== undefined ? { id: a.id } : {}),
     ...(a.description !== undefined ? { description: a.description } : {}),
     ...(typeof a.dueAt === 'string' ? { dueAt: a.dueAt } : {}),
@@ -243,7 +391,10 @@ function validateActionEntry(e: unknown, path: string): ActionImportEntry {
   return out;
 }
 
-export function validateRiskActionImport(value: unknown): RiskActionImportPayload {
+export function validateRiskActionImport(
+  value: unknown,
+  options: RiskActionImportOptions = {},
+): RiskActionImportPayload {
   if (!value || typeof value !== 'object') {
     throw new RiskActionImportValidationError('Payload must be a JSON object.');
   }
@@ -264,7 +415,7 @@ export function validateRiskActionImport(value: unknown): RiskActionImportPayloa
       throw new RiskActionImportValidationError('"risks" must be an array.');
     }
     for (let i = 0; i < v.risks.length; i++) {
-      risks.push(validateRiskEntry(v.risks[i], `$.risks[${i}]`));
+      risks.push(validateRiskEntry(v.risks[i], `$.risks[${i}]`, options.status));
     }
   }
   const actions: ActionImportEntry[] = [];
@@ -273,7 +424,7 @@ export function validateRiskActionImport(value: unknown): RiskActionImportPayloa
       throw new RiskActionImportValidationError('"actions" must be an array.');
     }
     for (let i = 0; i < v.actions.length; i++) {
-      actions.push(validateActionEntry(v.actions[i], `$.actions[${i}]`));
+      actions.push(validateActionEntry(v.actions[i], `$.actions[${i}]`, options.status));
     }
   }
   return {
@@ -352,25 +503,119 @@ export interface PlanContext {
   generateId?: () => string;
 }
 
+function dedupe<T extends string>(values: readonly T[]): readonly T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+function recalculateChangedFields(plan: RiskActionImportPlan): void {
+  for (const risk of plan.risks) {
+    if (risk.mode === 'update' && risk.previous) {
+      risk.changedFields = diffRisk(risk.previous, risk.next);
+    }
+  }
+  for (const action of plan.actions) {
+    if (action.mode === 'update' && action.previous) {
+      action.changedFields = diffAction(action.previous, action.next);
+    }
+  }
+}
+
+function cleanAndRebuildLinks(
+  risks: readonly RiskPlanItem[],
+  actions: readonly ActionPlanItem[],
+  ctx: PlanContext,
+  linkMode: ImportLinkMode,
+): void {
+  const knownRiskIds = new Set<string>(ctx.risksById.keys());
+  const knownActionIds = new Set<string>(ctx.actionsById.keys());
+  for (const risk of risks) knownRiskIds.add(risk.next.id);
+  for (const action of actions) knownActionIds.add(action.next.id);
+
+  for (const risk of risks) {
+    risk.next.requirementIds = dedupe(risk.next.requirementIds);
+    risk.next.actionIds = dedupe(
+      risk.next.actionIds.filter((actionId) => knownActionIds.has(actionId)),
+    );
+  }
+
+  for (const action of actions) {
+    action.next.requirementIds = dedupe(action.next.requirementIds);
+    action.next.riskIds = dedupe(action.next.riskIds.filter((riskId) => knownRiskIds.has(riskId)));
+  }
+
+  if (linkMode !== 'rebuild-bidirectional') return;
+
+  const riskToActions = new Map(risks.map((item) => [item.next.id, new Set(item.next.actionIds)]));
+  const actionToRisks = new Map(actions.map((item) => [item.next.id, new Set(item.next.riskIds)]));
+
+  for (const [riskId, actionIds] of riskToActions) {
+    for (const actionId of actionIds) {
+      const reverse = actionToRisks.get(actionId);
+      if (reverse) reverse.add(riskId);
+    }
+  }
+  for (const [actionId, riskIds] of actionToRisks) {
+    for (const riskId of riskIds) {
+      const reverse = riskToActions.get(riskId);
+      if (reverse) reverse.add(actionId);
+    }
+  }
+
+  for (const risk of risks) {
+    risk.next.actionIds = [...(riskToActions.get(risk.next.id) ?? new Set())]
+      .sort()
+      .map(asActionId);
+  }
+  for (const action of actions) {
+    action.next.riskIds = [...(actionToRisks.get(action.next.id) ?? new Set())]
+      .sort()
+      .map(asRiskId);
+  }
+}
+
 export function planRiskActionImport(
   payload: RiskActionImportPayload,
   ctx: PlanContext,
+  options: PlanOptions = {},
 ): RiskActionImportPlan {
   const gen = ctx.generateId ?? newId;
   const now = new Date().toISOString();
+  const updateMode = options.updateMode ?? 'replace-all';
+  const linkMode = options.linkMode ?? 'as-provided';
 
   const risks: RiskPlanItem[] = (payload.risks ?? []).map((entry, index) => {
     const id = entry.id ? asRiskId(entry.id) : asRiskId(gen());
     const previous = entry.id ? ctx.risksById.get(id) : undefined;
+    const requirementIds =
+      entry.requirementIds !== undefined
+        ? entry.requirementIds.map(asRequirementId)
+        : updateMode === 'patch' && previous
+          ? previous.requirementIds
+          : [];
+    const actionIds =
+      entry.actionIds !== undefined
+        ? entry.actionIds.map(asActionId)
+        : updateMode === 'patch' && previous
+          ? previous.actionIds
+          : [];
+    const description =
+      entry.description ?? (updateMode === 'patch' ? previous?.description : undefined);
     const next: Risk = {
       id,
       title: entry.title,
-      ...(entry.description !== undefined ? { description: entry.description } : {}),
+      ...(description !== undefined ? { description } : {}),
       likelihood: entry.likelihood,
       impact: entry.impact,
       status: entry.status,
-      requirementIds: (entry.requirementIds ?? []).map(asRequirementId),
-      actionIds: (entry.actionIds ?? []).map(asActionId),
+      requirementIds,
+      actionIds,
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
     };
@@ -383,15 +628,30 @@ export function planRiskActionImport(
   const actions: ActionPlanItem[] = (payload.actions ?? []).map((entry, index) => {
     const id = entry.id ? asActionId(entry.id) : asActionId(gen());
     const previous = entry.id ? ctx.actionsById.get(id) : undefined;
+    const requirementIds =
+      entry.requirementIds !== undefined
+        ? entry.requirementIds.map(asRequirementId)
+        : updateMode === 'patch' && previous
+          ? previous.requirementIds
+          : [];
+    const riskIds =
+      entry.riskIds !== undefined
+        ? entry.riskIds.map(asRiskId)
+        : updateMode === 'patch' && previous
+          ? previous.riskIds
+          : [];
+    const description =
+      entry.description ?? (updateMode === 'patch' ? previous?.description : undefined);
+    const dueAt = entry.dueAt ?? (updateMode === 'patch' ? previous?.dueAt : undefined);
     const next: Action = {
       id,
       title: entry.title,
-      ...(entry.description !== undefined ? { description: entry.description } : {}),
+      ...(description !== undefined ? { description } : {}),
       type: entry.type,
       status: entry.status,
-      ...(entry.dueAt !== undefined ? { dueAt: entry.dueAt } : {}),
-      requirementIds: (entry.requirementIds ?? []).map(asRequirementId),
-      riskIds: (entry.riskIds ?? []).map(asRiskId),
+      ...(dueAt !== undefined ? { dueAt } : {}),
+      requirementIds,
+      riskIds,
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
     };
@@ -401,12 +661,17 @@ export function planRiskActionImport(
     return { index, mode: 'add', next, changedFields: [] };
   });
 
-  return {
+  const plan: RiskActionImportPlan = {
     source: payload.source,
     capturedAt: payload.capturedAt,
     risks,
     actions,
   };
+
+  cleanAndRebuildLinks(risks, actions, ctx, linkMode);
+  recalculateChangedFields(plan);
+
+  return plan;
 }
 
 // ---------- Apply ----------

@@ -6,15 +6,56 @@ import type {
   Action,
   ComplianceEntry,
   ComplianceState,
+  Direction,
+  DirectionResponseState,
   RequirementId,
   Risk,
+  EssentialEightControlKey,
 } from '../data/types.ts';
+import { asRequirementId } from '../data/types.ts';
 import { allRequirements } from '../pspf/index.ts';
 
 export interface ComplianceBreakdown {
   total: number;
   byState: Record<ComplianceState, number>;
   compliantPct: number;
+}
+
+export const ESSENTIAL_EIGHT_REQUIREMENT_IDS: readonly RequirementId[] = [
+  asRequirementId('TECH-099'),
+  asRequirementId('TECH-100'),
+  asRequirementId('TECH-101'),
+  asRequirementId('TECH-102'),
+  asRequirementId('TECH-103'),
+  asRequirementId('TECH-104'),
+  asRequirementId('TECH-105'),
+  asRequirementId('TECH-106'),
+];
+
+export const ESSENTIAL_EIGHT_CATCHALL_ID: RequirementId = asRequirementId('TECH-107');
+
+export interface EssentialEightCoverage {
+  totalControls: number;
+  implementedControls: number;
+  applicableControls: number;
+  implementedPct: number;
+  byState: Record<ComplianceState, number>;
+  controls: readonly {
+    requirementId: RequirementId;
+    state: ComplianceState;
+    control?: EssentialEightControlKey;
+  }[];
+  catchall: {
+    requirementId: RequirementId;
+    state: ComplianceState;
+  };
+}
+
+export interface DirectionsSummary {
+  total: number;
+  byState: Record<DirectionResponseState, number>;
+  addressedPct: number;
+  needsResponseCount: number;
 }
 
 const ZERO_BY_STATE: Record<ComplianceState, number> = {
@@ -80,4 +121,61 @@ export function overdueActionCount(actions: readonly Action[], now = Date.now())
     if (new Date(a.dueAt).getTime() < now) n += 1;
   }
   return n;
+}
+
+export function essentialEightCoverage(
+  compliance: ReadonlyMap<RequirementId, ComplianceEntry>,
+): EssentialEightCoverage {
+  const byState: Record<ComplianceState, number> = { ...ZERO_BY_STATE };
+
+  const controls = ESSENTIAL_EIGHT_REQUIREMENT_IDS.map((requirementId) => {
+    const requirement = allRequirements.find((entry) => entry.id === requirementId);
+    const state: ComplianceState = compliance.get(requirementId)?.state ?? 'not-set';
+    byState[state] += 1;
+    return {
+      requirementId,
+      state,
+      ...(requirement?.essentialEightControl ? { control: requirement.essentialEightControl } : {}),
+    };
+  });
+
+  const applicableControls = controls.length - byState['not-applicable'];
+  const implementedControls = byState.yes;
+  const implementedPct =
+    applicableControls === 0 ? 0 : Math.round((implementedControls / applicableControls) * 100);
+
+  return {
+    totalControls: controls.length,
+    implementedControls,
+    applicableControls,
+    implementedPct,
+    byState,
+    controls,
+    catchall: {
+      requirementId: ESSENTIAL_EIGHT_CATCHALL_ID,
+      state: compliance.get(ESSENTIAL_EIGHT_CATCHALL_ID)?.state ?? 'not-set',
+    },
+  };
+}
+
+export function directionsSummary(directions: readonly Direction[]): DirectionsSummary {
+  const byState: Record<DirectionResponseState, number> = {
+    yes: 0,
+    no: 0,
+    'risk-managed': 0,
+    'not-set': 0,
+  };
+  for (const direction of directions) {
+    byState[direction.responseState] += 1;
+  }
+  const total = directions.length;
+  const needsResponseCount = byState['not-set'];
+  const addressed = total - needsResponseCount;
+  const addressedPct = total === 0 ? 0 : Math.round((addressed / total) * 100);
+  return {
+    total,
+    byState,
+    addressedPct,
+    needsResponseCount,
+  };
 }

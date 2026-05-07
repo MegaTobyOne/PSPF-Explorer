@@ -8,6 +8,8 @@ import type { AppStore } from '../state/app-store.ts';
 import { SignalWatcher } from '../state/signal-watcher.ts';
 import { summariseAllDomains } from '../domain/summary.ts';
 import { complianceColourVar, complianceLabel } from '../domain/compliance-display.ts';
+import { directionsSummary, essentialEightCoverage } from '../domain/analytics.ts';
+import { directionResponseLabel } from '../domain/reporting.ts';
 
 @customElement('pspf-coverage-view')
 export class CoverageView extends LitElement {
@@ -64,11 +66,13 @@ export class CoverageView extends LitElement {
         vertical-align: middle;
         margin-right: 4px;
       }
-      a.domain-link {
+      a.domain-link,
+      a.summary-link {
         color: var(--colour-accent);
         text-decoration: none;
       }
-      a.domain-link:hover {
+      a.domain-link:hover,
+      a.summary-link:hover {
         text-decoration: underline;
       }
       .muted {
@@ -85,11 +89,16 @@ export class CoverageView extends LitElement {
   private store: AppStore | undefined;
 
   // eslint-disable-next-line no-unused-private-class-members
-  #watcher = new SignalWatcher(this, () => (this.store ? [this.store.compliance] : []));
+  #watcher = new SignalWatcher(this, () =>
+    this.store ? [this.store.compliance, this.store.directions] : [],
+  );
 
   override render(): TemplateResult {
     const compliance = this.store?.compliance.value ?? new Map();
+    const directions = this.store?.directions.value ?? [];
     const summaries = summariseAllDomains(compliance);
+    const e8 = essentialEightCoverage(compliance);
+    const directionStats = directionsSummary(directions);
 
     const totals: Record<ComplianceState, number> = {
       yes: 0,
@@ -167,6 +176,42 @@ export class CoverageView extends LitElement {
                 )}
                 <td class="numeric" data-grand-total>${grandTotal}</td>
                 <td class="numeric" data-overall-compliant-pct>${overallCompliantPct}%</td>
+              </tr>
+              <tr class="totals" data-testid="coverage-essential-eight">
+                <th scope="row">
+                  Essential Eight<br /><span class="muted"
+                    >TECH-099 to TECH-106 · TECH-107 catchall</span
+                  >
+                </th>
+                ${COMPLIANCE_STATES.map(
+                  (state) => html`<td class="numeric">${e8.byState[state]}</td>`,
+                )}
+                <td class="numeric">${e8.totalControls}</td>
+                <td class="numeric">
+                  ${e8.implementedPct}%<br />
+                  <span class="muted">TECH-107: ${complianceLabel(e8.catchall.state)}</span>
+                </td>
+              </tr>
+              <tr class="totals" data-testid="coverage-directions">
+                <th scope="row">
+                  <a class="summary-link" href="#/directions/not-set">Directions</a><br /><span
+                    class="muted"
+                    >Response coverage across the register</span
+                  >
+                </th>
+                <td class="numeric">${directionStats.byState.yes}</td>
+                <td class="numeric">${directionStats.byState.no}</td>
+                <td class="numeric">${directionStats.byState['risk-managed']}</td>
+                <td class="numeric">&mdash;</td>
+                <td class="numeric">${directionStats.byState['not-set']}</td>
+                <td class="numeric">${directionStats.total}</td>
+                <td class="numeric">
+                  ${directionStats.addressedPct}%<br />
+                  <span class="muted"
+                    >${directionResponseLabel('not-set')}:
+                    ${directionStats.needsResponseCount}</span
+                  >
+                </td>
               </tr>
             </tbody>
           </table>

@@ -60,6 +60,7 @@ test('work import shows plan, applies only selected entries, and confirms update
   await view.getByTestId('work-import-select-new-risks').click();
   await view.getByTestId('work-import-select-new-actions').click();
   await expect(applyBtn).toBeEnabled();
+  page.once('dialog', (dialog) => dialog.accept());
   await applyBtn.click();
 
   const summary = view.getByTestId('work-import-summary');
@@ -101,6 +102,7 @@ test('work import shows plan, applies only selected entries, and confirms update
 
   // Select only the action update — risk should be untouched.
   await view.getByTestId('work-import-select-updated-actions').click();
+  page.once('dialog', (dialog) => dialog.accept());
   await applyBtn.click();
   const summary2 = view.getByTestId('work-import-summary');
   await expect(summary2).toContainText('0 risks added, 0 updated');

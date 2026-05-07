@@ -7,7 +7,7 @@
  */
 
 import { LitElement, css, html, type TemplateResult } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { designTokens } from '../app/design-tokens.ts';
 import {
@@ -239,6 +239,8 @@ export class DirectionsView extends LitElement {
   @consume({ context: appStoreContext, subscribe: true })
   private store: AppStore | undefined;
 
+  @property({ attribute: false }) params: Record<string, string> = {};
+
   // eslint-disable-next-line no-unused-private-class-members
   #watcher = new SignalWatcher(this, () => (this.store ? [this.store.directions] : []));
 
@@ -265,6 +267,14 @@ export class DirectionsView extends LitElement {
   @state() private accessor editEvidenceValue = '';
   @state() private accessor copyStatus = '';
 
+  override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    super.willUpdate(changed);
+    if (changed.has('params')) {
+      const routeState = this.params.state;
+      this.filterState = this.#isDirectionState(routeState) ? routeState : 'all';
+    }
+  }
+
   override render(): TemplateResult {
     const directions = this.store?.directions.value ?? [];
     const filtered =
@@ -284,16 +294,18 @@ export class DirectionsView extends LitElement {
             <label class="field">
               Show
               <select
-                .value=${this.filterState}
                 @change=${(e: Event): void => {
                   this.filterState = (e.target as HTMLSelectElement).value as
                     | DirectionResponseState
                     | 'all';
                 }}
               >
-                <option value="all">All Directions</option>
+                <option value="all" ?selected=${this.filterState === 'all'}>All Directions</option>
                 ${DIRECTION_RESPONSE_STATES.map(
-                  (state) => html`<option value=${state}>${directionResponseLabel(state)}</option>`,
+                  (state) =>
+                    html`<option value=${state} ?selected=${this.filterState === state}>
+                      ${directionResponseLabel(state)}
+                    </option>`,
                 )}
               </select>
             </label>
@@ -328,6 +340,13 @@ export class DirectionsView extends LitElement {
         <div class="metric"><strong>${count('not-set')}</strong><span>Needs response</span></div>
       </section>
     `;
+  }
+
+  #isDirectionState(value: string | undefined): value is DirectionResponseState {
+    return (
+      typeof value === 'string' &&
+      DIRECTION_RESPONSE_STATES.includes(value as DirectionResponseState)
+    );
   }
 
   #createForm(): TemplateResult {

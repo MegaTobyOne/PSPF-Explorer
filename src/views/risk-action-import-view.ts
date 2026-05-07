@@ -21,9 +21,22 @@ import {
   validateRiskActionImport,
   type ActionPlanItem,
   type ApplySummary,
+  type ImportLinkMode,
+  type ImportStatusMode,
+  type ImportUpdateMode,
   type RiskActionImportPlan,
   type RiskPlanItem,
 } from '../data/risk-action-import.ts';
+import {
+  ACTION_STATUSES,
+  ACTION_TYPES,
+  RISK_STATUSES,
+  asActionId,
+  asRequirementId,
+  asRiskId,
+  type Action,
+  type Risk,
+} from '../data/types.ts';
 
 const SAMPLE_PAYLOAD = {
   pspfWorkImport: 'v1',
@@ -166,6 +179,30 @@ export class RiskActionImportView extends LitElement {
         color: var(--colour-fg-muted);
         font-family: var(--font-mono, monospace);
       }
+      details.inline-editor {
+        margin-top: var(--space-1);
+      }
+      details.inline-editor > summary {
+        cursor: pointer;
+        font-size: var(--text-xs);
+        color: var(--colour-fg-muted);
+      }
+      .inline-editor-grid {
+        margin-top: var(--space-1);
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: var(--space-1);
+      }
+      .inline-editor-grid label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: var(--text-xs);
+      }
+      .inline-editor-grid input,
+      .inline-editor-grid select {
+        font: inherit;
+      }
       .empty {
         font-size: var(--text-sm);
         color: var(--colour-fg-muted);
@@ -204,6 +241,12 @@ export class RiskActionImportView extends LitElement {
   @state() private accessor selectedRiskIndexes: ReadonlySet<number> = new Set();
   @state() private accessor selectedActionIndexes: ReadonlySet<number> = new Set();
   @state() private accessor lastSummary: ApplySummary | null = null;
+  @state() private accessor statusMode: ImportStatusMode = 'map-common';
+  @state() private accessor linkMode: ImportLinkMode = 'rebuild-bidirectional';
+  @state() private accessor updateMode: ImportUpdateMode = 'replace-all';
+  @state() private accessor forcedRiskStatus: (typeof RISK_STATUSES)[number] = RISK_STATUSES[0];
+  @state() private accessor forcedActionStatus: (typeof ACTION_STATUSES)[number] =
+    ACTION_STATUSES[0];
 
   override render(): TemplateResult {
     return html`
@@ -224,6 +267,7 @@ export class RiskActionImportView extends LitElement {
 
         <section class="panel" aria-labelledby="upload-heading">
           <h3 id="upload-heading">1. Upload payload</h3>
+          ${this.#renderImportOptions()}
           <label class="row">
             <span class="visually-hidden">Choose risk and action import file</span>
             <input
@@ -280,6 +324,14 @@ export class RiskActionImportView extends LitElement {
           <button
             type="button"
             class="secondary"
+            data-testid="work-import-rebuild-links"
+            @click=${(): void => this.#rebuildPlanLinks()}
+          >
+            Rebuild links now
+          </button>
+          <button
+            type="button"
+            class="secondary"
             data-testid="work-import-cancel"
             @click=${(): void => this.#reset()}
           >
@@ -287,6 +339,106 @@ export class RiskActionImportView extends LitElement {
           </button>
         </div>
       </section>
+    `;
+  }
+
+  #renderImportOptions(): TemplateResult {
+    return html`
+      <div class="bulk" style="margin-bottom: var(--space-2);">
+        <label>
+          Status handling
+          <select
+            aria-label="Status handling"
+            @change=${(e: Event): void => {
+              this.statusMode = (e.target as HTMLSelectElement).value as ImportStatusMode;
+            }}
+          >
+            <option value="strict" ?selected=${this.statusMode === 'strict'}>
+              Strict (only known statuses)
+            </option>
+            <option value="map-common" ?selected=${this.statusMode === 'map-common'}>
+              Map common aliases (e.g. open → in-progress for actions)
+            </option>
+            <option value="force" ?selected=${this.statusMode === 'force'}>
+              Force all imported statuses
+            </option>
+          </select>
+        </label>
+
+        ${this.statusMode === 'force'
+          ? html`<label>
+                Force risk status
+                <select
+                  aria-label="Force risk status"
+                  @change=${(e: Event): void => {
+                    this.forcedRiskStatus = (e.target as HTMLSelectElement)
+                      .value as (typeof RISK_STATUSES)[number];
+                  }}
+                >
+                  ${RISK_STATUSES.map(
+                    (status) =>
+                      html`<option value=${status} ?selected=${this.forcedRiskStatus === status}>
+                        ${status}
+                      </option>`,
+                  )}
+                </select>
+              </label>
+              <label>
+                Force action status
+                <select
+                  aria-label="Force action status"
+                  @change=${(e: Event): void => {
+                    this.forcedActionStatus = (e.target as HTMLSelectElement)
+                      .value as (typeof ACTION_STATUSES)[number];
+                  }}
+                >
+                  ${ACTION_STATUSES.map(
+                    (status) =>
+                      html`<option value=${status} ?selected=${this.forcedActionStatus === status}>
+                        ${status}
+                      </option>`,
+                  )}
+                </select>
+              </label>`
+          : ''}
+
+        <label>
+          Links
+          <select
+            aria-label="Link handling"
+            @change=${(e: Event): void => {
+              this.linkMode = (e.target as HTMLSelectElement).value as ImportLinkMode;
+            }}
+          >
+            <option value="as-provided" ?selected=${this.linkMode === 'as-provided'}>
+              Keep links as provided
+            </option>
+            <option
+              value="rebuild-bidirectional"
+              ?selected=${this.linkMode === 'rebuild-bidirectional'}
+            >
+              Rebuild symmetric links (risk ↔ action)
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Update behaviour
+          <select
+            aria-label="Update behaviour"
+            @change=${(e: Event): void => {
+              this.updateMode = (e.target as HTMLSelectElement).value as ImportUpdateMode;
+            }}
+          >
+            <option value="replace-all" ?selected=${this.updateMode === 'replace-all'}>
+              Edit all fields (replace-all)
+            </option>
+            <option value="patch" ?selected=${this.updateMode === 'patch'}>
+              Patch existing (keep omitted optional fields)
+            </option>
+          </select>
+        </label>
+      </div>
     `;
   }
 
@@ -359,7 +511,105 @@ export class RiskActionImportView extends LitElement {
         </td>
         <td><span class=${`badge ${item.mode}`}>${item.mode}</span></td>
         <td><code>${item.next.id}</code></td>
-        <td>${item.next.title}</td>
+        <td>
+          ${item.next.title}
+          <details class="inline-editor">
+            <summary>Edit fields</summary>
+            <div class="inline-editor-grid">
+              <label>
+                Title
+                <input
+                  type="text"
+                  .value=${item.next.title}
+                  @change=${(e: Event): void =>
+                    this.#editRisk(item.index, {
+                      title: (e.target as HTMLInputElement).value,
+                    })}
+                />
+              </label>
+              <label>
+                Likelihood
+                <select
+                  @change=${(e: Event): void =>
+                    this.#editRisk(item.index, {
+                      likelihood: Number((e.target as HTMLSelectElement).value) as
+                        | 1
+                        | 2
+                        | 3
+                        | 4
+                        | 5,
+                    })}
+                >
+                  ${[1, 2, 3, 4, 5].map(
+                    (value) =>
+                      html`<option value=${value} ?selected=${item.next.likelihood === value}>
+                        ${value}
+                      </option>`,
+                  )}
+                </select>
+              </label>
+              <label>
+                Impact
+                <select
+                  @change=${(e: Event): void =>
+                    this.#editRisk(item.index, {
+                      impact: Number((e.target as HTMLSelectElement).value) as 1 | 2 | 3 | 4 | 5,
+                    })}
+                >
+                  ${[1, 2, 3, 4, 5].map(
+                    (value) =>
+                      html`<option value=${value} ?selected=${item.next.impact === value}>
+                        ${value}
+                      </option>`,
+                  )}
+                </select>
+              </label>
+              <label>
+                Status
+                <select
+                  @change=${(e: Event): void =>
+                    this.#editRisk(item.index, {
+                      status: (e.target as HTMLSelectElement)
+                        .value as (typeof RISK_STATUSES)[number],
+                    })}
+                >
+                  ${RISK_STATUSES.map(
+                    (status) =>
+                      html`<option value=${status} ?selected=${item.next.status === status}>
+                        ${status}
+                      </option>`,
+                  )}
+                </select>
+              </label>
+              <label>
+                Requirement IDs (comma-separated)
+                <input
+                  type="text"
+                  .value=${item.next.requirementIds.join(', ')}
+                  @change=${(e: Event): void =>
+                    this.#editRisk(item.index, {
+                      requirementIds: this.#splitIds((e.target as HTMLInputElement).value).map(
+                        asRequirementId,
+                      ),
+                    })}
+                />
+              </label>
+              <label>
+                Action IDs (comma-separated)
+                <input
+                  type="text"
+                  .value=${item.next.actionIds.join(', ')}
+                  @change=${(e: Event): void =>
+                    this.#editRisk(item.index, {
+                      actionIds: this.#splitIds((e.target as HTMLInputElement).value).map(
+                        asActionId,
+                      ),
+                    })}
+                />
+              </label>
+            </div>
+          </details>
+        </td>
         <td>${item.next.likelihood} × ${item.next.impact}</td>
         <td>${item.next.status}</td>
         <td>
@@ -442,7 +692,91 @@ export class RiskActionImportView extends LitElement {
         </td>
         <td><span class=${`badge ${item.mode}`}>${item.mode}</span></td>
         <td><code>${item.next.id}</code></td>
-        <td>${item.next.title}</td>
+        <td>
+          ${item.next.title}
+          <details class="inline-editor">
+            <summary>Edit fields</summary>
+            <div class="inline-editor-grid">
+              <label>
+                Title
+                <input
+                  type="text"
+                  .value=${item.next.title}
+                  @change=${(e: Event): void =>
+                    this.#editAction(item.index, {
+                      title: (e.target as HTMLInputElement).value,
+                    })}
+                />
+              </label>
+              <label>
+                Type
+                <select
+                  @change=${(e: Event): void =>
+                    this.#editAction(item.index, {
+                      type: (e.target as HTMLSelectElement).value as (typeof ACTION_TYPES)[number],
+                    })}
+                >
+                  ${ACTION_TYPES.map(
+                    (type) =>
+                      html`<option value=${type} ?selected=${item.next.type === type}>
+                        ${type}
+                      </option>`,
+                  )}
+                </select>
+              </label>
+              <label>
+                Status
+                <select
+                  @change=${(e: Event): void =>
+                    this.#editAction(item.index, {
+                      status: (e.target as HTMLSelectElement)
+                        .value as (typeof ACTION_STATUSES)[number],
+                    })}
+                >
+                  ${ACTION_STATUSES.map(
+                    (status) =>
+                      html`<option value=${status} ?selected=${item.next.status === status}>
+                        ${status}
+                      </option>`,
+                  )}
+                </select>
+              </label>
+              <label>
+                Due At (ISO 8601)
+                <input
+                  type="text"
+                  .value=${item.next.dueAt ?? ''}
+                  @change=${(e: Event): void =>
+                    this.#setActionDueAt(item.index, (e.target as HTMLInputElement).value.trim())}
+                />
+              </label>
+              <label>
+                Requirement IDs (comma-separated)
+                <input
+                  type="text"
+                  .value=${item.next.requirementIds.join(', ')}
+                  @change=${(e: Event): void =>
+                    this.#editAction(item.index, {
+                      requirementIds: this.#splitIds((e.target as HTMLInputElement).value).map(
+                        asRequirementId,
+                      ),
+                    })}
+                />
+              </label>
+              <label>
+                Risk IDs (comma-separated)
+                <input
+                  type="text"
+                  .value=${item.next.riskIds.join(', ')}
+                  @change=${(e: Event): void =>
+                    this.#editAction(item.index, {
+                      riskIds: this.#splitIds((e.target as HTMLInputElement).value).map(asRiskId),
+                    })}
+                />
+              </label>
+            </div>
+          </details>
+        </td>
         <td>${item.next.type}</td>
         <td>${item.next.status}</td>
         <td>
@@ -488,6 +822,175 @@ export class RiskActionImportView extends LitElement {
     this.selectedActionIndexes = next;
   }
 
+  #splitIds(raw: string): readonly string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const token of raw
+      .split(/[\n,]/g)
+      .map((part) => part.trim())
+      .filter(Boolean)) {
+      if (seen.has(token)) continue;
+      seen.add(token);
+      out.push(token);
+    }
+    return out;
+  }
+
+  #dedupeIds<T extends string>(ids: readonly T[]): readonly T[] {
+    const seen = new Set<string>();
+    const out: T[] = [];
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    return out;
+  }
+
+  #diffRisk(prev: Risk, next: Risk): readonly string[] {
+    const changed: string[] = [];
+    if (prev.title !== next.title) changed.push('title');
+    if ((prev.description ?? '') !== (next.description ?? '')) changed.push('description');
+    if (prev.likelihood !== next.likelihood) changed.push('likelihood');
+    if (prev.impact !== next.impact) changed.push('impact');
+    if (prev.status !== next.status) changed.push('status');
+    if (prev.requirementIds.join('|') !== next.requirementIds.join('|'))
+      changed.push('requirementIds');
+    if (prev.actionIds.join('|') !== next.actionIds.join('|')) changed.push('actionIds');
+    return changed;
+  }
+
+  #diffAction(prev: Action, next: Action): readonly string[] {
+    const changed: string[] = [];
+    if (prev.title !== next.title) changed.push('title');
+    if ((prev.description ?? '') !== (next.description ?? '')) changed.push('description');
+    if (prev.type !== next.type) changed.push('type');
+    if (prev.status !== next.status) changed.push('status');
+    if ((prev.dueAt ?? '') !== (next.dueAt ?? '')) changed.push('dueAt');
+    if (prev.requirementIds.join('|') !== next.requirementIds.join('|'))
+      changed.push('requirementIds');
+    if (prev.riskIds.join('|') !== next.riskIds.join('|')) changed.push('riskIds');
+    return changed;
+  }
+
+  #editRisk(index: number, patch: Partial<Risk>): void {
+    if (!this.plan) return;
+    const risks = this.plan.risks.map((item) => {
+      if (item.index !== index) return item;
+      const next: Risk = { ...item.next, ...patch };
+      return {
+        ...item,
+        next,
+        changedFields:
+          item.mode === 'update' && item.previous ? this.#diffRisk(item.previous, next) : [],
+      };
+    });
+    this.plan = { ...this.plan, risks };
+  }
+
+  #editAction(index: number, patch: Partial<Action>): void {
+    if (!this.plan) return;
+    const actions = this.plan.actions.map((item) => {
+      if (item.index !== index) return item;
+      const next: Action = { ...item.next, ...patch };
+      return {
+        ...item,
+        next,
+        changedFields:
+          item.mode === 'update' && item.previous ? this.#diffAction(item.previous, next) : [],
+      };
+    });
+    this.plan = { ...this.plan, actions };
+  }
+
+  #setActionDueAt(index: number, dueAt: string): void {
+    if (!this.plan) return;
+    const actions = this.plan.actions.map((item) => {
+      if (item.index !== index) return item;
+      const next: Action = { ...item.next };
+      if (dueAt.length > 0) next.dueAt = dueAt;
+      else delete next.dueAt;
+      return {
+        ...item,
+        next,
+        changedFields:
+          item.mode === 'update' && item.previous ? this.#diffAction(item.previous, next) : [],
+      };
+    });
+    this.plan = { ...this.plan, actions };
+  }
+
+  #rebuildPlanLinks(): void {
+    if (!this.plan) return;
+
+    const knownRiskIds = new Set<string>(this.plan.risks.map((item) => item.next.id));
+    const knownActionIds = new Set<string>(this.plan.actions.map((item) => item.next.id));
+
+    if (this.store) {
+      for (const risk of this.store.risks.value) knownRiskIds.add(risk.id);
+      for (const action of this.store.actions.value) knownActionIds.add(action.id);
+    }
+
+    const riskToActions = new Map<string, Set<string>>();
+    for (const risk of this.plan.risks) {
+      riskToActions.set(
+        risk.next.id,
+        new Set(
+          this.#dedupeIds(risk.next.actionIds).filter((actionId) => knownActionIds.has(actionId)),
+        ),
+      );
+    }
+
+    const actionToRisks = new Map<string, Set<string>>();
+    for (const action of this.plan.actions) {
+      actionToRisks.set(
+        action.next.id,
+        new Set(this.#dedupeIds(action.next.riskIds).filter((riskId) => knownRiskIds.has(riskId))),
+      );
+    }
+
+    for (const [riskId, actionIds] of riskToActions) {
+      for (const actionId of actionIds) {
+        const reverse = actionToRisks.get(actionId);
+        if (reverse) reverse.add(riskId);
+      }
+    }
+    for (const [actionId, riskIds] of actionToRisks) {
+      for (const riskId of riskIds) {
+        const reverse = riskToActions.get(riskId);
+        if (reverse) reverse.add(actionId);
+      }
+    }
+
+    const risks = this.plan.risks.map((item) => {
+      const actionIds = [...(riskToActions.get(item.next.id) ?? new Set<string>())]
+        .sort()
+        .map(asActionId);
+      const next: Risk = { ...item.next, actionIds };
+      return {
+        ...item,
+        next,
+        changedFields:
+          item.mode === 'update' && item.previous ? this.#diffRisk(item.previous, next) : [],
+      };
+    });
+
+    const actions = this.plan.actions.map((item) => {
+      const riskIds = [...(actionToRisks.get(item.next.id) ?? new Set<string>())]
+        .sort()
+        .map(asRiskId);
+      const next: Action = { ...item.next, riskIds };
+      return {
+        ...item,
+        next,
+        changedFields:
+          item.mode === 'update' && item.previous ? this.#diffAction(item.previous, next) : [],
+      };
+    });
+
+    this.plan = { ...this.plan, risks, actions };
+  }
+
   #reset(): void {
     this.plan = null;
     this.selectedRiskIndexes = new Set();
@@ -508,13 +1011,62 @@ export class RiskActionImportView extends LitElement {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
-      const payload = validateRiskActionImport(parsed);
+      const payload = validateRiskActionImport(parsed, {
+        status: {
+          mode: this.statusMode,
+          forcedRiskStatus: this.forcedRiskStatus,
+          forcedActionStatus: this.forcedActionStatus,
+        },
+      });
       const store = this.store;
       const risksById = new Map(store.risks.value.map((r) => [r.id, r]));
       const actionsById = new Map(store.actions.value.map((a) => [a.id, a]));
-      this.plan = planRiskActionImport(payload, { risksById, actionsById });
+      this.plan = planRiskActionImport(
+        payload,
+        { risksById, actionsById },
+        {
+          updateMode: this.updateMode,
+          linkMode: this.linkMode,
+        },
+      );
     } catch (err) {
-      this.errorMessage = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (
+        this.statusMode === 'strict' &&
+        message.includes('.status') &&
+        globalThis.confirm(
+          'Import includes unknown statuses. Switch to "Map common aliases" and retry?',
+        )
+      ) {
+        this.statusMode = 'map-common';
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text) as unknown;
+          const retryPayload = validateRiskActionImport(parsed, {
+            status: {
+              mode: this.statusMode,
+              forcedRiskStatus: this.forcedRiskStatus,
+              forcedActionStatus: this.forcedActionStatus,
+            },
+          });
+          const store = this.store;
+          const risksById = new Map(store.risks.value.map((r) => [r.id, r]));
+          const actionsById = new Map(store.actions.value.map((a) => [a.id, a]));
+          this.plan = planRiskActionImport(
+            retryPayload,
+            { risksById, actionsById },
+            {
+              updateMode: this.updateMode,
+              linkMode: this.linkMode,
+            },
+          );
+          return;
+        } catch (retryErr) {
+          this.errorMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+          return;
+        }
+      }
+      this.errorMessage = message;
     } finally {
       input.value = '';
     }
@@ -524,6 +1076,10 @@ export class RiskActionImportView extends LitElement {
     if (!this.plan || !this.store) return;
     const store = this.store;
     try {
+      const shouldApply = globalThis.confirm(
+        `Apply import with status mode "${this.statusMode}", link mode "${this.linkMode}", and update mode "${this.updateMode}"?`,
+      );
+      if (!shouldApply) return;
       const summary = await applyRiskActionImport(
         this.plan,
         { risks: this.selectedRiskIndexes, actions: this.selectedActionIndexes },

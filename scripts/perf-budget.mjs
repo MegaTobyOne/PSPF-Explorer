@@ -23,6 +23,10 @@ const BUDGETS = [
   { pattern: /^requirement-view-.*\.js$/, label: 'requirement view', maxGzipKb: 6 },
   { pattern: /^analytics-view-.*\.js$/, label: 'analytics view', maxGzipKb: 4 },
   { pattern: /^home-view-.*\.js$/, label: 'home view', maxGzipKb: 2 },
+  { pattern: /^risks-view-.*\.js$/, label: 'risks view', maxGzipKb: 5 },
+  { pattern: /^actions-view-.*\.js$/, label: 'actions view', maxGzipKb: 5 },
+  { pattern: /^directions-view-.*\.js$/, label: 'directions view', maxGzipKb: 5 },
+  { pattern: /^risk-action-import-view-.*\.js$/, label: 'work import view', maxGzipKb: 8 },
   {
     pattern: /^(cytoscape|relationship-map-view)-.*\.js$/,
     label: 'relationship map (lazy)',
@@ -34,7 +38,9 @@ const BUDGETS = [
 // specific route. Each must still have its own per-file budget above.
 const EXCLUDE_FROM_TOTAL = /^(cytoscape|relationship-map-view)-.*\.js$/;
 
-const TOTAL_GZIP_KB_BUDGET = 88;
+// Covers all non-map JS route chunks. Raised for the v3.2 long-list, import
+// review, Essential Eight, and Directions reporting release scope.
+const TOTAL_GZIP_KB_BUDGET = 96;
 
 const files = readdirSync(ROOT).filter((f) => f.endsWith('.js'));
 let totalGzip = 0;

@@ -10,6 +10,8 @@ It covers all 218 requirements across six domains: Governance, Information, Pers
 - Search across requirements, compliance notes, evidence, Directions, risks, and actions.
 - Record implementation status with evidence and notes.
 - Track risks, actions, Directions, and cross-entity relationships.
+- Search, filter, sort, paginate, and bulk-manage long risk and action lists, with list settings
+  remembered between visits and selections kept for the current browser session.
 - Use the relationship map to see how compliance gaps connect to logged work, risks, actions, and
   Directions. The map uses recognisable shapes (hexagon for requirements, triangle for risks,
   rounded rectangle for actions, tag for Directions), supports filtering by compliance state,
@@ -23,7 +25,12 @@ It covers all 218 requirements across six domains: Governance, Information, Pers
 - Save filtered views for repeat reporting.
 - Use coverage and analytics views to monitor progress. The Coverage matrix's _Fully
   implemented %_ column excludes Not&nbsp;applicable requirements from the calculation so they
-  don't drag the rating down.
+  don't drag the rating down. Analytics, Coverage, and Home now also surface an Essential Eight
+  indicator focused on TECH-099 to TECH-106, with TECH-107 shown as the catchall status, plus
+  Directions response coverage so open Directions are visible outside the register.
+- Import risk and action JSON with review-before-apply planning, status alias mapping, optional
+  forced statuses, link clean-up/rebuild, inline pre-apply editing, and bidirectional link
+  rebuild controls.
 - Copy human-readable summaries and export/restore local data with JSON files.
 
 ## Status labels

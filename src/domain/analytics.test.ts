@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   actionStatusCounts,
   complianceBreakdown,
+  directionsSummary,
+  ESSENTIAL_EIGHT_CATCHALL_ID,
+  ESSENTIAL_EIGHT_REQUIREMENT_IDS,
+  essentialEightCoverage,
   overdueActionCount,
   riskBandCounts,
   riskBandOf,
 } from './analytics.ts';
 import { allRequirements } from '../pspf/index.ts';
-import type { Action, ComplianceEntry, RequirementId, Risk } from '../data/types.ts';
+import type { Action, ComplianceEntry, Direction, RequirementId, Risk } from '../data/types.ts';
 
 const now = new Date('2026-05-05T00:00:00Z').toISOString();
 
@@ -80,5 +84,54 @@ describe('actionStatusCounts / overdueActionCount', () => {
     const future = '2099-01-01';
     const list = [a('in-progress', past), a('done', past), a('todo', future), a('blocked', past)];
     expect(overdueActionCount(list, Date.parse('2026-05-05'))).toBe(2);
+  });
+});
+
+describe('essentialEightCoverage', () => {
+  it('summarises TECH-099..TECH-106 and includes TECH-107 catchall state', () => {
+    const m = new Map<RequirementId, ComplianceEntry>();
+    m.set(ESSENTIAL_EIGHT_REQUIREMENT_IDS[0]!, entry(ESSENTIAL_EIGHT_REQUIREMENT_IDS[0]!, 'yes'));
+    m.set(ESSENTIAL_EIGHT_REQUIREMENT_IDS[1]!, entry(ESSENTIAL_EIGHT_REQUIREMENT_IDS[1]!, 'yes'));
+    m.set(
+      ESSENTIAL_EIGHT_REQUIREMENT_IDS[2]!,
+      entry(ESSENTIAL_EIGHT_REQUIREMENT_IDS[2]!, 'not-applicable'),
+    );
+    m.set(ESSENTIAL_EIGHT_CATCHALL_ID, entry(ESSENTIAL_EIGHT_CATCHALL_ID, 'risk-managed'));
+
+    const out = essentialEightCoverage(m);
+    expect(out.totalControls).toBe(8);
+    expect(out.implementedControls).toBe(2);
+    expect(out.applicableControls).toBe(7);
+    expect(out.implementedPct).toBe(Math.round((2 / 7) * 100));
+    expect(out.catchall.state).toBe('risk-managed');
+  });
+});
+
+describe('directionsSummary', () => {
+  it('summarises direction response states and addressed percentage', () => {
+    const direction = (responseState: Direction['responseState']): Direction => ({
+      id: `${responseState}-id` as Direction['id'],
+      reference: `Dir ${responseState}`,
+      title: `Direction ${responseState}`,
+      issuedAt: '2026-01-01',
+      requirementIds: [],
+      responseState,
+      evidence: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const out = directionsSummary([
+      direction('yes'),
+      direction('risk-managed'),
+      direction('not-set'),
+    ]);
+
+    expect(out.total).toBe(3);
+    expect(out.byState.yes).toBe(1);
+    expect(out.byState['risk-managed']).toBe(1);
+    expect(out.byState['not-set']).toBe(1);
+    expect(out.needsResponseCount).toBe(1);
+    expect(out.addressedPct).toBe(Math.round((2 / 3) * 100));
   });
 });

@@ -7,6 +7,12 @@ import { SignalWatcher } from '../state/signal-watcher.ts';
 import type { AppStore } from '../state/app-store.ts';
 import { summariseAllDomains, type DomainSummary } from '../domain/summary.ts';
 import type { ComplianceEntry, RequirementId } from '../data/types.ts';
+import {
+  complianceBreakdown,
+  directionsSummary,
+  essentialEightCoverage,
+} from '../domain/analytics.ts';
+import { complianceLabel } from '../domain/compliance-display.ts';
 import '../components/breadcrumbs.ts';
 
 @customElement('pspf-home-view')
@@ -33,6 +39,36 @@ export class HomeView extends LitElement {
         list-style: none;
         margin: 0;
         padding: 0;
+      }
+      .widgets {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        gap: var(--space-3);
+        margin: 0 0 var(--space-4) 0;
+      }
+      .widget {
+        border: 1px solid var(--colour-border);
+        border-radius: var(--radius-md);
+        background: var(--colour-bg-elevated);
+        padding: var(--space-3);
+      }
+      a.widget {
+        text-decoration: none;
+        color: inherit;
+      }
+      a.widget:hover,
+      a.widget:focus-visible {
+        border-color: var(--colour-fg-muted);
+        outline: none;
+      }
+      .widget .value {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.1;
+      }
+      .widget .label {
+        font-size: var(--text-xs);
+        color: var(--colour-fg-muted);
       }
       .card {
         display: flex;
@@ -86,12 +122,17 @@ export class HomeView extends LitElement {
   // Re-render whenever the compliance signal changes.
   // The watcher is held only for its controller lifecycle.
   // eslint-disable-next-line no-unused-private-class-members
-  #watcher = new SignalWatcher(this, () => (this.store ? [this.store.compliance] : []));
+  #watcher = new SignalWatcher(this, () =>
+    this.store ? [this.store.compliance, this.store.directions] : [],
+  );
 
   override render() {
     const compliance: ReadonlyMap<RequirementId, ComplianceEntry> =
       this.store?.compliance.value ?? new Map();
     const summaries = summariseAllDomains(compliance);
+    const overall = complianceBreakdown(compliance);
+    const e8 = essentialEightCoverage(compliance);
+    const directionStats = directionsSummary(this.store?.directions.value ?? []);
     return html`
       <article>
         <pspf-breadcrumbs .items=${[{ label: 'Home' }]}></pspf-breadcrumbs>
@@ -100,6 +141,25 @@ export class HomeView extends LitElement {
           Welcome to PSPF Explorer v3. Select a domain to start working through its requirements.
           Your work is stored on this device only.
         </p>
+        <section class="widgets" aria-label="Programme overview widgets">
+          <div class="widget" data-testid="home-widget-overall">
+            <div class="value">${overall.compliantPct}%</div>
+            <div class="label">Overall fully implemented (excl. n/a)</div>
+          </div>
+          <a class="widget" data-testid="home-widget-e8" href="#/essential-eight">
+            <div class="value">${e8.implementedPct}%</div>
+            <div class="label">
+              Essential Eight (TECH-099 to TECH-106) · catchall TECH-107:
+              ${complianceLabel(e8.catchall.state)}
+            </div>
+          </a>
+          <a class="widget" data-testid="home-widget-directions" href="#/directions/not-set">
+            <div class="value">${directionStats.needsResponseCount}</div>
+            <div class="label">
+              Directions needing response · addressed ${directionStats.addressedPct}%
+            </div>
+          </a>
+        </section>
         <ul class="grid">
           ${summaries.map((s) => this.#card(s))}
         </ul>
