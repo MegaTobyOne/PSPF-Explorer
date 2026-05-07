@@ -914,7 +914,8 @@ export class RelationshipMapView extends LitElement {
   };
 
   async #renderCytoscape(): Promise<void> {
-    if (!this.#canvas) return;
+    const canvas = this.#canvas;
+    if (!canvas) return;
     const { nodes, edges } = this.#graph();
     const signature = this.#cytoscapeSignature({ nodes, edges });
     if (nodes.length === 0) {
@@ -930,6 +931,9 @@ export class RelationshipMapView extends LitElement {
 
     const cytoscapeModule = await import('cytoscape');
     const cytoscape = cytoscapeModule.default;
+    // The canvas can be unmounted while Cytoscape is still loading.
+    // Bail out if the original mount target is no longer valid.
+    if (this.#canvas !== canvas || !canvas.isConnected || this.viewMode !== 'graph') return;
     this.#cy?.destroy();
     this.#graphSignature = signature;
 
@@ -970,7 +974,7 @@ export class RelationshipMapView extends LitElement {
 
     const tokens = this.#resolveStyleTokens();
     this.#cy = cytoscape({
-      container: this.#canvas,
+      container: canvas,
       elements,
       style: [
         {
