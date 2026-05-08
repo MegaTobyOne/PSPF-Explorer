@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildRelationshipMapGraph, formatRelationshipMapSummary } from './relationship-map.ts';
+import {
+  buildRelationshipMapGraph,
+  formatRelationshipMapSummary,
+  orderRelationshipMapNodes,
+} from './relationship-map.ts';
 import {
   asActionId,
   asDirectionId,
@@ -515,5 +519,58 @@ describe('buildRelationshipMapGraph', () => {
 
     const directionNodes = graph.nodes.filter((n) => n.kind === 'direction');
     expect(directionNodes.map((n) => n.id)).toEqual([needs.id]);
+  });
+});
+
+describe('orderRelationshipMapNodes', () => {
+  const reqA = asRequirementId('GOV-001');
+  const reqB = asRequirementId('GOV-002');
+  const reqC = asRequirementId('GOV-003');
+
+  function buildGraph() {
+    return buildRelationshipMapGraph({
+      compliance: new Map([
+        [reqA, compliance(reqA, 'no')],
+        [reqB, compliance(reqB, 'no')],
+        [reqC, compliance(reqC, 'yes')],
+      ]),
+      // Two risks: risk-1 connects to reqB; risk-2 connects to reqA. Sorting
+      // by median requirement index should put risk-2 before risk-1.
+      risks: [
+        baseRisk({ id: asRiskId('risk-1'), requirementIds: [reqB] }),
+        baseRisk({ id: asRiskId('risk-2'), requirementIds: [reqA] }),
+      ],
+      actions: [
+        baseAction({ id: asActionId('action-1'), requirementIds: [reqB] }),
+        baseAction({ id: asActionId('action-2'), requirementIds: [reqA] }),
+      ],
+      directions: [
+        baseDirection({ id: asDirectionId('direction-1'), requirementIds: [reqB] }),
+        baseDirection({ id: asDirectionId('direction-2'), requirementIds: [reqA] }),
+      ],
+      relationships: [],
+      workTracking: [],
+      visibility: { requirements: true, risks: true, actions: true, directions: true },
+    });
+  }
+
+  it('orders each lane so connected items align across columns', () => {
+    const ordered = orderRelationshipMapNodes(buildGraph());
+    // GOV-001 leads because it has the alphabetically-earliest gap; GOV-003
+    // (already 'yes') is dropped from the visible graph.
+    expect(ordered.requirements.map((n) => n.id)).toEqual([reqA, reqB]);
+    expect(ordered.risks.map((n) => n.id)).toEqual(['risk-2', 'risk-1']);
+    expect(ordered.actions.map((n) => n.id)).toEqual(['action-2', 'action-1']);
+    expect(ordered.directions.map((n) => n.id)).toEqual(['direction-2', 'direction-1']);
+  });
+
+  it('promotes focused and linked nodes to the top of every lane', () => {
+    const graph = buildGraph();
+    const ordered = orderRelationshipMapNodes(graph, new Set(['risk-1']));
+    // reqB is linked to risk-1, so it should rise to the top of the
+    // requirements lane even though reqA also has compliance gaps.
+    expect(ordered.requirements[0]?.id).toBe(reqB);
+    // The focused risk leads its own lane; unlinked risk-2 falls below it.
+    expect(ordered.risks.map((n) => n.id)).toEqual(['risk-1', 'risk-2']);
   });
 });

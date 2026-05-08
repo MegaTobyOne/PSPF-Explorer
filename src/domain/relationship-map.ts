@@ -745,3 +745,133 @@ export function formatRelationshipMapSummary(graph: RelationshipMapGraph): strin
 
   return lines.join('\n').trimEnd();
 }
+
+/**
+ * Layout-friendly ordering of map nodes.
+ *
+ * Treats the map as four left-to-right lanes — requirements → risks → actions
+ * → directions — and sorts each lane so connected items line up vertically
+ * with their neighbours (a barycentre / median-of-neighbours sort, the same
+ * heuristic used by Sugiyama-style layered graph layouts to reduce edge
+ * crossings). The result is used by both Board mode (column ordering) and
+ * Graph mode's "Lanes" preset layout, so the two views share a single
+ * visual story instead of presenting unrelated arrangements.
+ *
+ * When `focus` is provided, every lane partitions into [focus ∪ linked,
+ * everything else] preserving the barycentre order within each partition.
+ * This keeps the focused item and its connections at the top of every lane
+ * so a single glance shows the value-chain for the current selection.
+ */
+export interface OrderedRelationshipMap {
+  requirements: readonly MapNode[];
+  risks: readonly MapNode[];
+  actions: readonly MapNode[];
+  directions: readonly MapNode[];
+  /** Position (row index) of each node id within its lane. */
+  positions: ReadonlyMap<string, number>;
+}
+
+export function orderRelationshipMapNodes(
+  graph: RelationshipMapGraph,
+  focus?: ReadonlySet<string>,
+): OrderedRelationshipMap {
+  const requirements = graph.nodes.filter((n) => n.kind === 'requirement').slice();
+  const risks = graph.nodes.filter((n) => n.kind === 'risk').slice();
+  const actions = graph.nodes.filter((n) => n.kind === 'action').slice();
+  const directions = graph.nodes.filter((n) => n.kind === 'direction').slice();
+
+  // Anchor lane: requirements ordered by compliance gap urgency, then id, so
+  // open gaps lead the value chain in both views.
+  requirements.sort((a, b) => {
+    const aGap = complianceGap(a.complianceState ?? 'not-set') ? 0 : 1;
+    const bGap = complianceGap(b.complianceState ?? 'not-set') ? 0 : 1;
+    return aGap - bGap || a.id.localeCompare(b.id);
+  });
+
+  const indexOf = (list: readonly MapNode[]): Map<string, number> => {
+    const map = new Map<string, number>();
+    list.forEach((node, i) => map.set(node.id, i));
+    return map;
+  };
+
+  const reqIndex = indexOf(requirements);
+
+  // Median of connected neighbour positions; nodes with no usable neighbour
+  // sink to the bottom of the lane (Number.POSITIVE_INFINITY) but keep their
+  // relative id order for stability.
+  const median = (values: readonly number[]): number => {
+    if (values.length === 0) return Number.POSITIVE_INFINITY;
+    const sorted = values.slice().sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  };
+
+  const lookup = (ids: readonly string[] | undefined, idx: Map<string, number>): number[] => {
+    if (!ids) return [];
+    const out: number[] = [];
+    for (const id of ids) {
+      const v = idx.get(id);
+      if (v !== undefined) out.push(v);
+    }
+    return out;
+  };
+
+  const sortByMedian = (
+    list: MapNode[],
+    score: (node: MapNode) => number,
+  ): void => {
+    list.sort((a, b) => {
+      const ay = score(a);
+      const by = score(b);
+      if (ay !== by) return ay - by;
+      return a.id.localeCompare(b.id);
+    });
+  };
+
+  // Risks sit between requirements and actions — anchor them to requirements.
+  sortByMedian(risks, (n) => median(lookup(n.connections?.requirementIds, reqIndex)));
+  const riskIndex = indexOf(risks);
+
+  // Actions reference both requirements and risks; combining the two yields
+  // a position roughly halfway between the two upstream lanes.
+  sortByMedian(actions, (n) =>
+    median([
+      ...lookup(n.connections?.requirementIds, reqIndex),
+      ...lookup(n.connections?.riskIds, riskIndex),
+    ]),
+  );
+
+  // Directions only relate to requirements at the data-model level.
+  sortByMedian(directions, (n) => median(lookup(n.connections?.requirementIds, reqIndex)));
+
+  const partitionByFocus = (list: MapNode[]): MapNode[] => {
+    if (!focus || focus.size === 0) return list;
+    const linked = new Set<string>(focus);
+    for (const edge of graph.edges) {
+      if (focus.has(edge.source)) linked.add(edge.target);
+      if (focus.has(edge.target)) linked.add(edge.source);
+    }
+    const top: MapNode[] = [];
+    const rest: MapNode[] = [];
+    for (const n of list) (linked.has(n.id) ? top : rest).push(n);
+    return [...top, ...rest];
+  };
+
+  const orderedReq = partitionByFocus(requirements);
+  const orderedRisk = partitionByFocus(risks);
+  const orderedAct = partitionByFocus(actions);
+  const orderedDir = partitionByFocus(directions);
+
+  const positions = new Map<string, number>();
+  for (const lane of [orderedReq, orderedRisk, orderedAct, orderedDir]) {
+    lane.forEach((n, i) => positions.set(n.id, i));
+  }
+
+  return {
+    requirements: orderedReq,
+    risks: orderedRisk,
+    actions: orderedAct,
+    directions: orderedDir,
+    positions,
+  };
+}

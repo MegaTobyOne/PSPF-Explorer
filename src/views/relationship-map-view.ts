@@ -16,6 +16,7 @@ import { designTokens } from '../app/design-tokens.ts';
 import {
   buildRelationshipMapGraph,
   formatRelationshipMapSummary,
+  orderRelationshipMapNodes,
   type MapNode,
   type MapFilters,
   type RelationshipMapGraph,
@@ -99,9 +100,10 @@ export function relationshipMapTooltipLines(node: MapNode): readonly string[] {
   return lines;
 }
 
-type MapLayoutName = 'cose' | 'breadthfirst' | 'concentric' | 'grid';
+type MapLayoutName = 'lanes' | 'cose' | 'breadthfirst' | 'concentric' | 'grid';
 
 const MAP_LAYOUT_OPTIONS: readonly { value: MapLayoutName; label: string }[] = [
+  { value: 'lanes', label: 'Lanes (by relationship)' },
   { value: 'cose', label: 'Force-directed' },
   { value: 'breadthfirst', label: 'Hierarchy' },
   { value: 'concentric', label: 'Concentric' },
@@ -346,6 +348,25 @@ export class RelationshipMapView extends LitElement {
         position: absolute;
         inset: 0;
       }
+      .lane-headers {
+        position: absolute;
+        inset: var(--space-1) var(--space-2) auto var(--space-2);
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--space-2);
+        pointer-events: none;
+        z-index: 2;
+      }
+      .lane-header {
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--colour-fg-muted);
+        text-align: center;
+        padding: 2px 6px;
+        background: color-mix(in srgb, var(--colour-bg-elevated) 80%, transparent);
+        border-radius: var(--radius-sm);
+      }
       .map-tooltip {
         position: absolute;
         transform: translate(12px, -50%);
@@ -517,7 +538,7 @@ export class RelationshipMapView extends LitElement {
       .board {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: var(--space-2);
+        gap: var(--space-4);
         min-height: 520px;
         position: relative;
       }
@@ -550,9 +571,11 @@ export class RelationshipMapView extends LitElement {
         flex-direction: column;
         gap: var(--space-1);
         padding: var(--space-2);
-        border: 1px solid var(--colour-border);
+        border: 1px dashed color-mix(in srgb, var(--colour-border) 60%, transparent);
         border-radius: var(--radius-md);
-        background: var(--colour-bg-elevated);
+        /* Transparent column so SVG connection lines remain visible between
+           cards. Individual cards keep solid backgrounds for readability. */
+        background: transparent;
         max-height: 600px;
         overflow-y: auto;
         position: relative;
@@ -566,7 +589,10 @@ export class RelationshipMapView extends LitElement {
         color: var(--colour-fg-muted);
         position: sticky;
         top: 0;
-        background: var(--colour-bg-elevated);
+        /* Translucent so the column header doesn't fully hide edges that
+           start from cards just below it while users scroll. */
+        background: color-mix(in srgb, var(--colour-bg-elevated) 75%, transparent);
+        backdrop-filter: blur(2px);
         padding-bottom: 4px;
       }
       .board-column .count {
@@ -664,7 +690,7 @@ export class RelationshipMapView extends LitElement {
   @state() private accessor actionOverdueOnly = false;
   @state() private accessor directionResponseFilter: ReadonlySet<DirectionResponseState> =
     new Set();
-  @state() private accessor layoutName: MapLayoutName = 'cose';
+  @state() private accessor layoutName: MapLayoutName = 'lanes';
   @state() private accessor searchQuery = '';
   @state() private accessor viewMode: 'graph' | 'board' = 'graph';
   @state() private accessor focusedNodeIds: ReadonlySet<string> = new Set();
@@ -862,6 +888,14 @@ export class RelationshipMapView extends LitElement {
                       data-testid="map-canvas"
                       ${ref(this.#onCanvasRef)}
                     ></div>`}
+                ${nodes.length > 0 && this.layoutName === 'lanes'
+                  ? html`<div class="lane-headers" aria-hidden="true">
+                      <span class="lane-header">Requirements</span>
+                      <span class="lane-header">Risks</span>
+                      <span class="lane-header">Actions</span>
+                      <span class="lane-header">Directions</span>
+                    </div>`
+                  : ''}
                 ${this.#renderHoverTooltip(nodes)}
               </div>`
             : this.#renderBoard(graph)}
@@ -1264,9 +1298,11 @@ export class RelationshipMapView extends LitElement {
     };
   }
 
-  #buildLayoutOptions(): LayoutOptions {
+  #buildLayoutOptions(graph?: RelationshipMapGraph): LayoutOptions {
     const padding = 16;
     switch (this.layoutName) {
+      case 'lanes':
+        return this.#buildLanesLayout(graph ?? this.#graph(), padding);
       case 'breadthfirst':
         return {
           name: 'breadthfirst',
@@ -1298,6 +1334,49 @@ export class RelationshipMapView extends LitElement {
       default:
         return { name: 'cose', animate: false, fit: true, padding };
     }
+  }
+
+  /**
+   * Position nodes in four left-to-right lanes by kind so the value chain —
+   * requirements → risks → actions → directions — is read at a glance.
+   * Within each lane, nodes use the median-of-neighbours order shared with
+   * Board mode so connected items align across lanes and edges stay short.
+   */
+  #buildLanesLayout(graph: RelationshipMapGraph, padding: number): LayoutOptions {
+    const ordered = orderRelationshipMapNodes(graph);
+    const laneX: Record<MapNode['kind'], number> = {
+      requirement: 0,
+      risk: 1,
+      action: 2,
+      direction: 3,
+    };
+    const laneSize: Record<MapNode['kind'], number> = {
+      requirement: ordered.requirements.length,
+      risk: ordered.risks.length,
+      action: ordered.actions.length,
+      direction: ordered.directions.length,
+    };
+    const tallest = Math.max(1, ...Object.values(laneSize));
+    const COL_WIDTH = 240;
+    const ROW_HEIGHT = 56;
+    // Centre shorter lanes vertically so connections don't bunch at the top.
+    return {
+      name: 'preset',
+      animate: false,
+      fit: true,
+      padding,
+      positions: (node): { x: number; y: number } => {
+        const id = node.id();
+        const kind = node.data('kind') as MapNode['kind'];
+        const row = ordered.positions.get(id) ?? 0;
+        const count = laneSize[kind] || 1;
+        const offset = (tallest - count) / 2;
+        return {
+          x: laneX[kind] * COL_WIDTH,
+          y: (row + offset) * ROW_HEIGHT,
+        };
+      },
+    };
   }
 
   override updated(): void {
@@ -1736,15 +1815,6 @@ export class RelationshipMapView extends LitElement {
 
   #renderBoard(graph: RelationshipMapGraph): TemplateResult {
     const { nodes, edges } = graph;
-    const requirements = nodes.filter(
-      (n) =>
-        n.kind === 'requirement' &&
-        n.complianceState !== 'yes' &&
-        n.complianceState !== 'not-applicable',
-    );
-    const risks = nodes.filter((n) => n.kind === 'risk');
-    const actions = nodes.filter((n) => n.kind === 'action');
-    const directions = nodes.filter((n) => n.kind === 'direction');
     if (nodes.length === 0) {
       return html`<div class="board" data-testid="map-board">
         <div class="empty" data-testid="empty">
@@ -1755,6 +1825,16 @@ export class RelationshipMapView extends LitElement {
     }
     const focusSet = this.#boardFocusSet();
     const linkedSet = this.#boardLinkedSet(focusSet, edges);
+    // Order each lane so connected items line up across columns. When a focus
+    // is active, focused + linked items are pulled to the top of every lane
+    // so the value-chain fits in a single screenful regardless of overall
+    // column length.
+    const ordered = orderRelationshipMapNodes(graph, focusSet);
+    // The Compliance gaps column intentionally omits requirements that are
+    // already met or not applicable, so the board reads as outstanding work.
+    const requirements = ordered.requirements.filter(
+      (n) => n.complianceState !== 'yes' && n.complianceState !== 'not-applicable',
+    );
     const hasFocus = focusSet.size > 0;
     return html`<div
       class=${`board${hasFocus ? ' has-focus' : ''}`}
@@ -1769,9 +1849,15 @@ export class RelationshipMapView extends LitElement {
         focusSet,
         linkedSet,
       )}
-      ${this.#renderBoardColumn('Risks', 'risk', risks, focusSet, linkedSet)}
-      ${this.#renderBoardColumn('Actions', 'action', actions, focusSet, linkedSet)}
-      ${this.#renderBoardColumn('Directions', 'direction', directions, focusSet, linkedSet)}
+      ${this.#renderBoardColumn('Risks', 'risk', ordered.risks, focusSet, linkedSet)}
+      ${this.#renderBoardColumn('Actions', 'action', ordered.actions, focusSet, linkedSet)}
+      ${this.#renderBoardColumn(
+        'Directions',
+        'direction',
+        ordered.directions,
+        focusSet,
+        linkedSet,
+      )}
       ${this.#renderBoardEdges(edges, focusSet, linkedSet)}
     </div>`;
   }
