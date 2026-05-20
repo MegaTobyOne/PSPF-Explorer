@@ -1344,6 +1344,7 @@ export class RelationshipMapView extends LitElement {
    */
   #buildLanesLayout(graph: RelationshipMapGraph, padding: number): LayoutOptions {
     const ordered = orderRelationshipMapNodes(graph);
+    const kindById = new Map(graph.nodes.map((node) => [node.id, node.kind] as const));
     const laneX: Record<MapNode['kind'], number> = {
       requirement: 0,
       risk: 1,
@@ -1365,9 +1366,16 @@ export class RelationshipMapView extends LitElement {
       animate: false,
       fit: true,
       padding,
-      positions: (node): { x: number; y: number } => {
-        const id = node.id();
-        const kind = node.data('kind') as MapNode['kind'];
+      positions: (
+        node: string | { id(): string; data(key: 'kind'): MapNode['kind'] },
+      ): { x: number; y: number } => {
+        const id = typeof node === 'string' ? node : node.id();
+        const kind = (() => {
+          if (typeof node !== 'string') return node.data('kind');
+          const resolved = kindById.get(node);
+          if (resolved !== undefined) return resolved;
+          throw new Error(`Missing lane kind for relationship-map node '${node}'.`);
+        })();
         const row = ordered.positions.get(id) ?? 0;
         const count = laneSize[kind] || 1;
         const offset = (tallest - count) / 2;
@@ -1851,13 +1859,7 @@ export class RelationshipMapView extends LitElement {
       )}
       ${this.#renderBoardColumn('Risks', 'risk', ordered.risks, focusSet, linkedSet)}
       ${this.#renderBoardColumn('Actions', 'action', ordered.actions, focusSet, linkedSet)}
-      ${this.#renderBoardColumn(
-        'Directions',
-        'direction',
-        ordered.directions,
-        focusSet,
-        linkedSet,
-      )}
+      ${this.#renderBoardColumn('Directions', 'direction', ordered.directions, focusSet, linkedSet)}
       ${this.#renderBoardEdges(edges, focusSet, linkedSet)}
     </div>`;
   }

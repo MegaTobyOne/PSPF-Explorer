@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
 import pkg from './package.json' with { type: 'json' };
 
-const base = process.env.PSPF_BASE ?? '/pspf-explorer/';
+const base = process.env.PSPF_BASE ?? '/PSPF-Explorer/';
 
 export default defineConfig({
   base,
