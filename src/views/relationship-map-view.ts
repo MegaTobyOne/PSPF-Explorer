@@ -1365,9 +1365,12 @@ export class RelationshipMapView extends LitElement {
       animate: false,
       fit: true,
       padding,
-      positions: (node): { x: number; y: number } => {
+      positions: (node: {
+        id(): string;
+        data(key: 'kind'): MapNode['kind'];
+      }): { x: number; y: number } => {
         const id = node.id();
-        const kind = node.data('kind') as MapNode['kind'];
+        const kind = node.data('kind');
         const row = ordered.positions.get(id) ?? 0;
         const count = laneSize[kind] || 1;
         const offset = (tallest - count) / 2;
@@ -1851,13 +1854,7 @@ export class RelationshipMapView extends LitElement {
       )}
       ${this.#renderBoardColumn('Risks', 'risk', ordered.risks, focusSet, linkedSet)}
       ${this.#renderBoardColumn('Actions', 'action', ordered.actions, focusSet, linkedSet)}
-      ${this.#renderBoardColumn(
-        'Directions',
-        'direction',
-        ordered.directions,
-        focusSet,
-        linkedSet,
-      )}
+      ${this.#renderBoardColumn('Directions', 'direction', ordered.directions, focusSet, linkedSet)}
       ${this.#renderBoardEdges(edges, focusSet, linkedSet)}
     </div>`;
   }

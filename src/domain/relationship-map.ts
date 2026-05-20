@@ -816,10 +816,7 @@ export function orderRelationshipMapNodes(
     return out;
   };
 
-  const sortByMedian = (
-    list: MapNode[],
-    score: (node: MapNode) => number,
-  ): void => {
+  const sortByMedian = (list: MapNode[], score: (node: MapNode) => number): void => {
     list.sort((a, b) => {
       const ay = score(a);
       const by = score(b);
