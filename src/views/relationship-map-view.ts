@@ -1370,8 +1370,12 @@ export class RelationshipMapView extends LitElement {
         node: string | { id(): string; data(key: 'kind'): MapNode['kind'] },
       ): { x: number; y: number } => {
         const id = typeof node === 'string' ? node : node.id();
-        const kind =
-          typeof node === 'string' ? (kindById.get(node) ?? 'requirement') : node.data('kind');
+        const kind = (() => {
+          if (typeof node !== 'string') return node.data('kind');
+          const resolved = kindById.get(node);
+          if (resolved) return resolved;
+          throw new Error(`Missing lane kind for relationship-map node '${node}'.`);
+        })();
         const row = ordered.positions.get(id) ?? 0;
         const count = laneSize[kind] || 1;
         const offset = (tallest - count) / 2;
