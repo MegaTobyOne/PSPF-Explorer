@@ -1344,6 +1344,7 @@ export class RelationshipMapView extends LitElement {
    */
   #buildLanesLayout(graph: RelationshipMapGraph, padding: number): LayoutOptions {
     const ordered = orderRelationshipMapNodes(graph);
+    const kindById = new Map(graph.nodes.map((node) => [node.id, node.kind] as const));
     const laneX: Record<MapNode['kind'], number> = {
       requirement: 0,
       risk: 1,
@@ -1365,12 +1366,12 @@ export class RelationshipMapView extends LitElement {
       animate: false,
       fit: true,
       padding,
-      positions: (node: {
-        id(): string;
-        data(key: 'kind'): MapNode['kind'];
-      }): { x: number; y: number } => {
-        const id = node.id();
-        const kind = node.data('kind');
+      positions: (
+        node: string | { id(): string; data(key: 'kind'): MapNode['kind'] },
+      ): { x: number; y: number } => {
+        const id = typeof node === 'string' ? node : node.id();
+        const kind =
+          typeof node === 'string' ? (kindById.get(node) ?? 'requirement') : node.data('kind');
         const row = ordered.positions.get(id) ?? 0;
         const count = laneSize[kind] || 1;
         const offset = (tallest - count) / 2;
