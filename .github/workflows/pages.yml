@@ -41,7 +41,7 @@ jobs:
         run: npm run sbom
       - name: Stage SBOM into dist
         run: cp sbom.json dist/sbom.json
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
